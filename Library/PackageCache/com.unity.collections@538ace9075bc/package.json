@@ -1,0 +1,20 @@
+{
+  "name": "com.unity.collections",
+  "displayName": "Collections",
+  "version": "6.4.0",
+  "unity": "6000.4",
+  "dependencies": {
+    "com.unity.burst": "1.8.23",
+    "com.unity.mathematics": "1.3.2",
+    "com.unity.nuget.mono-cecil": "1.11.5",
+    "com.unity.test-framework": "1.4.6",
+    "com.unity.test-framework.performance": "3.0.3"
+  },
+  "description": "A C# collections library providing data structures that can be used in jobs, and optimized by Burst compiler.",
+  "keywords": [
+    "dots",
+    "collections",
+    "unity"
+  ],
+  "_fingerprint": "538ace9075bc08320fd46e69fe74807d5b319ba1"
+}
