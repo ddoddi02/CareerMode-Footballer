@@ -10,24 +10,91 @@ namespace Prototype
     }
 
     /// <summary>
-    /// Sits on the goal side of the receiver and holds a gap. The gap can CHANGE
-    /// mid-round, which is what makes an early scan go stale and forces the player
-    /// to time the shoulder check rather than spam it.
+    /// One defender. He does not decide where the shape should be - <see cref="TeamDefence"/>
+    /// hands him a station every time the defence takes a new picture - but he decides how
+    /// to stand once he gets there, and when to go.
+    ///
+    /// THE PRESS IS NOT AN ATTEMPT TO WIN THE BALL. Diving in at a man who is facing his
+    /// own goal is how you get turned. The job is to stop him turning at all: stand
+    /// goal-side and shade the INSIDE shoulder, so the only comfortable ball he has left
+    /// is square to the touchline or backwards. A centre-forward who receives in the
+    /// middle and has to play it back has been defended perfectly, and nobody tackled
+    /// anyone.
+    ///
+    /// The tackle then has exactly one trigger: he tries to turn anyway while you are
+    /// tight. That is the moment his body is across the ball and it is furthest from his
+    /// feet, and you either take it or knock it out of play. Everything else - the
+    /// random lunge - is what gives up the goal.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class DefenderAI : MonoBehaviour
     {
+        [Header("Who he is")]
+        public Role role = Role.LCB;
+        [Tooltip("His slot in the formation. TeamDefence slides the whole shape off these.")]
+        public Vector3 homeSlot;
+
+        [Header("Refs")]
         public Transform target;
+        [Tooltip("When set he abandons his station and goes for this - the ball, once it is being carried.")]
+        [HideInInspector] public Transform chase;
         public float speed = 5.8f;
         public bool active = true;
 
+        [Header("Denying the turn")]
+        [Tooltip("How far off the carrier he sets up. Close enough that turning into him is a bad idea.")]
+        public float denyGap = 1.05f;
+        [Tooltip("How far to the inside shoulder he shades, which is what leaves the touchline open.")]
+        public float shoulderShade = 0.85f;
+        [Tooltip("Extra shading on a break - showing him wide matters more when he is running at you.")]
+        public float breakShade = 1.5f;
+        [Tooltip("He counts as tight inside this. Only from here does an attempted turn become a tackle.")]
+        public float tightRange = 1.5f;
+        [Tooltip("Degrees off our goal within which the carrier counts as having turned in.")]
+        public float turnedInAngle = 75f;
+
+        [Header("Tackle")]
+        [Tooltip("He will commit from this far off the ball.")]
+        public float lungeRange = 1.9f;
+        [Tooltip("Touch distance that reads as a heavy touch and invites the challenge.")]
+        public float exposureTrigger = 0.9f;
+        [Tooltip("Chance per second of going in on a tucked-in ball with no turn on. Deliberately near zero - he is not trying to win it.")]
+        public float gambleChance = 0.05f;
+        public float tackleCooldown = 1.1f;
+        [Tooltip("How long he is out of it after missing.")]
+        public float missRecovery = 1.0f;
+        [Range(0f, 1f)] public float tackling01 = 0.60f;
+
         public PressStyle Style { get; private set; }
+        public bool Recovering { get { return Time.time < recoverUntil; } }
+
+        /// <summary>Set by TeamDefence: the man he has been told to pick up, if any.</summary>
+        [HideInInspector] public Vector3? markTarget;
+
+        /// <summary>Set by TeamDefence: he is filling a hole rather than holding his own slot.</summary>
+        [HideInInspector] public bool covering;
+
+        /// <summary>True while he is the one closing the ball down.</summary>
+        public bool Pressing { get { return pressing; } }
+
+        /// <summary>His current orders - where TeamDefence wants him standing.</summary>
+        public Vector3 Station { get { return station; } }
+
+        Vector3 station;
+        bool pressing;
+        Vector3 carrierPos;
+        bool defendsPositiveZ = true;
+        bool onBreak;
 
         float lateral;
+        bool drillShape;          // Begin() was called - the drill owns his shape
         float switchAfter = -1f;
         PressStyle switchTo;
         float t0;
         bool switched;
+
+        float nextTackle = -99f;
+        float recoverUntil = -99f;
 
         CharacterController cc;
         Vector3 vel;
@@ -35,7 +102,22 @@ namespace Prototype
         void Awake()
         {
             cc = GetComponent<CharacterController>();
+            station = transform.position;
         }
+
+        // ----------------------------------------------------------- team orders --
+
+        public void SetStation(Vector3 p) { station = p; }
+
+        public void SetPressing(bool on, Vector3 carrier, bool goalAtPositiveZ, bool breaking)
+        {
+            pressing = on;
+            carrierPos = carrier;
+            defendsPositiveZ = goalAtPositiveZ;
+            onBreak = breaking;
+        }
+
+        // ------------------------------------------------------- drill interface --
 
         public void Warp(Vector3 pos)
         {
@@ -43,11 +125,15 @@ namespace Prototype
             transform.position = pos;
             cc.enabled = true;
             vel = Vector3.zero;
+            station = pos;
+            nextTackle = -99f;
+            recoverUntil = -99f;
         }
 
         public void Begin(PressStyle style, float lateralOffset, float switchDelay, PressStyle to)
         {
             Style = style;
+            drillShape = true;
             lateral = lateralOffset;
             switchAfter = switchDelay;
             switchTo = to;
@@ -72,25 +158,129 @@ namespace Prototype
             }
         }
 
+        // ------------------------------------------------------------ the moment --
+
+        /// <summary>
+        /// Is the man on the ball trying to spin off him right now? Reads his torso, not
+        /// the ball: the ball can be anywhere, it is the body coming round that says he
+        /// has committed to turning.
+        /// </summary>
+        public bool CarrierIsTurningIn()
+        {
+            if (target == null) return false;
+            var fc = target.GetComponent<FootballerController>();
+            if (fc == null) return false;
+
+            Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
+            Vector3 d = goal - target.position;
+            Vector2 toGoal = new Vector2(d.x, d.z);
+            if (toGoal.sqrMagnitude < 1e-4f) return false;
+
+            float ang = Vector2.Angle(fc.BodyForward, toGoal.normalized);
+            return ang < turnedInAngle;
+        }
+
+        /// <summary>Does he go in this frame?</summary>
+        public bool WantsTackle(Vector3 ballPos, float exposure)
+        {
+            if (Time.time < nextTackle || Recovering) return false;
+
+            Vector3 d = ballPos - transform.position;
+            d.y = 0f;
+            float gap = d.magnitude;
+            if (gap > lungeRange) return false;
+
+            // The one trigger that matters: tight, and he is coming round anyway.
+            if (gap <= tightRange && CarrierIsTurningIn()) return true;
+
+            // A touch that has run away from him is free money either way.
+            if (exposure > exposureTrigger) return true;
+
+            // Otherwise stay on your feet. This is near enough never.
+            return Random.value < gambleChance * Time.deltaTime;
+        }
+
+        public void BeganTackle() { nextTackle = Time.time + tackleCooldown; }
+        public void MissedTackle() { recoverUntil = Time.time + missRecovery; }
+
+        // ------------------------------------------------------------ where to be --
+
+        /// <summary>
+        /// Goal-side of the carrier and shaded to his inside shoulder. The gap he is left
+        /// with points at the touchline, which is the whole idea: out there he has one
+        /// less passing angle, no shot, and a line to put him over.
+        /// </summary>
+        public Vector3 DenyTurnStance(Vector3 carrier)
+        {
+            Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
+            Vector3 toGoal = goal - carrier;
+            toGoal.y = 0f;
+            if (toGoal.sqrMagnitude < 1e-4f) toGoal = Vector3.forward;
+            toGoal.Normalize();
+
+            Vector3 inside = TacticalPitch.InsideDir(carrier);
+            float shade = onBreak ? breakShade : shoulderShade;
+
+            // Only shade when he is central. Out by the touchline the pitch is already
+            // doing the job and cheating inside just opens the line back in.
+            if (!TacticalPitch.IsCentral(TacticalPitch.LaneOf(carrier.x))) shade *= 0.35f;
+
+            return carrier + toGoal * denyGap + inside * shade;
+        }
+
+        // ------------------------------------------------------------------ loop --
+
         void Update()
         {
-            if (!active || target == null) return;
+            if (!active) return;
 
-            if (!switched && switchAfter > 0f && Time.time - t0 > switchAfter)
+            if (Recovering)
             {
-                Style = switchTo;
-                switched = true;
+                // On the floor. He cannot chase for a moment.
+                vel = Vector3.MoveTowards(vel, Vector3.zero, 40f * Time.deltaTime);
+                cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
+                return;
             }
 
-            Vector3 anchor = target.position + new Vector3(lateral, 0f, DesiredGap(Style));
-            Vector3 d = anchor - transform.position;
-            d.y = 0f;
+            Vector3 want;
+            Vector3 look;
 
-            Vector3 want = Vector3.ClampMagnitude(d * 3.4f, speed);
-            vel = Vector3.MoveTowards(vel, want, 32f * Time.deltaTime);
+            if (chase != null)
+            {
+                // The drill has handed him the carrier. Do not run at the ball - take up
+                // the stance that stops the turn and hold it.
+                Vector3 carrier = target != null ? target.position : chase.position;
+                want = DenyTurnStance(carrier);
+                look = carrier - transform.position;
+            }
+            else if (pressing)
+            {
+                want = DenyTurnStance(carrierPos);
+                look = carrierPos - transform.position;
+            }
+            else if (drillShape && target != null)
+            {
+                // Legacy drill shape: hold a gap behind the receiver until the ball comes.
+                if (!switched && switchAfter > 0f && Time.time - t0 > switchAfter)
+                { Style = switchTo; switched = true; }
+                want = target.position + new Vector3(lateral, 0f, DesiredGap(Style));
+                look = target.position - transform.position;
+            }
+            else
+            {
+                want = station;
+                look = markTarget.HasValue
+                    ? markTarget.Value - transform.position
+                    : station - transform.position;
+            }
+
+            Vector3 dv = want - transform.position;
+            dv.y = 0f;
+
+            Vector3 target3 = Vector3.ClampMagnitude(dv * 3.4f, speed);
+            vel = Vector3.MoveTowards(vel, target3, 32f * Time.deltaTime);
             cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
 
-            Vector3 look = target.position - transform.position;
             look.y = 0f;
             if (look.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(look);
         }

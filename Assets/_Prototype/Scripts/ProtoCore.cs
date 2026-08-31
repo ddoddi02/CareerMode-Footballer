@@ -47,8 +47,21 @@ namespace Prototype
     }
 
     /// <summary>
-    /// Thin input wrapper so the prototype works whether the project is set to
-    /// the new Input System, the legacy manager, or both.
+    /// Control scheme follows the FC / FIFA convention so anyone coming from those
+    /// games can pick it up without relearning anything:
+    ///
+    ///   move    arrow keys  / left stick
+    ///   sprint  LeftShift   / RB
+    ///   pass    S           / A (south)
+    ///   cross   A           / X (west)
+    ///   shoot   D           / B (east)
+    ///   shield  E           / LT
+    ///   through W           / Y (north)
+    ///   plant   LeftCtrl    / LB               <- designate without moving
+    ///   look    mouse       / right stick      <- always live, no button
+    ///   aim     mouse       / right stick      <- where a lay-off goes
+    ///
+    /// Works with the new Input System, the legacy manager, or both.
     /// </summary>
     public static class ProtoInput
     {
@@ -59,10 +72,11 @@ namespace Prototype
             var kb = Keyboard.current;
             if (kb != null)
             {
-                if (kb.wKey.isPressed) v.y += 1f;
-                if (kb.sKey.isPressed) v.y -= 1f;
-                if (kb.dKey.isPressed) v.x += 1f;
-                if (kb.aKey.isPressed) v.x -= 1f;
+                // Right hand moves, left hand plays. WASD belongs to the ball now.
+                if (kb.upArrowKey.isPressed) v.y += 1f;
+                if (kb.downArrowKey.isPressed) v.y -= 1f;
+                if (kb.rightArrowKey.isPressed) v.x += 1f;
+                if (kb.leftArrowKey.isPressed) v.x -= 1f;
             }
             var gp = Gamepad.current;
             if (gp != null)
@@ -71,40 +85,117 @@ namespace Prototype
                 if (ls.sqrMagnitude > 0.04f) v = ls;
             }
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            v = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+            if (Input.GetKey(KeyCode.UpArrow)) v.y += 1f;
+            if (Input.GetKey(KeyCode.DownArrow)) v.y -= 1f;
+            if (Input.GetKey(KeyCode.RightArrow)) v.x += 1f;
+            if (Input.GetKey(KeyCode.LeftArrow)) v.x -= 1f;
 #endif
             return Vector2.ClampMagnitude(v, 1f);
         }
 
-        /// <summary>Hold to free the head from the torso (shoulder check).</summary>
-        public static bool ScanHeld()
+        public static bool SprintHeld()
         {
 #if ENABLE_INPUT_SYSTEM
-            var mouse = Mouse.current;
-            if (mouse != null && mouse.rightButton.isPressed) return true;
             var kb = Keyboard.current;
             if (kb != null && kb.leftShiftKey.isPressed) return true;
             var gp = Gamepad.current;
-            if (gp != null && gp.leftTrigger.ReadValue() > 0.35f) return true;
+            if (gp != null && gp.rightShoulder.isPressed) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetMouseButton(1) || Input.GetKey(KeyCode.LeftShift);
+            return Input.GetKey(KeyCode.LeftShift);
 #else
             return false;
 #endif
         }
 
-        /// <summary>Tap for an automatic quick sweep behind you.</summary>
-        public static bool QuickScanPressed()
+        public static bool PassPressed()
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.qKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.sKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
-            if (gp != null && gp.rightShoulder.wasPressedThisFrame) return true;
+            if (gp != null && gp.buttonSouth.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.Q);
+            return Input.GetKeyDown(KeyCode.S);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Call for the ball to be played into the space ahead of your run.</summary>
+        public static bool ThroughPassPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.wKey.wasPressedThisFrame) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.buttonNorth.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.W);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>A = cross. Gamepad square/X, as in FC.</summary>
+        public static bool CrossPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.aKey.wasPressedThisFrame) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.buttonWest.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.A);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>D = shoot. Gamepad circle/B, as in FC.</summary>
+        public static bool ShootPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.dKey.wasPressedThisFrame) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.buttonEast.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.D);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Hold to put your body between the defender and the ball.</summary>
+        public static bool ShieldHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.eKey.isPressed) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.leftTrigger.ReadValue() > 0.35f) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKey(KeyCode.E);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Hold to turn your head. Never affects the torso or the ball.</summary>
+        public static bool ScanHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.qKey.isPressed) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKey(KeyCode.Q);
 #else
             return false;
 #endif
@@ -125,7 +216,6 @@ namespace Prototype
 #endif
         }
 
-        /// <summary>Tab toggles the vision mask off, for comparison / debugging.</summary>
         public static bool XrayPressed()
         {
 #if ENABLE_INPUT_SYSTEM
@@ -136,6 +226,33 @@ namespace Prototype
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
             return Input.GetKeyDown(KeyCode.Tab);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Plant your feet: the stick designates where you want the ball instead of moving you.</summary>
+        public static bool HoldHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed)) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.leftShoulder.isPressed) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+#else
+            return false;
+#endif
+        }
+
+        public static bool MouseAvailable()
+        {
+#if ENABLE_INPUT_SYSTEM
+            return Mouse.current != null;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return true;
 #else
             return false;
 #endif
@@ -174,13 +291,13 @@ namespace Prototype
     {
         public static readonly List<Perceivable> All = new List<Perceivable>();
 
-        public static float focusAngle = 24f;      // full detail
-        public static float peripheralAngle = 62f; // shape only
-        public static float edgeAngle = 95f;       // motion only
+        public static float focusAngle = 26f;
+        public static float peripheralAngle = 55f;
+        public static float edgeAngle = 80f;
         public static float maxDistance = 30f;
         public static float memorySeconds = 4.5f;
         public static float motionThreshold = 1.5f;
-        public static float freeRadius = 2.0f;     // you always know what is at your feet
+        public static float freeRadius = 2.0f;
         public static bool xrayDebug = false;
 
         public static void Register(Perceivable p)

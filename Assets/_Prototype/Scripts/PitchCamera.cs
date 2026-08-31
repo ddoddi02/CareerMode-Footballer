@@ -16,11 +16,11 @@ namespace Prototype
 
         [Header("Rig")]
         public float tilt = 58f;
-        public float distance = 45f;
-        public float orthoSize = 13f;
+        public float distance = 90f;
+        public float orthoSize = 16f;
 
         [Header("Framing")]
-        public float lookAhead = 4.5f;
+        public float lookAhead = 3.4f;
         public float smooth = 9f;
 
         Camera cam;
