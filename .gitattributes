@@ -1,3 +1,74 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Line endings are declared here rather than left to each machine's
+# core.autocrlf, so the stored form does not depend on who committed.
+#
+# Everything is LF, in the repository AND in the working tree. Unity writes
+# its YAML as LF on every platform, and pinning source to LF too means git
+# never rewrites a file on checkout - no conversion, no "LF will be replaced
+# by CRLF" warnings, no whole-file diffs when someone clones on another OS.
+# Visual Studio and Rider both read and write LF on Windows without complaint.
+
+* text=auto eol=lf
+
+# Let git syntax-highlight and pick better hunk headers for C#.
+*.cs  text diff=csharp
+
+# --------------------------------------------------------------- binaries ---
+# Never touched, never diffed as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.bmp  binary
+*.ico  binary
+*.tga  binary
+*.tif  binary
+*.tiff binary
+*.psd  binary
+*.exr  binary
+*.hdr  binary
+*.cubemap binary
+
+*.fbx   binary
+*.obj   binary
+*.blend binary
+*.dae   binary
+*.3ds   binary
+*.ma    binary
+*.mb    binary
+
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.aif  binary
+*.aiff binary
+*.mp4  binary
+*.mov  binary
+*.webm binary
+
+*.ttf binary
+*.otf binary
+
+*.dll   binary
+*.so    binary
+# .dylib goes through LFS - carried over from the original .gitattributes.
 *.dylib filter=lfs diff=lfs merge=lfs -text
+*.pdb   binary
+*.a     binary
+*.zip   binary
+*.unitypackage binary
+
+# ------------------------------------------------------------------ notes ---
+# Unity ships a smart merge tool for scene and prefab conflicts. To use it,
+# uncomment the two lines below and register the driver once per machine:
+#
+#   git config --global merge.unityyamlmerge.name "Unity SmartMerge"
+#   git config --global merge.unityyamlmerge.driver \
+#     '"C:/Program Files/Unity/Hub/Editor/<version>/Editor/Data/Tools/UnityYAMLMerge.exe" merge -p %O %B %A %A'
+#
+# *.unity  merge=unityyamlmerge
+# *.prefab merge=unityyamlmerge
+#
+# git-lfs is installed here and *.dylib is already routed through it, though
+# nothing currently matches. If large binary art (textures, audio, models)
+# arrives later it belongs in LFS too - but every machine cloning this repo
+# then needs git-lfs installed, so add those patterns deliberately.
