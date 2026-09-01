@@ -40,6 +40,31 @@ namespace Prototype
             return Lane.RightWing;
         }
 
+        /// <summary>How many bands the pitch is cut into along its length. PROJECT.md §3.12.</summary>
+        public const int BandCount = 6;
+        public const int LaneCount = 5;
+
+        /// <summary>
+        /// Which sixth of the pitch, counted in the attacking direction: 0 is the deepest
+        /// band a side plays out of, 5 is the one it scores in. Together with the lane
+        /// this gives the 5 x 6 grid the tactical model is built on - two divisions, no
+        /// colliders, and every cell is addressable whether or not anybody is standing
+        /// in it. That is the whole reason a long ball can be aimed at the emptiest part
+        /// of the pitch: emptiness is a property of a cell, not of a body.
+        /// </summary>
+        public static int BandOf(float z, bool attacksPositiveZ)
+        {
+            float along = (attacksPositiveZ ? z : -z) + HalfL;      // 0 .. 2*HalfL
+            int b = Mathf.FloorToInt(along / (2f * HalfL) * BandCount);
+            return Mathf.Clamp(b, 0, BandCount - 1);
+        }
+
+        /// <summary>A single index for the lane/band cell a point sits in.</summary>
+        public static int CellOf(Vector3 p, bool attacksPositiveZ)
+        {
+            return (int)LaneOf(p.x) * BandCount + BandOf(p.z, attacksPositiveZ);
+        }
+
         /// <summary>Centre and both half-spaces. The channels a shot or a turn comes from.</summary>
         public static bool IsCentral(Lane l)
         {

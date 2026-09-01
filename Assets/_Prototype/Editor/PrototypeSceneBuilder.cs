@@ -105,6 +105,7 @@ public static class PrototypeSceneBuilder
                 new Vector3(0.30f, 0.10f, 0.32f), mNose);
 
         var fc = player.AddComponent<FootballerController>();
+        fc.passing = Formation.PassingFor(Role.DM);
         fc.headMarker = headPivot;
         fc.pitchHalfX = HalfW;
         fc.pitchHalfZ = HalfL;
@@ -131,8 +132,19 @@ public static class PrototypeSceneBuilder
         fc.threat = dPerc;     // later shoulder checks favour the side he was seen on
 
         // ------------------------------------------------------------ passer ----
+        // The centre-back the possession starts with. He used to be a fixed prop that
+        // only ever passed to the human; he is an ordinary bot now and chooses his own
+        // ball like everyone else. All that is left of the drill is that play starts at
+        // his feet.
         var passer = new GameObject("Passer");
         passer.transform.position = new Vector3(0f, 0f, -13f);
+        var passerCc = passer.AddComponent<CharacterController>();
+        passerCc.height = PlayerHeight;
+        passerCc.radius = 0.28f;
+        passerCc.center = new Vector3(0f, PlayerHeight * 0.5f, 0f);
+        passerCc.slopeLimit = 60f;
+        passerCc.stepOffset = 0.3f;
+        var passerAi = passer.AddComponent<AttackerAI>();
         AddCapsule(passer.transform, "Body", new Vector3(0f, PlayerHeight * 0.5f, 0f),
                    new Vector3(PlayerWidth, PlayerHeight * 0.5f, PlayerWidth), mPasser);
         var passerPerc = passer.AddComponent<Perceivable>();
@@ -158,6 +170,10 @@ public static class PrototypeSceneBuilder
         var homeBots = new System.Collections.Generic.List<AttackerAI>();
         var homeBodies = new System.Collections.Generic.List<Transform>();
         var awayBodies = new System.Collections.Generic.List<Transform>();
+        // Everyone on the home side who can receive a pass. The keeper is deliberately
+        // not in it: he has no brain to control the ball with, so a ball played back to
+        // him would simply roll past and die.
+        var homeMates = new System.Collections.Generic.List<Transform>();
 
         for (int t = 0; t < 2; t++)
         {
@@ -173,12 +189,18 @@ public static class PrototypeSceneBuilder
                 {
                     Slot(player, root, pos, away, "Player (Home DM)");
                     homeBodies.Add(player.transform);
+                    homeMates.Add(player.transform);
                     continue;
                 }
                 if (!away && slot.role == Role.LCB)
                 {
                     Slot(passer, root, pos, away, "Passer (Home LCB)");
+                    passerAi.role = slot.role;
+                    passerAi.homeSlot = pos;
+                    passerAi.passing = Formation.PassingFor(slot.role);
+                    homeBots.Add(passerAi);
                     homeBodies.Add(passer.transform);
+                    homeMates.Add(passer.transform);
                     passerHome = pos;
                     continue;
                 }
@@ -214,11 +236,16 @@ public static class PrototypeSceneBuilder
                     var a = body.GetComponent<AttackerAI>();
                     a.role = slot.role;
                     a.homeSlot = pos;
+                    a.passing = Formation.PassingFor(slot.role);
                     homeBots.Add(a);
                 }
 
                 if (away) awayBodies.Add(body.transform);
-                else homeBodies.Add(body.transform);
+                else
+                {
+                    homeBodies.Add(body.transform);
+                    if (!gk) homeMates.Add(body.transform);
+                }
             }
         }
 
@@ -231,7 +258,7 @@ public static class PrototypeSceneBuilder
         var teamAtk = homeRoot.gameObject.AddComponent<TeamAttack>();
         teamAtk.attacksPositiveZ = true;               // home attacks the goal at +Z
         teamAtk.members = homeBots.ToArray();
-        teamAtk.mates = homeBodies.ToArray();
+        teamAtk.mates = homeMates.ToArray();
         teamAtk.opponents = awayBodies.ToArray();      // keeper included - he is usually the last man
 
         // -------------------------------------------------------------- ball ----
@@ -244,7 +271,9 @@ public static class PrototypeSceneBuilder
         ball.ApplyScale();                                    // -> 0.22 m across
         fc.lookTarget = ballGo.transform;   // head watches the ball by default
         teamDef.ball = ballGo.transform;
+        teamDef.ballBody = ball;            // he cuts passes out, so he reads its path
         teamAtk.ball = ballGo.transform;
+        teamAtk.ballBody = ball;            // and this side actually plays it
         var ballPerc = ballGo.AddComponent<Perceivable>();
         ballPerc.tint = Color.white;
         ballPerc.ghostScale = Vector3.one * 0.5f;
@@ -291,11 +320,24 @@ public static class PrototypeSceneBuilder
         drill.defenderPerc = dPerc;
         drill.passer = passer.transform;
         drill.ball = ball;
+        drill.attack = teamAtk;
+        drill.defence = teamDef;
         drill.startPos = Vector3.zero;
         drill.passerHome = passerHome;      // the LCB slot he now stands in
-        drill.pitchHalfX = 30f;      // keep the drill's passes inside a sane region
-        drill.pitchHalfZ = 40f;
+        drill.pitchHalfX = HalfW;    // the ball is in play until it crosses a real line
+        drill.pitchHalfZ = HalfL;
         drill.goalZ = HalfL;
+        drill.goalHalfWidth = 3.66f;
+
+        // Reads the ranges off the components that own them and draws them on the grass.
+        // An orthographic camera 90 m up has no depth cue, so "how close is he" is not a
+        // question the screen can answer on its own. G toggles it.
+        var view = director.AddComponent<PlayDebugView>();
+        view.ball = ball;
+        view.attack = teamAtk;
+        view.defence = teamDef;
+        view.player = fc;
+        view.director = drill;
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
@@ -303,9 +345,10 @@ public static class PrototypeSceneBuilder
         AssetDatabase.Refresh();
 
         Debug.Log(string.Format(
-            "[Prototype] Drill scene built at {0}  —  pitch {1} x {2} m, players {3:0.00} m, " +
-            "two 4-1-2-3 squads (22 bodies, no AI). " +
-            "Arrow keys move, W/A/S/D = through/cross/pass/shoot, Q = shoulder check.",
+            "[Prototype] Match scene built at {0}  —  pitch {1} x {2} m, players {3:0.00} m, " +
+            "two 4-1-2-3 squads. Home plays it out of the back among themselves; away " +
+            "defends and cuts passes out. " +
+            "Arrow keys move AND aim the pass, W/A/S/D = through/cross/pass/shoot, Q = shoulder check.",
             ScenePath, HalfW * 2f, HalfL * 2f, PlayerHeight));
     }
 

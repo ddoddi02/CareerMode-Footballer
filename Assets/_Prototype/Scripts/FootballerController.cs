@@ -14,7 +14,7 @@ namespace Prototype
     /// keyboard scheme is being tuned.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public class FootballerController : MonoBehaviour
+    public class FootballerController : MonoBehaviour, IBallCarrier
     {
         /// <summary>How the receiver is allowed to move while a pass is live.</summary>
         public enum Receive
@@ -57,6 +57,10 @@ namespace Prototype
         [Tooltip("Minimum effort when chasing a ball played away from you.")]
         public float chaseFloor = 0.55f;
 
+        [Header("Attributes")]
+        [Tooltip("How well he passes, 0..1. Lives here rather than on the director so there is ONE of it: the pass selector reads the same number the strike does when it asks whether a team-mate is a better passer than him.")]
+        [Range(0f, 1f)] public float passing = 0.70f;
+
         [Header("Refs")]
         public Camera cam;
         public Transform headMarker;
@@ -94,6 +98,12 @@ namespace Prototype
 
         public float Speed { get { return new Vector2(vel.x, vel.z).magnitude; } }
         public Vector3 Velocity { get { return vel; } }
+
+        // --- IBallCarrier: the ball does not care that this one has a human on it ---
+        public Transform CarrierTransform { get { return transform; } }
+        public Vector2 CarrierForward { get { return BodyForward; } }
+        public float CarrierSpeed { get { return Speed; } }
+        public float CarrierTopSpeed { get { return sprintSpeed; } }
 
         public Vector2 BodyForward
         {

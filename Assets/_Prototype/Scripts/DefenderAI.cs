@@ -53,6 +53,10 @@ namespace Prototype
         [Tooltip("Degrees off our goal within which the carrier counts as having turned in.")]
         public float turnedInAngle = 75f;
 
+        [Header("Going for a loose ball")]
+        [Tooltip("Pace he moves at when he has been sent to cut a pass out. Reading the ball early is worth more than being quick, but he still has to get there.")]
+        public float interceptSpeed = 7.4f;
+
         [Header("Tackle")]
         [Tooltip("He will commit from this far off the ball.")]
         public float lungeRange = 1.9f;
@@ -77,10 +81,17 @@ namespace Prototype
         /// <summary>True while he is the one closing the ball down.</summary>
         public bool Pressing { get { return pressing; } }
 
+        /// <summary>True while he has been sent to cut a pass out. Overrides everything else.</summary>
+        public bool Intercepting { get; private set; }
+
+        /// <summary>The point on the ball's path he was sent to.</summary>
+        public Vector3 InterceptPoint { get { return interceptPoint; } }
+
         /// <summary>His current orders - where TeamDefence wants him standing.</summary>
         public Vector3 Station { get { return station; } }
 
         Vector3 station;
+        Vector3 interceptPoint;
         bool pressing;
         Vector3 carrierPos;
         bool defendsPositiveZ = true;
@@ -109,6 +120,16 @@ namespace Prototype
 
         public void SetStation(Vector3 p) { station = p; }
 
+        /// <summary>
+        /// TeamDefence has worked out that this man, and only this man, can reach the
+        /// ball before the intended receiver does. He goes there and stops doing
+        /// anything else - a pass that is already travelling will not wait for him to
+        /// finish holding his shape.
+        /// </summary>
+        public void SetIntercept(Vector3 p) { Intercepting = true; interceptPoint = p; }
+
+        public void ClearIntercept() { Intercepting = false; }
+
         public void SetPressing(bool on, Vector3 carrier, bool goalAtPositiveZ, bool breaking)
         {
             pressing = on;
@@ -126,6 +147,7 @@ namespace Prototype
             cc.enabled = true;
             vel = Vector3.zero;
             station = pos;
+            Intercepting = false;
             nextTackle = -99f;
             recoverUntil = -99f;
         }
@@ -244,8 +266,15 @@ namespace Prototype
 
             Vector3 want;
             Vector3 look;
+            float top = speed;
 
-            if (chase != null)
+            if (Intercepting)
+            {
+                want = interceptPoint;
+                look = interceptPoint - transform.position;
+                top = interceptSpeed;
+            }
+            else if (chase != null)
             {
                 // The drill has handed him the carrier. Do not run at the ball - take up
                 // the stance that stops the turn and hold it.
@@ -277,7 +306,7 @@ namespace Prototype
             Vector3 dv = want - transform.position;
             dv.y = 0f;
 
-            Vector3 target3 = Vector3.ClampMagnitude(dv * 3.4f, speed);
+            Vector3 target3 = Vector3.ClampMagnitude(dv * 3.4f, top);
             vel = Vector3.MoveTowards(vel, target3, 32f * Time.deltaTime);
             cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
 

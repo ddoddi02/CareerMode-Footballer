@@ -26,6 +26,8 @@ namespace Prototype
     {
         [Header("Refs")]
         public Transform ball;
+        [Tooltip("The ball itself. Needed to read its path - a defender cuts a pass out by going where it will be, not where it is.")]
+        public Ball ballBody;
         public Transform[] opponents;
         public DefenderAI[] members;
 
@@ -68,8 +70,25 @@ namespace Prototype
         [Header("5 - cover")]
         [Range(0f, 1f)] public float coverBlend = 0.55f;
 
+        [Header("Cutting the pass out")]
+        [Tooltip("Seconds before he reacts to a ball being struck. This is the whole difference between a defender and a magnet: he has to read it first.")]
+        public float reaction = 0.28f;
+        [Tooltip("How far ahead of the ball he is willing to think, in seconds.")]
+        public float lookAhead = 2.6f;
+        [Tooltip("Steps the path is sampled at. Finer costs nothing at these distances.")]
+        public float step = 0.08f;
+        [Tooltip("Highest a ball can be and still be cut out. Above his head is what a lofted pass is for.")]
+        public float interceptHeight = 1.1f;
+
         /// <summary>The man currently closing the ball down. Everyone else holds shape.</summary>
         public DefenderAI Presser { get; private set; }
+
+        /// <summary>The one man sent to cut the ball out, if anybody can reach it.</summary>
+        public DefenderAI Interceptor { get; private set; }
+
+        /// <summary>Where he was sent, and when the ball gets there.</summary>
+        public Vector3 InterceptAt { get; private set; }
+        public float InterceptIn { get; private set; }
 
         /// <summary>Opponent in possession, as far as the defence knows.</summary>
         public Vector3 CarrierPos { get; private set; }
@@ -86,8 +105,81 @@ namespace Prototype
         {
             if (ball == null || members == null || members.Length == 0) return;
 
+            // Live, every frame, unlike everything else here. A ball already travelling
+            // is the one thing a defender is directly engaged with, and PitchIntel exists
+            // to make the REST of the picture stale - not this. Acting on a one-second-old
+            // snapshot of a pass means never reaching one.
+            TickIntercept();
+
             if (intel.Tick(Time.time, opponents, ball.position, BlockCentre()))
                 Recompute();
+        }
+
+        // ---------------------------------------------------------- interception --
+
+        /// <summary>
+        /// Walk forward along the ball's own closed-form path and ask, at each step,
+        /// whether anybody could be standing there by the time it arrives. The first man
+        /// for whom the answer is yes gets sent; nobody else moves.
+        ///
+        /// Sending only one is the same rule as principle 5: a loose ball that drags the
+        /// whole block toward it leaves the pitch behind it wide open, and one man
+        /// arriving is all it takes anyway.
+        ///
+        /// A ball over their heads is unreachable by construction - the sample is skipped
+        /// while it is above interceptHeight - so a lofted pass beats the press for
+        /// exactly as long as it is in the air, and no rule had to be written for that.
+        /// </summary>
+        void TickIntercept()
+        {
+            Interceptor = null;
+            InterceptIn = 0f;
+
+            bool loose = ballBody != null && ballBody.InFlight && !ballBody.Carried;
+            if (!loose)
+            {
+                for (int i = 0; i < members.Length; i++)
+                    if (members[i] != null) members[i].ClearIntercept();
+                return;
+            }
+
+            int pick = -1;
+            float bestT = float.MaxValue;
+            Vector3 bestP = Vector3.zero;
+
+            for (float t = step; t <= lookAhead; t += step)
+            {
+                Vector3 p = ballBody.Predict(t);
+                if (p.y > interceptHeight) continue;
+
+                for (int i = 0; i < members.Length; i++)
+                {
+                    var m = members[i];
+                    if (m == null || !m.active || m.Recovering) continue;
+
+                    float travel = Flat(p - m.transform.position).magnitude;
+                    float need = travel / Mathf.Max(m.interceptSpeed, 0.1f) + reaction;
+                    if (need > t) continue;
+
+                    if (t < bestT) { bestT = t; bestP = p; pick = i; }
+                }
+
+                if (pick >= 0) break;      // walking forwards, so the first hit is the earliest
+            }
+
+            for (int i = 0; i < members.Length; i++)
+            {
+                if (members[i] == null) continue;
+                if (i == pick) members[i].SetIntercept(bestP);
+                else members[i].ClearIntercept();
+            }
+
+            if (pick >= 0)
+            {
+                Interceptor = members[pick];
+                InterceptAt = bestP;
+                InterceptIn = bestT;
+            }
         }
 
         // ---------------------------------------------------------------- shape --

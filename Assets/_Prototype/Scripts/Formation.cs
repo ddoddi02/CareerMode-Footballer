@@ -152,6 +152,32 @@ namespace Prototype
 
         public const int LineCount = 3;
 
+        /// <summary>
+        /// How well this slot passes, 0..1.
+        ///
+        /// Data rather than something the scene builder invents, for the same reason the
+        /// slot coordinates are: it is a property of the ROLE, and the pass selector now
+        /// asks "is there a better passer than me to give this to" (PassRules.wQuality).
+        /// With one shared number for the whole side that question has no answer and the
+        /// term is dead weight.
+        ///
+        /// The eights are the highest because that is who a side plays through. Real
+        /// per-player attributes replace this the moment there is a squad to load.
+        /// </summary>
+        public static float PassingFor(Role r)
+        {
+            switch (r)
+            {
+                case Role.GK: return 0.45f;
+                case Role.LCB: case Role.RCB: return 0.56f;
+                case Role.LB: case Role.RB: return 0.60f;
+                case Role.DM: return 0.72f;
+                case Role.LCM: case Role.RCM: return 0.80f;
+                case Role.LW: case Role.RW: return 0.66f;
+                default: return 0.62f;      // ST
+            }
+        }
+
         /// <summary>Which way this body faces at kickoff - down the pitch, at the other goal.</summary>
         public static Quaternion Facing(bool away)
         {

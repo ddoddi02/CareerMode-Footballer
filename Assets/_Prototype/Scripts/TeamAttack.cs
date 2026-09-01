@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Prototype
@@ -31,6 +32,8 @@ namespace Prototype
         public Transform[] mates;
         [Tooltip("The ones this actually moves. The human is not in here.")]
         public AttackerAI[] members;
+        [Tooltip("The ball itself - this side plays it, not just runs off it.")]
+        public Ball ballBody;
 
         [Tooltip("True if this side attacks the goal at +Z.")]
         public bool attacksPositiveZ = true;
@@ -84,6 +87,48 @@ namespace Prototype
         [Header("Sampling")]
         [Range(6, 48)] public int samples = 24;
 
+        [Header("On the ball")]
+        [Tooltip("Who the ball can be played to, how far, and through what. See PassPlanner.")]
+        public PassRules pass = new PassRules();
+        [Tooltip("How long a bot stands on the ball before releasing it. Not a delay for its own sake - it is the window the defence has to close the lane he was going to use.")]
+        public float holdMin = 0.55f;
+        public float holdMax = 1.40f;
+        [Tooltip("He will not strike it more than this far off his own shoulder. Turning onto the ball first is why a pressed man is slower to release it.")]
+        public float alignAngle = 40f;
+        [Tooltip("Longest he will spend turning before he plays it anyway, badly.")]
+        public float maxTurnWait = 0.9f;
+        [Tooltip("How near the ball a bot has to be to take it under control.")]
+        public float collectRadius = 1.1f;
+        [Tooltip("How far the ball has to have run before anybody but the passer can claim it.")]
+        public float passEscape = 1.4f;
+        [Tooltip("A ball played to the human is his for this long before a bot goes and takes it off him. Without it a team-mate hoovers up every ball before he can reach it.")]
+        public float humanFirstRefusal = 1.2f;
+        [Tooltip("How far ahead the chaser reads the ball, in seconds.")]
+        public float chaseLookAhead = 3f;
+        [Tooltip("Distance at which an opponent counts as full pressure on the passer.")]
+        public float pressTight = 1.2f;
+        public float pressLoose = 6f;
+
+        /// <summary>The bot with the ball at his feet, if one of ours has it.</summary>
+        public AttackerAI BallCarrier { get; private set; }
+
+        /// <summary>The one man sent to go and get a loose ball.</summary>
+        public AttackerAI Chaser { get; private set; }
+
+        /// <summary>The last pass this side played, and who it was meant for.</summary>
+        public PassPlan LastPlan { get { return lastPlan; } }
+
+        /// <summary>
+        /// Every option the last decision looked at, scored. Kept so the debug view can
+        /// draw the balls he did NOT play - "why that one" is only answerable next to
+        /// the ones it beat.
+        /// </summary>
+        public IList<PassCandidate> Candidates { get { return candidates; } }
+        public Transform IntendedReceiver { get; private set; }
+
+        /// <summary>Bumped every time a pass leaves a foot, so a listener can spot a new one.</summary>
+        public int PassSerial { get; private set; }
+
         /// <summary>The furthest line our attackers may stand on right now.</summary>
         public float OffsideLine { get; private set; }
         public Vector3 CarrierPos { get; private set; }
@@ -94,11 +139,246 @@ namespace Prototype
         int showAhead = -1, showBehind = -1;
         Vector3 shift;
 
+        readonly List<PassCandidate> candidates = new List<PassCandidate>();
+        PassPlan lastPlan;
+        PassPlan pending;
+        bool hasPending;
+        float pendingSince;
+        float holdUntil = -1f;
+        float looseSince = -1f;
+
         void Update()
         {
             if (ball == null || members == null || members.Length == 0) return;
+
+            // Possession is handled live. Everything else on this side runs off the
+            // one-second picture, but a man standing on the ball cannot be working from a
+            // one-second-old version of where his team-mates are - the ball is the one
+            // thing he is directly engaged with.
+            TickPossession();
+
             if (intel.Tick(Time.time, opponents, ball.position, BlockCentre()))
                 Recompute();
+        }
+
+        // ------------------------------------------------------------ possession --
+
+        void TickPossession()
+        {
+            if (ballBody == null) return;
+
+            BallCarrier = ballBody.Carrier as AttackerAI;
+
+            if (BallCarrier == null)
+            {
+                hasPending = false;
+                holdUntil = -1f;
+                TickChase();
+                TryCollect();
+                return;
+            }
+
+            looseSince = -1f;
+            SendChaser(null);
+
+            if (holdUntil < 0f) holdUntil = Time.time + Random.Range(holdMin, holdMax);
+            if (Time.time < holdUntil) return;
+
+            PlayPass(BallCarrier);
+        }
+
+        /// <summary>
+        /// A ball nobody has is nobody's until somebody goes for it.
+        ///
+        /// The pass arriving is not the same as the pass being received: it is weighted
+        /// with an error in metres (PROJECT.md §3.8), so it lands NEAR him, not on him.
+        /// Without this the ball rolled to a stop a couple of metres from the man it was
+        /// played to and the possession simply stopped - and the receiver stood over it
+        /// doing nothing, because to the rest of this class he looked like the carrier.
+        ///
+        /// One man goes, the same rule as the defence's interception (§3.18): a loose
+        /// ball that drags the whole side toward it leaves the shape behind it in ruins.
+        /// The man it was played to gets first go at his own ball; if he cannot have it,
+        /// whoever is nearest does.
+        /// </summary>
+        void TickChase()
+        {
+            if (ballBody.Carried) { looseSince = -1f; SendChaser(null); return; }
+            if (looseSince < 0f) looseSince = Time.time;
+
+            // A ball played to the human is his. A bot barging in to collect it before he
+            // can take his touch would quietly delete the thing this prototype measures.
+            AttackerAI intended = IntendedReceiver != null
+                ? IntendedReceiver.GetComponent<AttackerAI>() : null;
+            if (IntendedReceiver != null && intended == null
+                && Time.time - looseSince < humanFirstRefusal)
+            {
+                SendChaser(null);
+                return;
+            }
+
+            Vector3 aim = ChasePoint();
+
+            AttackerAI pick = intended != null && intended.active && intended.CanCollect
+                            ? intended : null;
+            if (pick == null)
+            {
+                float best = float.MaxValue;
+                for (int i = 0; i < members.Length; i++)
+                {
+                    AttackerAI m = members[i];
+                    if (m == null || !m.active || !m.CanCollect) continue;
+                    float d = Flat(m.transform.position - aim).sqrMagnitude;
+                    if (d < best) { best = d; pick = m; }
+                }
+            }
+
+            SendChaser(pick, aim);
+        }
+
+        /// <summary>
+        /// Where to run to. The earliest point on the ball's path he could actually be
+        /// standing on, and failing that the point it is going to stop at - never the
+        /// point it currently occupies.
+        /// </summary>
+        Vector3 ChasePoint()
+        {
+            Vector3 rest = ballBody.Predict(chaseLookAhead);
+            rest.y = 0f;
+            if (!ballBody.InFlight) return rest;
+
+            for (float t = 0.1f; t <= chaseLookAhead; t += 0.1f)
+            {
+                Vector3 p = ballBody.Predict(t);
+                p.y = 0f;
+                for (int i = 0; i < members.Length; i++)
+                {
+                    AttackerAI m = members[i];
+                    if (m == null || !m.active || !m.CanCollect) continue;
+                    if (Flat(p - m.transform.position).magnitude / Mathf.Max(m.sprintSpeed, 0.1f) <= t)
+                        return p;
+                }
+            }
+            return rest;
+        }
+
+        void SendChaser(AttackerAI who) { SendChaser(who, Vector3.zero); }
+
+        void SendChaser(AttackerAI who, Vector3 aim)
+        {
+            Chaser = who;
+            for (int i = 0; i < members.Length; i++)
+            {
+                if (members[i] == null) continue;
+                if (members[i] == who) members[i].SetChase(aim);
+                else members[i].ClearChase();
+            }
+        }
+
+        /// <summary>
+        /// A loose ball on the floor near one of ours becomes his. The human is not in
+        /// here - the director gives him the ball, because his touch is the thing being
+        /// scored and it has to go through the receiving rules first.
+        /// </summary>
+        void TryCollect()
+        {
+            if (ballBody.Carried || ballBody.Airborne) return;
+            // Same reason as the defence's version: for the first stride the ball is
+            // still leaving the passer's foot and the man beside him has not received
+            // anything.
+            if (ballBody.InFlight && ballBody.Travelled < passEscape) return;
+
+            Vector3 bp = Flat(ballBody.transform.position);
+            AttackerAI best = null;
+            float bd = collectRadius;
+
+            for (int i = 0; i < members.Length; i++)
+            {
+                AttackerAI m = members[i];
+                if (m == null || !m.active || !m.CanCollect) continue;
+                float d = Flat(m.transform.position - bp).magnitude;
+                if (d < bd) { bd = d; best = m; }
+            }
+
+            if (best == null) return;
+            ballBody.Attach(best);
+            best.TakeBall();
+        }
+
+        /// <summary>
+        /// Turn onto the ball, then hit it. The plan is cached while he turns so he does
+        /// not change his mind halfway through: re-planning every frame produced a passer
+        /// who pirouetted on the spot while the best option flickered between two
+        /// team-mates.
+        /// </summary>
+        void PlayPass(AttackerAI who)
+        {
+            Vector3 from = ballBody.transform.position;
+
+            if (!hasPending)
+            {
+                pending = PassPlanner.Choose(who.transform, from, mates, opponents,
+                                             pass, attacksPositiveZ, ballBody, candidates);
+                if (!pending.valid) { holdUntil = Time.time + 0.4f; return; }
+                hasPending = true;
+                pendingSince = Time.time;
+            }
+
+            who.FaceTarget(pending.target);
+
+            Vector3 aim = Flat(pending.target - from);
+            float off = Vector2.Angle(who.CarrierForward, new Vector2(aim.x, aim.z));
+            bool rushed = Time.time - pendingSince > maxTurnWait;
+            if (off > alignAngle && !rushed) return;
+
+            float diff = BallModel.Difficulty(Pressure(from), off, rushed, false);
+
+            if (pending.kind == PassKind.Lofted)
+            {
+                // Resolve gives the sprayed direction and the weight error. For a ball in
+                // the air the weight error is a LENGTH error rather than a speed one, so
+                // it is folded into how far up the line the aim point sits; the strike
+                // speed it returns is unused, because Loft solves that from the distance
+                // and the apex.
+                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, 0f, who.passing, diff);
+                float over = 1f + st.speedErrorPct * 0.01f;
+                Vector3 landing = from + st.direction * (pending.distance * over);
+                ballBody.Loft(from, landing, PassPlanner.LoftApex(pending.distance, pass));
+                lastPlan = pending;
+                lastPlan.target = landing;
+            }
+            else
+            {
+                float v0 = Ball.SpeedToReach(pending.distance, pass.arrivePace, ballBody.rollDecel);
+                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, v0, who.passing, diff);
+                ballBody.Launch(from, st.direction, st.speed);
+                lastPlan = pending;
+            }
+
+            who.ReleaseBall();
+            IntendedReceiver = pending.receiver;
+            PassSerial++;
+            hasPending = false;
+            holdUntil = -1f;
+        }
+
+        /// <summary>How closed down the man on the ball is, 0..1.</summary>
+        float Pressure(Vector3 p)
+        {
+            return Mathf.Clamp01(Mathf.InverseLerp(pressLoose, pressTight, NearestOpponent(p)));
+        }
+
+        /// <summary>Forget the ball - a restart.</summary>
+        public void ResetPossession()
+        {
+            BallCarrier = null;
+            IntendedReceiver = null;
+            Chaser = null;
+            hasPending = false;
+            holdUntil = -1f;
+            looseSince = -1f;
+            lastPlan = new PassPlan();
+            intel.Clear();
         }
 
         // ---------------------------------------------------------------- picture --
@@ -108,9 +388,13 @@ namespace Prototype
             Vector3 ballPos = intel.Ball;
 
             OffsideLine = Offside.Line(attacksPositiveZ, opponents, ballPos.z);
-            carrier = NearestMate(ballPos, null);
+            // Only a man who ACTUALLY has the ball is the carrier. Treating "nearest
+            // team-mate to the ball" as one froze him on the spot - he was told to hold
+            // his position because he looked like he was on the ball, while the ball sat
+            // two metres away waiting for somebody to come and get it.
+            carrier = BallCarrier != null ? BallCarrier.transform : null;
             CarrierPos = carrier != null ? carrier.position : ballPos;
-            support = carrier != null ? NearestMate(CarrierPos, carrier) : null;
+            support = NearestMate(CarrierPos, carrier);
 
             shift = ShapeShift(ballPos);
             AssessNumbers();

@@ -231,6 +231,22 @@ namespace Prototype
 #endif
         }
 
+        /// <summary>Show the numbers the AI is actually working to - ranges, lanes, cones.</summary>
+        public static bool DebugViewPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.gKey.wasPressedThisFrame) return true;
+            var gp = Gamepad.current;
+            if (gp != null && gp.rightStickButton.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.G);
+#else
+            return false;
+#endif
+        }
+
         /// <summary>Plant your feet: the stick designates where you want the ball instead of moving you.</summary>
         public static bool HoldHeld()
         {
