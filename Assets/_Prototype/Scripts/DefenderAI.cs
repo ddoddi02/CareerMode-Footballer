@@ -9,6 +9,16 @@ namespace Prototype
         Drop    // dropped away, you are free to turn
     }
 
+    /// <summary>What the man nearest the ball has been told to do about it.</summary>
+    public enum PressMode
+    {
+        None,
+        /// <summary>Get tight and stop him turning. The default.</summary>
+        Deny,
+        /// <summary>Stand off and delay him - TeamDefence owns the position, he just holds it and faces the ball.</summary>
+        Contain
+    }
+
     /// <summary>
     /// One defender. He does not decide where the shape should be - <see cref="TeamDefence"/>
     /// hands him a station every time the defence takes a new picture - but he decides how
@@ -81,6 +91,9 @@ namespace Prototype
         /// <summary>True while he is the one closing the ball down.</summary>
         public bool Pressing { get { return pressing; } }
 
+        /// <summary>Engaging him, or standing off and delaying him.</summary>
+        public PressMode Mode { get { return mode; } }
+
         /// <summary>True while he has been sent to cut a pass out. Overrides everything else.</summary>
         public bool Intercepting { get; private set; }
 
@@ -92,6 +105,7 @@ namespace Prototype
 
         Vector3 station;
         Vector3 interceptPoint;
+        PressMode mode = PressMode.Deny;
         bool pressing;
         Vector3 carrierPos;
         bool defendsPositiveZ = true;
@@ -130,9 +144,10 @@ namespace Prototype
 
         public void ClearIntercept() { Intercepting = false; }
 
-        public void SetPressing(bool on, Vector3 carrier, bool goalAtPositiveZ, bool breaking)
+        public void SetPressing(bool on, PressMode how, Vector3 carrier, bool goalAtPositiveZ, bool breaking)
         {
             pressing = on;
+            mode = how;
             carrierPos = carrier;
             defendsPositiveZ = goalAtPositiveZ;
             onBreak = breaking;
@@ -206,6 +221,11 @@ namespace Prototype
         public bool WantsTackle(Vector3 ballPos, float exposure)
         {
             if (Time.time < nextTackle || Recovering) return false;
+
+            // Delaying and tackling are opposites. A man told to stand off who then dives
+            // in has thrown away the only thing delay buys - the seconds the rest of the
+            // shape needs to get back.
+            if (pressing && mode == PressMode.Contain) return false;
 
             Vector3 d = ballPos - transform.position;
             d.y = 0f;
@@ -281,6 +301,15 @@ namespace Prototype
                 Vector3 carrier = target != null ? target.position : chase.position;
                 want = DenyTurnStance(carrier);
                 look = carrier - transform.position;
+            }
+            else if (pressing && mode == PressMode.Contain)
+            {
+                // Delaying a break. TeamDefence worked out where to stand - goal-side,
+                // shading the middle, on the lane behind him - and the job here is to
+                // hold it and stay square to him. Closing the last three metres is the
+                // one thing that must not happen: that is the touch he is waiting for.
+                want = station;
+                look = carrierPos - transform.position;
             }
             else if (pressing)
             {

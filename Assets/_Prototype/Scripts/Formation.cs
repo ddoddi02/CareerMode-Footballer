@@ -178,6 +178,85 @@ namespace Prototype
             }
         }
 
+        // ------------------------------------------------------- role groups ----
+        // The defensive duties are written per role ("full-backs pick up wingers"),
+        // so the roles have to be askable as GROUPS rather than one at a time. Kept
+        // here beside the shape because that is what they are: a property of the slot,
+        // not of the man standing in it.
+
+        public static bool IsKeeper(Role r) { return r == Role.GK; }
+        public static bool IsCentreBack(Role r) { return r == Role.LCB || r == Role.RCB; }
+        public static bool IsFullBack(Role r) { return r == Role.LB || r == Role.RB; }
+        public static bool IsMidfield(Role r) { return r == Role.DM || r == Role.LCM || r == Role.RCM; }
+        public static bool IsWinger(Role r) { return r == Role.LW || r == Role.RW; }
+        public static bool IsStriker(Role r) { return r == Role.ST; }
+
+        /// <summary>The men a centre-back is watching: the front three.</summary>
+        public static bool IsForward(Role r) { return r == Role.LW || r == Role.ST || r == Role.RW; }
+
+        /// <summary>Who a striker hunts when he presses: the men who play it out.</summary>
+        public static bool IsBuildUp(Role r)
+        {
+            return r == Role.GK || IsCentreBack(r) || IsFullBack(r);
+        }
+
+        /// <summary>
+        /// How far from his station an opponent has to be before he counts as being IN
+        /// this man's area - the trigger for common principle 3.
+        ///
+        /// Wider out wide, because a full-back covers a channel rather than a point, and
+        /// tightest through the middle where the goal is.
+        /// </summary>
+        public static float DefensiveZone(Role r)
+        {
+            if (IsCentreBack(r)) return 8f;
+            if (IsFullBack(r)) return 11f;
+            if (IsMidfield(r)) return 10f;
+            if (IsWinger(r)) return 12f;
+            if (IsStriker(r)) return 13f;
+            return 6f;      // keeper
+        }
+
+        /// <summary>
+        /// How far from his slot a defender may be dragged by anything at all - marking,
+        /// covering, pressing, delaying a break.
+        ///
+        /// This is the TOP principle, not a courtesy: whatever the rest of the defending
+        /// decides, the answer is clamped back inside this radius before it becomes an
+        /// order. A side that will follow its man anywhere does not have a shape, it has
+        /// eleven separate chases, and the space it leaves behind is worth more than
+        /// every duel it wins.
+        ///
+        /// Tightest at the back and loosest at the front, because that is where the cost
+        /// of being out of position is paid. A striker twelve metres out of his slot has
+        /// made a bad press; a centre-back twelve metres out of his has opened the goal.
+        /// </summary>
+        public static float PositionLeash(Role r)
+        {
+            if (IsKeeper(r)) return 6f;
+            if (IsCentreBack(r)) return 9f;
+            if (IsFullBack(r)) return 12f;
+            if (IsMidfield(r)) return 13f;
+            if (IsWinger(r)) return 15f;
+            return 16f;      // striker
+        }
+
+        /// <summary>
+        /// Whatever role this body is playing, whichever component happens to own it.
+        /// Looked up once per picture rather than per frame.
+        /// </summary>
+        public static Role RoleOf(Transform t)
+        {
+            if (t == null) return Role.DM;
+            AttackerAI a = t.GetComponent<AttackerAI>();
+            if (a != null) return a.role;
+            DefenderAI d = t.GetComponent<DefenderAI>();
+            if (d != null) return d.role;
+            FootballerController f = t.GetComponent<FootballerController>();
+            if (f != null) return f.role;
+            return Role.DM;
+        }
+
         /// <summary>Which way this body faces at kickoff - down the pitch, at the other goal.</summary>
         public static Quaternion Facing(bool away)
         {

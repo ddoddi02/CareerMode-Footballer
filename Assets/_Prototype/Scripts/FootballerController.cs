@@ -57,6 +57,10 @@ namespace Prototype
         [Tooltip("Minimum effort when chasing a ball played away from you.")]
         public float chaseFloor = 0.55f;
 
+        [Header("Who he is")]
+        [Tooltip("His slot in the shape. The opposing defence reads it to decide who picks him up - a full-back marks a winger, and it has to be able to tell that this is one.")]
+        public Role role = Role.DM;
+
         [Header("Attributes")]
         [Tooltip("How well he passes, 0..1. Lives here rather than on the director so there is ONE of it: the pass selector reads the same number the strike does when it asks whether a team-mate is a better passer than him.")]
         [Range(0f, 1f)] public float passing = 0.70f;

@@ -105,6 +105,7 @@ public static class PrototypeSceneBuilder
                 new Vector3(0.30f, 0.10f, 0.32f), mNose);
 
         var fc = player.AddComponent<FootballerController>();
+        fc.role = Role.DM;                        // 원 볼란치 - the slot the human plays
         fc.passing = Formation.PassingFor(Role.DM);
         fc.headMarker = headPivot;
         fc.pitchHalfX = HalfW;
