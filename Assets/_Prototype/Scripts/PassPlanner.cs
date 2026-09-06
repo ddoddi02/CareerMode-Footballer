@@ -88,8 +88,8 @@ namespace Prototype
         public float denseBlock = 3f;
         [Tooltip("How much of criterion 3 is his own space rather than his block's emptiness.")]
         [Range(0f, 1f)] public float personalSpaceShare = 0.5f;
-        [Tooltip("Flight time that counts as a full point of risk. Has to sit ABOVE the longest ball actually attempted or every pass past ~16 m scores the same maximum and the term stops separating them - at which point the shortest ball always wins and nothing else in the score matters.")]
-        public float riskTime = 3.2f;
+        [Tooltip("Flight time that counts as a full point of risk. Has to sit ABOVE the longest ball actually attempted or every pass past ~16 m scores the same maximum and the term stops separating them - at which point the shortest ball always wins and nothing else in the score matters. It therefore has to be re-tuned whenever arrivePace moves, because arrivePace is what sets the longest flight there is: at 9 m/s a 30 m ball lands in 2.1 s, so 2.4 keeps the spread at 0.20..0.88 instead of pinning half the pitch at 1.00.")]
+        public float riskTime = 2.4f;
 
         [Header("The human's wedge")]
         [Tooltip("Half-angle of the wedge a human's stick input picks a team-mate out of. Outside it he strikes the raw direction instead and the pass goes nowhere.")]
@@ -105,8 +105,8 @@ namespace Prototype
         public float loftApexMin = 3f;
         public float loftApexMax = 9f;
 
-        [Tooltip("Pace a ground pass should still be doing when it reaches him. Too dead and he has to come back for it - and the slower the ball, the longer the lane has to survive.")]
-        public float arrivePace = 3.5f;
+        [Tooltip("Pace a ground pass should still be doing when it reaches him. This is the only knob that sets how QUICK a pass is: the strike speed is solved backwards from it (Ball.SpeedToReach), so raising it lifts the whole flight, not just the last metre. Too dead and he has to come back for it, and every extra tenth of a second is another tenth the lane has to stay open. At 3.5 an 18 m ball took 2.1 s and looked like it was rolling through sand; at 9 it takes 1.4 s. Raising it means re-tuning riskTime, which is scaled against the longest flight this produces.")]
+        public float arrivePace = 9f;
     }
 
     /// <summary>

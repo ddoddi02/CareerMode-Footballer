@@ -2444,14 +2444,14 @@ MonoBehaviour:
     freeSpace: 8
     denseBlock: 3
     personalSpaceShare: 0.5
-    riskTime: 3.2
+    riskTime: 2.4
     coneHalfAngle: 15
     leadFactor: 0.55
     maxLead: 4
     loftApexPerMetre: 0.16
     loftApexMin: 3
     loftApexMax: 9
-    arrivePace: 3.5
+    arrivePace: 9
   holdMin: 0.55
   holdMax: 1.4
   alignAngle: 40
@@ -5132,7 +5132,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0.35000002}
-  m_LocalScale: {x: 74.40734, y: 33.92, z: 1}
+  m_LocalScale: {x: 55.15563, y: 33.92, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1582408703}
@@ -6937,11 +6937,22 @@ MonoBehaviour:
   maxLineGap: 14
   compactPasses: 16
   squeeze: 0.8
-  dangerThreshold: 0.34
+  backLineFloor: 8
+  backLineCeiling: 62
   markGap: 1.7
   maxMarkTravel: 26
+  watchBlend: 0.35
+  highPressBeyond: 68
+  lowPressWithin: 34
+  forwardDrop: 9
+  forwardPush: 5
   breakSpeed: 5
+  containGap: 3.2
+  containInsideShade: 2
+  laneBlockShare: 0.35
   coverBlend: 0.55
+  leashScale: 1
+  holdPosition: 1
   reaction: 0.28
   lookAhead: 2.6
   step: 0.08
@@ -7769,6 +7780,7 @@ MonoBehaviour:
   onLineEnter: 2.4
   onLineExit: 3.2
   chaseFloor: 0.55
+  role: 5
   passing: 0.72
   cam: {fileID: 1582408699}
   headMarker: {fileID: 134577081}
@@ -10178,6 +10190,7 @@ GameObject:
   - component: {fileID: 1801159579}
   - component: {fileID: 1801159578}
   - component: {fileID: 1801159580}
+  - component: {fileID: 1801159581}
   m_Layer: 0
   m_Name: GameDirector
   m_TagString: Untagged
@@ -10259,11 +10272,13 @@ MonoBehaviour:
   defence: {fileID: 1259432253}
   player: {fileID: 1358007472}
   director: {fileID: 1801159578}
+  lab: {fileID: 0}
   show: 1
   showSteal: 1
   showReach: 1
   showLunge: 1
   showPassCorridor: 1
+  showCandidates: 1
   showAimCone: 1
   coneLength: 26
   height: 0.06
@@ -10278,6 +10293,32 @@ MonoBehaviour:
   shadowCol: {r: 0.6, g: 0.6, b: 0.7, a: 0.28}
   coneCol: {r: 0.5, g: 0.8, b: 1, a: 0.5}
   pickCol: {r: 0.5, g: 1, b: 0.8, a: 0.9}
+--- !u!114 &1801159581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801159577}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 961e7afa9be7eee4fb5556163dce78f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Prototype.PassLab
+  ball: {fileID: 0}
+  attack: {fileID: 0}
+  defence: {fileID: 0}
+  player: {fileID: 0}
+  director: {fileID: 0}
+  running: 0
+  auto: 1
+  dwell: 2
+  unfreezeDefence: 0
+  perfectStrike: 1
+  arriveRadius: 1.5
+  flightTimeout: 8
+  showTable: 1
+  history: 6
 --- !u!1 &1817441311
 GameObject:
   m_ObjectHideFlags: 0
