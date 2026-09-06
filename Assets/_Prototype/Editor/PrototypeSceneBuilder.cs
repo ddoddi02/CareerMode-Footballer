@@ -340,6 +340,16 @@ public static class PrototypeSceneBuilder
         view.player = fc;
         view.director = drill;
 
+        // The pass bench (P). Freezes everybody and plays passes on command, so the
+        // selector's own criteria can be read off a picture that is not moving.
+        var lab = director.AddComponent<PassLab>();
+        lab.ball = ball;
+        lab.attack = teamAtk;
+        lab.defence = teamDef;
+        lab.player = fc;
+        lab.director = drill;
+        view.lab = lab;
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
         AssetDatabase.SaveAssets();
@@ -349,7 +359,8 @@ public static class PrototypeSceneBuilder
             "[Prototype] Match scene built at {0}  —  pitch {1} x {2} m, players {3:0.00} m, " +
             "two 4-1-2-3 squads. Home plays it out of the back among themselves; away " +
             "defends and cuts passes out. " +
-            "Arrow keys move AND aim the pass, W/A/S/D = through/cross/pass/shoot, Q = shoulder check.",
+            "Arrow keys move AND aim the pass, W/A/S/D = through/cross/pass/shoot, Q = shoulder check, " +
+            "G = ranges and lanes, P = pass bench (freeze everybody and pass on Space).",
             ScenePath, HalfW * 2f, HalfL * 2f, PlayerHeight));
     }
 

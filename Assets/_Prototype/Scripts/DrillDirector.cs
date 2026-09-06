@@ -624,6 +624,20 @@ namespace Prototype
             else { staleTry++; if (ok) staleOk++; }
         }
 
+        /// <summary>
+        /// Put the drawn lines away. Disabling this component stops it updating them but
+        /// leaves whatever they were last showing frozen on the grass, which is exactly
+        /// the stale picture a debug view must never leave behind - PassLab calls this
+        /// when it takes the pitch over.
+        /// </summary>
+        public void HideLines()
+        {
+            if (passLine != null) passLine.enabled = false;
+            if (passRing != null) passRing.enabled = false;
+            if (interceptRing != null) interceptRing.enabled = false;
+            if (receiveGuide != null) receiveGuide.enabled = false;
+        }
+
         void EndRound()
         {
             player.EndReceive();

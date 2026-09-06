@@ -35,6 +35,8 @@ namespace Prototype
         public FootballerController player;
         [Tooltip("Where the steal radius lives. Read, never written.")]
         public DrillDirector director;
+        [Tooltip("The pass bench. While it is running, every option it is scoring is drawn.")]
+        public PassLab lab;
 
         [Header("Toggle")]
         public bool show = true;
@@ -49,6 +51,8 @@ namespace Prototype
 
         [Header("Which lanes")]
         public bool showPassCorridor = true;
+        [Tooltip("Draw every option the pass bench is scoring, not just the one that won. Green survived the gates, red did not - which is the only way to see that the ball taken was taken over a better one.")]
+        public bool showCandidates = true;
         public bool showAimCone = true;
         [Tooltip("Length of the drawn wedge, in metres.")]
         public float coneLength = 26f;
@@ -85,6 +89,7 @@ namespace Prototype
             if (defence == null) defence = FindAnyObjectByType<TeamDefence>();
             if (player == null) player = FindAnyObjectByType<FootballerController>();
             if (director == null) director = FindAnyObjectByType<DrillDirector>();
+            if (lab == null) lab = FindAnyObjectByType<PassLab>();
 
             AdoptStrays();
         }
@@ -119,6 +124,7 @@ namespace Prototype
             if (show)
             {
                 DrawDefenderRings();
+                DrawCandidates();
                 DrawPassCorridor();
                 DrawAimCone();
             }
@@ -168,6 +174,43 @@ namespace Prototype
 
             PassPlan plan = attack.LastPlan;
             Corridor(plan.from, plan.target, attack.pass, attack.opponents);
+        }
+
+        /// <summary>
+        /// Every ball that was considered, drawn at once - the rejected ones in red, the
+        /// survivors in green, and the corridor drawn in full only for the one currently
+        /// winning. "Why that pass" is not answerable on its own: it is only ever an
+        /// answer next to the passes it beat, which is why the losers are on the grass too.
+        ///
+        /// Only while the bench is running. In a live match these change several times a
+        /// second and would draw a fan of lines nobody can read.
+        /// </summary>
+        void DrawCandidates()
+        {
+            if (!showCandidates || lab == null || !lab.Running || attack == null) return;
+
+            IList<PassCandidate> list = lab.Candidates;
+            Transform fav = lab.Favourite;
+            Vector3 from = lab.Origin;
+
+            for (int i = 0; list != null && i < list.Count; i++)
+            {
+                PassCandidate c = list[i];
+                if (c.receiver == null) continue;
+                bool win = fav != null && c.receiver == fav;
+                Color col = c.open ? laneOpenCol : laneBlockedCol;
+                Segment(from, c.target, col);
+                Ring(c.target, win ? 1.1f : 0.6f, win ? pickCol : col);
+            }
+
+            if (fav != null) Corridor(from, LaneTarget(list, fav), attack.pass, attack.opponents);
+        }
+
+        static Vector3 LaneTarget(IList<PassCandidate> list, Transform who)
+        {
+            for (int i = 0; list != null && i < list.Count; i++)
+                if (list[i].receiver == who) return list[i].target;
+            return who.position;
         }
 
         void Corridor(Vector3 from, Vector3 to, PassRules r, Transform[] opponents)

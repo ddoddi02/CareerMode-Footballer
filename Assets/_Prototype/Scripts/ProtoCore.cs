@@ -287,6 +287,48 @@ namespace Prototype
 #endif
         }
 
+        /// <summary>Freeze everybody and pass on command - the pass-selection bench (PassLab).</summary>
+        public static bool PassLabPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.pKey.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.P);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Play the pass that is currently top of the bench's list.</summary>
+        public static bool PassLabStepPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.spaceKey.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.Space);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Put the ball back at the centre-back's feet without unfreezing anyone.</summary>
+        public static bool PassLabResetPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.bKey.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.B);
+#else
+            return false;
+#endif
+        }
+
         public static Vector2 RightStick()
         {
 #if ENABLE_INPUT_SYSTEM
