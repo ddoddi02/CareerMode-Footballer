@@ -29,6 +29,8 @@ namespace Prototype
         [Tooltip("Used while running in behind - a run is only a run if it is quick.")]
         public float sprintSpeed = 7.9f;
         public bool active = true;
+        [Tooltip("What his body can actually do: how fast he starts, stops and turns. See PlayerMotion.")]
+        public MotionModel motion = new MotionModel();
 
         [Header("4 - runs in behind")]
         [Tooltip("Seconds between runs, randomised per player so they do not all go at once.")]
@@ -192,37 +194,35 @@ namespace Prototype
         {
             if (!active) return;
 
+            float dt = Time.deltaTime;
+            float yaw = transform.eulerAngles.y;
+
             if (HasBall)
             {
                 // On the ball he does not go looking for space - he stands it up and
                 // waits for TeamAttack to tell him where it goes.
-                vel = Vector3.MoveTowards(vel, Vector3.zero, 26f * Time.deltaTime);
-                cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
+                vel = PlayerMotion.Step(vel, transform.position, transform.position,
+                                        speed, yaw, motion, dt);
+                cc.Move((vel + Vector3.down * 3f) * dt);
 
                 Vector3 f = facing ? faceTarget - transform.position
                                    : (lookAt != null ? lookAt.position - transform.position : Vector3.zero);
-                f.y = 0f;
-                if (f.sqrMagnitude > 0.04f)
-                    transform.rotation = Quaternion.RotateTowards(
-                        transform.rotation, Quaternion.LookRotation(f), 480f * Time.deltaTime);
+                transform.rotation = Quaternion.Euler(0f, PlayerMotion.Turn(yaw, f, motion, dt), 0f);
                 return;
             }
 
-            Vector3 dv = (Chasing ? chasePoint : station) - transform.position;
-            dv.y = 0f;
-
+            Vector3 goTo = Chasing ? chasePoint : station;
             float top = Running || Chasing ? sprintSpeed : speed;
-            Vector3 want = Vector3.ClampMagnitude(dv * 3.0f, top);
-            vel = Vector3.MoveTowards(vel, want, 30f * Time.deltaTime);
-            cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
+
+            vel = PlayerMotion.Step(vel, transform.position, goTo, top, yaw, motion, dt);
+            cc.Move((vel + Vector3.down * 3f) * dt);
 
             // Head up, watching the ball - except on a run, when he is looking where he
             // is going.
             Vector3 look = (Running && !Chasing) || lookAt == null
                 ? new Vector3(vel.x, 0f, vel.z)
                 : lookAt.position - transform.position;
-            look.y = 0f;
-            if (look.sqrMagnitude > 0.04f) transform.rotation = Quaternion.LookRotation(look);
+            transform.rotation = Quaternion.Euler(0f, PlayerMotion.Turn(yaw, look, motion, dt), 0f);
         }
     }
 }

@@ -40,6 +40,10 @@ namespace Prototype
 
         [Header("What it knows, and when")]
         public PitchIntel intel = new PitchIntel();
+        [Tooltip("Who would reach each square of the pitch first. Rebuilt with every picture, from this side's own snapshot. See PitchControl.")]
+        public PitchControl control = new PitchControl();
+        [Tooltip("Top speed the control grid assumes everybody runs at.")]
+        public float controlSpeed = 7.2f;
 
         [Header("Shape")]
         [Range(0f, 1f)] public float lateralFollow = 0.35f;
@@ -140,6 +144,10 @@ namespace Prototype
         Vector3 shift;
 
         readonly List<PassCandidate> candidates = new List<PassCandidate>();
+        readonly List<Vector3> ctrlOurs = new List<Vector3>();
+        readonly List<Vector3> ctrlOursVel = new List<Vector3>();
+        readonly List<Vector3> ctrlTheirs = new List<Vector3>();
+        readonly List<Vector3> ctrlTheirsVel = new List<Vector3>();
         PassPlan lastPlan;
         PassPlan pending;
         bool hasPending;
@@ -318,7 +326,7 @@ namespace Prototype
             if (!hasPending)
             {
                 pending = PassPlanner.Choose(who.transform, from, mates, opponents,
-                                             pass, attacksPositiveZ, ballBody, candidates);
+                                             pass, attacksPositiveZ, ballBody, candidates, control);
                 if (!pending.valid) { holdUntil = Time.time + 0.4f; return; }
                 hasPending = true;
                 pendingSince = Time.time;
@@ -379,6 +387,7 @@ namespace Prototype
             looseSince = -1f;
             lastPlan = new PassPlan();
             intel.Clear();
+            control.Clear();
         }
 
         // ---------------------------------------------------------------- picture --
@@ -386,6 +395,8 @@ namespace Prototype
         void Recompute()
         {
             Vector3 ballPos = intel.Ball;
+
+            RebuildControl();
 
             OffsideLine = Offside.Line(attacksPositiveZ, opponents, ballPos.z);
             // Only a man who ACTUALLY has the ball is the carrier. Treating "nearest
@@ -419,6 +430,41 @@ namespace Prototype
                 bool showing = i == showAhead || i == showBehind;
                 m.SetStation(BestSpot(m, showing, squeezed), showing, squeezed, ball);
             }
+        }
+
+        /// <summary>
+        /// Rebuild the control grid from what this side can see: its own men live, the
+        /// opposition as of the last picture, carried forward by however they were
+        /// moving. Same staleness as every other belief this side holds.
+        /// </summary>
+        void RebuildControl()
+        {
+            ctrlOurs.Clear(); ctrlOursVel.Clear();
+            for (int i = 0; mates != null && i < mates.Length; i++)
+            {
+                if (mates[i] == null) continue;
+                ctrlOurs.Add(mates[i].position);
+                ctrlOursVel.Add(VelocityOf(mates[i]));
+            }
+
+            ctrlTheirs.Clear(); ctrlTheirsVel.Clear();
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+            {
+                if (opponents[k] == null) continue;
+                ctrlTheirs.Add(intel.Projected(k, Time.time));
+                ctrlTheirsVel.Add(k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero);
+            }
+
+            control.Rebuild(ctrlOurs, ctrlOursVel, ctrlTheirs, ctrlTheirsVel, controlSpeed);
+        }
+
+        static Vector3 VelocityOf(Transform t)
+        {
+            AttackerAI a = t.GetComponent<AttackerAI>();
+            if (a != null) return a.Velocity;
+            FootballerController f = t.GetComponent<FootballerController>();
+            if (f != null) return f.Velocity;
+            return Vector3.zero;
         }
 
         Vector3 ShapeShift(Vector3 ballPos)
@@ -541,7 +587,8 @@ namespace Prototype
             }
 
             // 2 - space, and staying in his own zone while he looks for it.
-            total += wSpace * Mathf.Min(NearestOpponent(cand), 8f) / 8f;
+            total += wSpace * (control.Ready ? control.OursAt(cand)
+                                             : Mathf.Min(NearestOpponent(cand), 8f) / 8f);
             total -= wZone * Mathf.Clamp01(Flat(cand - anchor).magnitude / Mathf.Max(radius, 0.01f));
 
             // 3 - when he is shut down, reward the direction he is currently working in.

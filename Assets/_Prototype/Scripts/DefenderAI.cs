@@ -50,6 +50,8 @@ namespace Prototype
         [HideInInspector] public Transform chase;
         public float speed = 5.8f;
         public bool active = true;
+        [Tooltip("What his body can actually do: how fast he starts, stops and turns. See PlayerMotion.")]
+        public MotionModel motion = new MotionModel();
 
         [Header("Denying the turn")]
         [Tooltip("How far off the carrier he sets up. Close enough that turning into him is a bad idea.")]
@@ -276,11 +278,14 @@ namespace Prototype
         {
             if (!active) return;
 
+            float dt = Time.deltaTime;
+            float yaw = transform.eulerAngles.y;
+
             if (Recovering)
             {
                 // On the floor. He cannot chase for a moment.
-                vel = Vector3.MoveTowards(vel, Vector3.zero, 40f * Time.deltaTime);
-                cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
+                vel = Vector3.MoveTowards(vel, Vector3.zero, 40f * dt);
+                cc.Move((vel + Vector3.down * 3f) * dt);
                 return;
             }
 
@@ -332,15 +337,12 @@ namespace Prototype
                     : station - transform.position;
             }
 
-            Vector3 dv = want - transform.position;
-            dv.y = 0f;
+            vel = PlayerMotion.Step(vel, transform.position, want, top, yaw, motion, dt);
+            cc.Move((vel + Vector3.down * 3f) * dt);
 
-            Vector3 target3 = Vector3.ClampMagnitude(dv * 3.4f, top);
-            vel = Vector3.MoveTowards(vel, target3, 32f * Time.deltaTime);
-            cc.Move((vel + Vector3.down * 3f) * Time.deltaTime);
-
-            look.y = 0f;
-            if (look.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(look);
+            // He watches the man, not his own feet - so the body angle is solved from
+            // where he is LOOKING, and running backwards is priced in by PlayerMotion.
+            transform.rotation = Quaternion.Euler(0f, PlayerMotion.Turn(yaw, look, motion, dt), 0f);
         }
     }
 }

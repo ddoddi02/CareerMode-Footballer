@@ -54,6 +54,10 @@ namespace Prototype
         [Tooltip("Draw every option the pass bench is scoring, not just the one that won. Green survived the gates, red did not - which is the only way to see that the ball taken was taken over a better one.")]
         public bool showCandidates = true;
         public bool showAimCone = true;
+        [Tooltip("Paint the control grid on the pitch: blue where we would get there first, red where they would.")]
+        public bool showControl = true;
+        [Tooltip("Strongest the paint ever gets. Kept low - it is under the play, not over it.")]
+        [Range(0.05f, 0.9f)] public float controlAlpha = 0.34f;
         [Tooltip("Length of the drawn wedge, in metres.")]
         public float coneLength = 26f;
 
@@ -76,6 +80,11 @@ namespace Prototype
         readonly List<LineRenderer> pool = new List<LineRenderer>();
         Material mat;
         int used;
+
+        Transform controlQuad;
+        Texture2D controlTex;
+        Color32[] controlPix;
+        float controlBuiltAt = -99f;
 
         void Awake()
         {
@@ -129,6 +138,8 @@ namespace Prototype
                 DrawAimCone();
             }
             for (int i = used; i < pool.Count; i++) pool[i].enabled = false;
+
+            DrawControl();
         }
 
         // ------------------------------------------------------------- rings ----
@@ -280,6 +291,94 @@ namespace Prototype
                 Ring(plan.receiver.position, 1.0f, pickCol);
                 Corridor(pp, plan.target, r, attack.opponents);
             }
+        }
+
+        // ------------------------------------------------------- control grid ---
+
+        /// <summary>
+        /// The control grid, painted straight onto the grass.
+        ///
+        /// A texture rather than a thousand line renderers, because it IS an image: one
+        /// pixel per square, point-filtered so the squares stay squares. Blue is ground
+        /// we would reach first, red is theirs, and the washed-out middle is the part
+        /// that is genuinely up for grabs - which is usually the only part worth looking
+        /// at.
+        /// </summary>
+        void DrawControl()
+        {
+            bool on = show && showControl && attack != null && attack.control != null
+                      && attack.control.Ready;
+
+            if (!on)
+            {
+                if (controlQuad != null) controlQuad.gameObject.SetActive(false);
+                return;
+            }
+
+            PitchControl c = attack.control;
+            EnsureControlQuad(c);
+            controlQuad.gameObject.SetActive(true);
+
+            // Only repaint when the side has taken a new picture.
+            if (Mathf.Approximately(controlBuiltAt, c.BuiltAt)) return;
+            controlBuiltAt = c.BuiltAt;
+
+            for (int iz = 0; iz < c.Nz; iz++)
+            {
+                for (int ix = 0; ix < c.Nx; ix++)
+                {
+                    float v = c.Raw(ix, iz);
+                    float a = Mathf.Clamp01(Mathf.Abs(v)) * controlAlpha;
+                    Color col = v >= 0f
+                        ? new Color(0.30f, 0.62f, 1f, a)
+                        : new Color(1f, 0.32f, 0.30f, a);
+                    controlPix[iz * c.Nx + ix] = col;
+                }
+            }
+
+            controlTex.SetPixels32(controlPix);
+            controlTex.Apply(false);
+        }
+
+        void EnsureControlQuad(PitchControl c)
+        {
+            if (controlTex == null || controlTex.width != c.Nx || controlTex.height != c.Nz)
+            {
+                controlTex = new Texture2D(c.Nx, c.Nz, TextureFormat.RGBA32, false);
+                controlTex.filterMode = FilterMode.Point;    // squares should look like squares
+                controlTex.wrapMode = TextureWrapMode.Clamp;
+                controlPix = new Color32[c.Nx * c.Nz];
+                controlBuiltAt = -99f;
+            }
+
+            if (controlQuad == null)
+            {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                go.name = "ControlGrid";
+                Destroy(go.GetComponent<Collider>());
+                go.transform.SetParent(transform, false);
+
+                Renderer r = go.GetComponent<Renderer>();
+                Material m = ProtoMat.UnlitFade(Color.white);
+                m.SetTexture("_BaseMap", controlTex);
+                m.mainTexture = controlTex;
+                r.sharedMaterial = m;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+
+                controlQuad = go.transform;
+            }
+            else
+            {
+                Renderer r = controlQuad.GetComponent<Renderer>();
+                r.sharedMaterial.SetTexture("_BaseMap", controlTex);
+                r.sharedMaterial.mainTexture = controlTex;
+            }
+
+            // Flat on the grass, covering the whole pitch, just above the markings.
+            controlQuad.rotation = Quaternion.Euler(90f, 0f, 0f);
+            controlQuad.position = new Vector3(0f, 0.03f, 0f);
+            controlQuad.localScale = new Vector3(TacticalPitch.HalfW * 2f, TacticalPitch.HalfL * 2f, 1f);
         }
 
         // ------------------------------------------------------------- pooling --

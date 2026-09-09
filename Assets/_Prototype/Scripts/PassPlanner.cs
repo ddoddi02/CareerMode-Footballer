@@ -88,6 +88,8 @@ namespace Prototype
         public float denseBlock = 3f;
         [Tooltip("How much of criterion 3 is his own space rather than his block's emptiness.")]
         [Range(0f, 1f)] public float personalSpaceShare = 0.5f;
+        [Tooltip("How much of criterion 3 comes from the control grid instead of counting bodies. Counting bodies cannot tell a man standing in the space from a man sprinting out of it; the grid can. 1 = trust the grid entirely.")]
+        [Range(0f, 1f)] public float controlShare = 0.7f;
         [Tooltip("Flight time that counts as a full point of risk. Has to sit ABOVE the longest ball actually attempted or every pass past ~16 m scores the same maximum and the term stops separating them - at which point the shortest ball always wins and nothing else in the score matters. It therefore has to be re-tuned whenever arrivePace moves, because arrivePace is what sets the longest flight there is: at 9 m/s a 30 m ball lands in 2.1 s, so 2.4 keeps the spread at 0.20..0.88 instead of pinning half the pitch at 1.00.")]
         public float riskTime = 2.4f;
 
@@ -149,6 +151,14 @@ namespace Prototype
                                       PassRules r, bool attacksPositiveZ, Ball ball,
                                       List<PassCandidate> scratch)
         {
+            return Choose(self, from, mates, opponents, r, attacksPositiveZ, ball, scratch, null);
+        }
+
+        public static PassPlan Choose(Transform self, Vector3 from,
+                                      IList<Transform> mates, IList<Transform> opponents,
+                                      PassRules r, bool attacksPositiveZ, Ball ball,
+                                      List<PassCandidate> scratch, PitchControl control)
+        {
             PassPlan plan = new PassPlan();
             plan.from = from;
             if (scratch != null) scratch.Clear();
@@ -195,10 +205,15 @@ namespace Prototype
                 c.quality = Mathf.Clamp01((PassingOf(mates[i]) - selfPassing)
                                           / Mathf.Max(r.qualitySpan, 0.01f));
 
-                // 3. room. Half his own, half his block's.
+                // 3. room. Counting bodies where there is no control grid, and asking
+                //    the grid where there is - it knows who is ARRIVING, which is the
+                //    half of "has he got room" that a head count cannot see.
                 float personal = Mathf.Clamp01(NearestOpponent(c.target, opponents) / Mathf.Max(r.freeSpace, 0.1f));
                 float block = 1f - Mathf.Clamp01(c.cellDefenders / Mathf.Max(r.denseBlock, 0.1f));
                 c.freedom = Mathf.Lerp(block, personal, r.personalSpaceShare);
+
+                if (control != null && control.Ready)
+                    c.freedom = Mathf.Lerp(c.freedom, control.OursAt(c.target), r.controlShare);
 
                 // the cost.
                 c.risk = Mathf.Clamp01(c.flightTime / Mathf.Max(r.riskTime, 0.01f));
@@ -231,7 +246,7 @@ namespace Prototype
             }
 
             // --- nothing on the floor. Hit the emptiest block over the top ---------
-            return LongBall(self, from, mates, opponents, r, attacksPositiveZ, ball, rejected);
+            return LongBall(self, from, mates, opponents, r, attacksPositiveZ, ball, rejected, control);
         }
 
         /// <summary>
@@ -245,7 +260,8 @@ namespace Prototype
         /// </summary>
         static PassPlan LongBall(Transform self, Vector3 from, IList<Transform> mates,
                                  IList<Transform> opponents, PassRules r,
-                                 bool attacksPositiveZ, Ball ball, int rejected)
+                                 bool attacksPositiveZ, Ball ball, int rejected,
+                                 PitchControl control)
         {
             PassPlan plan = new PassPlan();
             plan.from = from;
@@ -265,6 +281,11 @@ namespace Prototype
 
                 int crowd = DefendersInCell(mates[i].position, opponents, attacksPositiveZ);
                 float forward = mates[i].position.z * dir;
+
+                // With a control grid, "emptiest" is a question about time rather than a
+                // head count: prefer the man standing in ground we would actually win.
+                if (control != null && control.Ready && control.At(mates[i].position) > 0.15f)
+                    crowd = Mathf.Max(0, crowd - 1);
 
                 // Emptiest block wins; ties go to the man furthest up the pitch, because
                 // a ball hoisted backwards into space is not what this rule is for.
