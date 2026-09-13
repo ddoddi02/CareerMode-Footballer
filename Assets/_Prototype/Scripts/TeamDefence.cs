@@ -59,6 +59,10 @@ namespace Prototype
 
         [Header("What it knows, and when")]
         public PitchIntel intel = new PitchIntel();
+        [Tooltip("Who would reach each square first, from THIS side's point of view. Built from this side's own snapshot, never shared with the attack - a grid both teams read would let each of them see through the other's delay, and that delay is the difficulty (PROJECT.md 3.15, 3.24).")]
+        public PitchControl control = new PitchControl();
+        [Tooltip("Top speed the control grid assumes everybody runs at.")]
+        public float controlSpeed = 7.2f;
 
         [Header("1 - shape")]
         [Tooltip("How much of the ball's lateral offset the whole block slides across.")]
@@ -164,6 +168,12 @@ namespace Prototype
         Vector3 prevBall;
         float prevBallAt;
 
+        // Scratch for the control grid, kept so a rebuild every picture allocates nothing.
+        readonly List<Vector3> ctrlOurs = new List<Vector3>();
+        readonly List<Vector3> ctrlOursVel = new List<Vector3>();
+        readonly List<Vector3> ctrlTheirs = new List<Vector3>();
+        readonly List<Vector3> ctrlTheirsVel = new List<Vector3>();
+
         void Update()
         {
             if (ball == null || members == null || members.Length == 0) return;
@@ -247,8 +257,63 @@ namespace Prototype
 
         // ---------------------------------------------------------------- shape --
 
+        /// <summary>
+        /// Rebuild the grid from what THIS side can see: its own men live, the attack as
+        /// of the last picture and carried forward by however it was moving. The same
+        /// staleness as every other belief on this side (PROJECT.md 3.15).
+        ///
+        /// "Ours" is `members`, which is the outfield block - the keeper has no brain and
+        /// was never in it. That happens to be the right list anyway: crediting a
+        /// goalkeeper with winning a race to the halfway line would hand this side ground
+        /// it does not have.
+        /// </summary>
+        void RebuildControl()
+        {
+            ctrlOurs.Clear(); ctrlOursVel.Clear();
+            for (int i = 0; members != null && i < members.Length; i++)
+            {
+                // A frozen man is still a body standing in the way, so `active` is not
+                // consulted here - it stops him deciding things, not existing.
+                if (members[i] == null) continue;
+                ctrlOurs.Add(members[i].transform.position);
+                ctrlOursVel.Add(members[i].Velocity);
+            }
+
+            ctrlTheirs.Clear(); ctrlTheirsVel.Clear();
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+            {
+                if (opponents[k] == null) continue;
+                ctrlTheirs.Add(intel.Projected(k, Time.time));
+                ctrlTheirsVel.Add(k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero);
+            }
+
+            control.Rebuild(ctrlOurs, ctrlOursVel, ctrlTheirs, ctrlTheirsVel, controlSpeed);
+        }
+
+        /// <summary>
+        /// What the map MEANS to a defence, which is not what it means to an attack.
+        ///
+        /// The attack reads control straight - high is somewhere to play into. A defence
+        /// that asks "where do we control" gets a useless answer, because the ground it
+        /// owns least is usually the corner flag and losing that costs nothing. The real
+        /// question is "where do THEY own ground that would hurt us", so the loss is
+        /// priced by how much it costs to concede from there - the same Danger() the
+        /// marking priorities already run on.
+        ///
+        /// 0 = not our problem. 1 = they would win the race to the ground in front of
+        /// our own goal.
+        /// </summary>
+        public float ExposureAt(Vector3 p)
+        {
+            if (!control.Ready) return 0f;
+            float theirs = 1f - control.OursAt(p);
+            return theirs * TacticalPitch.Danger(p, defendsPositiveZ);
+        }
+
         void Recompute()
         {
+            RebuildControl();
+
             int n = members.Length;
             if (slotNow.Length != n)
             {

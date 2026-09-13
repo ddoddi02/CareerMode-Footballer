@@ -194,6 +194,7 @@ namespace Prototype
             if (defence != null)
             {
                 defence.intel.Clear();
+                defence.control.Clear();
                 for (int i = 0; defence.members != null && i < defence.members.Length; i++)
                 {
                     var d = defence.members[i];

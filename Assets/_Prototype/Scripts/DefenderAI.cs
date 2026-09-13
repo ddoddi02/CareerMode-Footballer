@@ -105,6 +105,13 @@ namespace Prototype
         /// <summary>His current orders - where TeamDefence wants him standing.</summary>
         public Vector3 Station { get { return station; } }
 
+        /// <summary>
+        /// How he is moving. The attacker already exposed this; the defence needs it too
+        /// now that its own control grid credits a man from where his run is taking him
+        /// rather than from his feet (PitchControl.momentum).
+        /// </summary>
+        public Vector3 Velocity { get { return vel; } }
+
         Vector3 station;
         Vector3 interceptPoint;
         PressMode mode = PressMode.Deny;

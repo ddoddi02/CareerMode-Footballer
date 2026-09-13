@@ -26,6 +26,14 @@ namespace Prototype
     ///
     /// G toggles it.
     /// </summary>
+    /// <summary>Whose control grid the view is painting.</summary>
+    public enum ControlView
+    {
+        Attack,         // the attacking side's raw map
+        Defence,        // the defending side's raw map - a different snapshot, so a different map
+        DefenceThreat   // the defending side's map priced by what it costs to concede there
+    }
+
     public class PlayDebugView : MonoBehaviour
     {
         [Header("Refs")]
@@ -56,6 +64,8 @@ namespace Prototype
         public bool showAimCone = true;
         [Tooltip("Paint the control grid on the pitch: blue where we would get there first, red where they would.")]
         public bool showControl = true;
+        [Tooltip("WHOSE map to paint. Each side builds its own from its own snapshot, so the two disagree - and where they disagree is where somebody is about to be wrong. DefenceThreat is the defence's map read the way a defence should read it: not 'where do we control' but 'where do THEY own ground that hurts', which is a different picture.")]
+        public ControlView controlView = ControlView.Attack;
         [Tooltip("Strongest the paint ever gets. Kept low - it is under the play, not over it.")]
         [Range(0.05f, 0.9f)] public float controlAlpha = 0.34f;
         [Tooltip("Length of the drawn wedge, in metres.")]
@@ -85,6 +95,7 @@ namespace Prototype
         Texture2D controlTex;
         Color32[] controlPix;
         float controlBuiltAt = -99f;
+        ControlView controlDrawn = (ControlView)(-1);
 
         void Awake()
         {
@@ -306,8 +317,8 @@ namespace Prototype
         /// </summary>
         void DrawControl()
         {
-            bool on = show && showControl && attack != null && attack.control != null
-                      && attack.control.Ready;
+            PitchControl c = SelectedGrid();
+            bool on = show && showControl && c != null && c.Ready;
 
             if (!on)
             {
@@ -315,29 +326,56 @@ namespace Prototype
                 return;
             }
 
-            PitchControl c = attack.control;
             EnsureControlQuad(c);
             controlQuad.gameObject.SetActive(true);
 
-            // Only repaint when the side has taken a new picture.
-            if (Mathf.Approximately(controlBuiltAt, c.BuiltAt)) return;
+            // Only repaint when that side has taken a new picture - or when you switched
+            // which map you are looking at, which is also a new picture as far as the
+            // texture is concerned.
+            if (controlDrawn == controlView && Mathf.Approximately(controlBuiltAt, c.BuiltAt)) return;
             controlBuiltAt = c.BuiltAt;
+            controlDrawn = controlView;
+
+            bool threat = controlView == ControlView.DefenceThreat && defence != null;
 
             for (int iz = 0; iz < c.Nz; iz++)
             {
                 for (int ix = 0; ix < c.Nx; ix++)
                 {
-                    float v = c.Raw(ix, iz);
-                    float a = Mathf.Clamp01(Mathf.Abs(v)) * controlAlpha;
-                    Color col = v >= 0f
-                        ? new Color(0.30f, 0.62f, 1f, a)
-                        : new Color(1f, 0.32f, 0.30f, a);
+                    Color col;
+                    if (threat)
+                    {
+                        // One-sided, so one hue. Nothing to show where it does not hurt.
+                        float e = Mathf.Clamp01(defence.ExposureAt(c.CentreOf(ix, iz)));
+                        col = new Color(1f, 0.25f, 0.18f, e * controlAlpha);
+                    }
+                    else
+                    {
+                        float v = c.Raw(ix, iz);
+                        float a = Mathf.Clamp01(Mathf.Abs(v)) * controlAlpha;
+                        col = v >= 0f
+                            ? new Color(0.30f, 0.62f, 1f, a)
+                            : new Color(1f, 0.32f, 0.30f, a);
+                    }
                     controlPix[iz * c.Nx + ix] = col;
                 }
             }
 
             controlTex.SetPixels32(controlPix);
             controlTex.Apply(false);
+        }
+
+        /// <summary>
+        /// Whose grid is on screen. Blue is always "the side whose map this is", so the
+        /// attack's map and the defence's map are mirror images of each other - and where
+        /// they are NOT mirror images is the interesting part, because that is the gap
+        /// between what the two sides believe.
+        /// </summary>
+        PitchControl SelectedGrid()
+        {
+            if (controlView == ControlView.Attack)
+                return attack != null ? attack.control : null;
+            return defence != null ? defence.control : null;
         }
 
         void EnsureControlQuad(PitchControl c)
