@@ -47,19 +47,31 @@ namespace Prototype
     }
 
     /// <summary>
-    /// Control scheme follows the FC / FIFA convention so anyone coming from those
-    /// games can pick it up without relearning anything:
+    /// Mouse and keyboard, NOT the FC / FIFA convention any more.
     ///
-    ///   move    arrow keys  / left stick
+    /// The old scheme copied FC so that anyone arriving from those games would not have
+    /// to relearn anything. It was dropped because this game is not trying to be one:
+    /// the thing being built is a player who can only see where he is looking, and on a
+    /// pad the direction you look, the direction you run and the direction you pass all
+    /// come out of the same two sticks. They fight each other. A mouse separates them -
+    /// WASD is where you RUN, the cursor is where you LOOK, and where you look is what
+    /// you can see, which is the whole game.
+    ///
+    ///   move    WASD        / left stick
+    ///   look    mouse       / right stick      <- always live, no button. also what you can SEE
+    ///   aim     mouse       / right stick      <- the same cursor: you pass where you are looking
+    ///   pass    E           / A (south)
+    ///   shoot   R           / B (east)
+    ///   through F           / Y (north)
+    ///   cross   C           / X (west)
+    ///   scan    Q                              <- the short look behind (unchanged)
     ///   sprint  LeftShift   / RB
-    ///   pass    S           / A (south)
-    ///   cross   A           / X (west)
-    ///   shoot   D           / B (east)
-    ///   shield  E           / LT
-    ///   through W           / Y (north)
-    ///   plant   LeftCtrl    / LB               <- designate without moving
-    ///   look    mouse       / right stick      <- always live, no button
-    ///   aim     mouse       / right stick      <- where a lay-off goes
+    ///   shield  Space       / LT
+    ///   plant   LeftCtrl    / LB
+    ///
+    /// PLANT is now nearly redundant and is kept only as "stand still". It existed
+    /// because one stick had to do both moving and aiming, so you needed a way to say
+    /// "this is an aim, not a run". The mouse answers that by construction.
     ///
     /// Works with the new Input System, the legacy manager, or both.
     /// </summary>
@@ -73,10 +85,10 @@ namespace Prototype
             if (kb != null)
             {
                 // Right hand moves, left hand plays. WASD belongs to the ball now.
-                if (kb.upArrowKey.isPressed) v.y += 1f;
-                if (kb.downArrowKey.isPressed) v.y -= 1f;
-                if (kb.rightArrowKey.isPressed) v.x += 1f;
-                if (kb.leftArrowKey.isPressed) v.x -= 1f;
+                if (kb.wKey.isPressed) v.y += 1f;
+                if (kb.sKey.isPressed) v.y -= 1f;
+                if (kb.dKey.isPressed) v.x += 1f;
+                if (kb.aKey.isPressed) v.x -= 1f;
             }
             var gp = Gamepad.current;
             if (gp != null)
@@ -85,10 +97,10 @@ namespace Prototype
                 if (ls.sqrMagnitude > 0.04f) v = ls;
             }
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetKey(KeyCode.UpArrow)) v.y += 1f;
-            if (Input.GetKey(KeyCode.DownArrow)) v.y -= 1f;
-            if (Input.GetKey(KeyCode.RightArrow)) v.x += 1f;
-            if (Input.GetKey(KeyCode.LeftArrow)) v.x -= 1f;
+            if (Input.GetKey(KeyCode.W)) v.y += 1f;
+            if (Input.GetKey(KeyCode.S)) v.y -= 1f;
+            if (Input.GetKey(KeyCode.D)) v.x += 1f;
+            if (Input.GetKey(KeyCode.A)) v.x -= 1f;
 #endif
             return Vector2.ClampMagnitude(v, 1f);
         }
@@ -112,12 +124,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.sKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.eKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonSouth.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.S);
+            return Input.GetKeyDown(KeyCode.E);
 #else
             return false;
 #endif
@@ -128,12 +140,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.wKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.fKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonNorth.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.W);
+            return Input.GetKeyDown(KeyCode.F);
 #else
             return false;
 #endif
@@ -144,12 +156,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.aKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.cKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonWest.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.A);
+            return Input.GetKeyDown(KeyCode.C);
 #else
             return false;
 #endif
@@ -160,12 +172,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.dKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.rKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonEast.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.D);
+            return Input.GetKeyDown(KeyCode.R);
 #else
             return false;
 #endif
@@ -176,12 +188,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.eKey.isPressed) return true;
+            if (kb != null && kb.spaceKey.isPressed) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.leftTrigger.ReadValue() > 0.35f) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKey(KeyCode.E);
+            return Input.GetKey(KeyCode.Space);
 #else
             return false;
 #endif
@@ -205,12 +217,12 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.rKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.backspaceKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.selectButton.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.R);
+            return Input.GetKeyDown(KeyCode.Backspace);
 #else
             return false;
 #endif
@@ -306,10 +318,10 @@ namespace Prototype
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.spaceKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.enterKey.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.Space);
+            return Input.GetKeyDown(KeyCode.Return);
 #else
             return false;
 #endif

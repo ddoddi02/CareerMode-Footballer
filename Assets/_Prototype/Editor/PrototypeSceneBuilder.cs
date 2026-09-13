@@ -359,8 +359,9 @@ public static class PrototypeSceneBuilder
             "[Prototype] Match scene built at {0}  —  pitch {1} x {2} m, players {3:0.00} m, " +
             "two 4-1-2-3 squads. Home plays it out of the back among themselves; away " +
             "defends and cuts passes out. " +
-            "Arrow keys move AND aim the pass, W/A/S/D = through/cross/pass/shoot, Q = shoulder check, " +
-            "G = ranges and lanes, P = pass bench (freeze everybody and pass on Space).",
+            "WASD moves, the MOUSE looks and aims, E = pass, R = shoot, F = through, C = cross, " +
+            "Q = shoulder check, Shift = sprint, Space = shield, G = ranges and lanes, " +
+            "P = pass bench (freeze everybody, Return to pass).",
             ScenePath, HalfW * 2f, HalfL * 2f, PlayerHeight));
     }
 

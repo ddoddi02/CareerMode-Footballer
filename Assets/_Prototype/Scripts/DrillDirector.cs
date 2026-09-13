@@ -514,9 +514,10 @@ namespace Prototype
         {
             bool through = type == PassType.Through;
             Vector3 pp = player.transform.position;
-            Vector2 aim = player.InputDir.sqrMagnitude > 0.09f
-                        ? player.InputDir.normalized
-                        : player.BodyForward;
+            // Where he is POINTING, not where he is running. Those used to be the same
+            // input and the ball went wherever his feet were taking him; now the cursor
+            // says it, and it says the same thing his head is already doing.
+            Vector2 aim = player.HasAim ? player.AimDir : player.BodyForward;
 
             PassRules rules = attack != null ? attack.pass : new PassRules();
             PassPlan plan = PassPlanner.PickInCone(player.transform, pp, aim,

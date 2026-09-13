@@ -279,9 +279,7 @@ namespace Prototype
             if (!ball.Carried || !ReferenceEquals(ball.Carrier, player)) return;
 
             Vector3 pp = player.transform.position;
-            Vector2 aim = player.InputDir.sqrMagnitude > 0.09f
-                        ? player.InputDir.normalized
-                        : player.BodyForward;
+            Vector2 aim = player.HasAim ? player.AimDir : player.BodyForward;
 
             PassRules r = attack.pass;
             Vector3 fwd = new Vector3(aim.x, 0f, aim.y);

@@ -3,15 +3,19 @@ using UnityEngine;
 namespace Prototype
 {
     /// <summary>
-    /// Keyboard-first, FC-conventional. The stick moves you, the torso follows your
-    /// run, sprint is a modifier, pass and through-ball are buffered presses.
+    /// Mouse and keyboard. WASD runs, the cursor looks, and the two are independent -
+    /// which is the point, because on a pad they are not.
     ///
-    /// The only addition is the SHOULDER CHECK on Q: hold it and your head turns
-    /// round, release and it snaps back to the ball. Which shoulder you turn over is
-    /// chosen for you by where the pitch actually is - see ChooseScanSide.
+    /// The head follows the cursor, and the head is what the player can SEE (PROJECT.md
+    /// 3.3). So the vision mechanic stops being something the game does to you and
+    /// becomes something you are steering: look at the man you are thinking of passing
+    /// to and you cannot see the one closing you down. The same cursor is the pass aim,
+    /// because pointing somewhere and playing it somewhere else was never a real
+    /// distinction - you pass where you are looking.
     ///
-    /// Mouse control is commented out for now (see the [MOUSE] blocks) while the
-    /// keyboard scheme is being tuned.
+    /// The SHOULDER CHECK on Q survives all of it, and outranks the cursor while held:
+    /// your head snaps round, and releasing brings it back. Which shoulder you turn over
+    /// is chosen for you by where the pitch actually is - see ChooseScanSide.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class FootballerController : MonoBehaviour, IBallCarrier
@@ -95,7 +99,7 @@ namespace Prototype
         public string ScanReason { get; private set; }
         public bool ScanClamped { get; private set; }
 
-        // [MOUSE] kept so the director still compiles while the mouse is parked.
+        /// <summary>Where on the grass the cursor is, and the direction to it.</summary>
         public Vector3 AimPoint { get; private set; }
         public Vector2 AimDir { get; private set; }
         public bool HasAim { get; private set; }
@@ -132,7 +136,7 @@ namespace Prototype
         Vector3 rcvBallPos;
         Vector3 rcvBallDir = Vector3.forward;
 
-        // [MOUSE] readonly Plane ground = new Plane(Vector3.up, 0f);
+        readonly Plane ground = new Plane(Vector3.up, 0f);
 
         void Awake()
         {
@@ -222,32 +226,35 @@ namespace Prototype
             if (ProtoInput.CrossPressed()) LastCrossPress = Time.time;
             if (ProtoInput.ShootPressed()) LastShootPress = Time.time;
 
-            // [MOUSE] UpdateAim();
-            HasAim = false;
+            UpdateAim();
 
             UpdateFacing(dt, mv);
             UpdateMovement(dt, mv);
         }
 
-        // [MOUSE] ------------------------------------------------------------------
-        // Project the cursor onto the pitch, driving both the head and the pass aim.
-        // Parked while the keyboard scheme is being tuned.
-        //
-        // void UpdateAim()
-        // {
-        //     if (cam == null || !ProtoInput.MouseAvailable()) { HasAim = false; return; }
-        //     Ray ray = cam.ScreenPointToRay(ProtoInput.MousePosition());
-        //     float t;
-        //     if (!ground.Raycast(ray, out t)) return;
-        //     Vector3 hit = ray.GetPoint(t);
-        //     Vector3 d = hit - transform.position;
-        //     d.y = 0f;
-        //     if (d.sqrMagnitude < 0.25f) return;
-        //     AimPoint = hit;
-        //     AimDir = new Vector2(d.x, d.z).normalized;
-        //     HasAim = true;
-        // }
-        // --------------------------------------------------------------------------
+        /// <summary>
+        /// Project the cursor onto the pitch. This one ray drives both the head and the
+        /// pass aim, which is why they can never disagree.
+        ///
+        /// The cursor sitting almost on top of him is not an aim - the direction would
+        /// be whatever sub-pixel jitter says - so the last good one is kept rather than
+        /// dropped. Dropping it snapped the head back to the ball whenever the mouse
+        /// passed over his own feet.
+        /// </summary>
+        void UpdateAim()
+        {
+            if (cam == null || !ProtoInput.MouseAvailable()) { HasAim = false; return; }
+            Ray ray = cam.ScreenPointToRay(ProtoInput.MousePosition());
+            float t;
+            if (!ground.Raycast(ray, out t)) return;
+            Vector3 hit = ray.GetPoint(t);
+            Vector3 d = hit - transform.position;
+            d.y = 0f;
+            if (d.sqrMagnitude < 0.25f) return;
+            AimPoint = hit;
+            AimDir = new Vector2(d.x, d.z).normalized;
+            HasAim = true;
+        }
 
         float AngleTo(Vector3 worldPos)
         {
@@ -412,11 +419,14 @@ namespace Prototype
                 headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
                 Scanning = true;
             }
-            // [MOUSE] else if (HasAim)
-            // {
-            //     headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
-            //     Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
-            // }
+            else if (HasAim)
+            {
+                // The cursor IS the head. Past 70 degrees off his run he counts as
+                // scanning - he is looking away from where he is going, and the cost of
+                // that is exactly what this prototype measures.
+                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
+                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
+            }
             else
             {
                 Scanning = false;
