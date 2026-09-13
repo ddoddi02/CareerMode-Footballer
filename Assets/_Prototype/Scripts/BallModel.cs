@@ -75,11 +75,29 @@ namespace Prototype
             return 0.4f + 0.6f * (dist / 30f);
         }
 
+        /// <summary>
+        /// How wide the miss can be, in metres, before the dice are thrown - the RADIUS
+        /// of the circle the ball might go through.
+        ///
+        /// Split out from AimError so the thing drawn on screen and the thing the strike
+        /// actually rolls against are the same number, computed once. A reticle that
+        /// works out its own radius would drift away from the strike it is describing,
+        /// and the player would believe the picture (PROJECT.md 3.20).
+        ///
+        /// Note what it is NOT: a distance the ball stops at. It is a lateral spread at
+        /// the aim point, turned into an angle by Resolve, so the ball travels down one
+        /// of the lines through that circle and keeps going.
+        /// </summary>
+        public static float AimSpread(float stat01, float dist, float difficulty)
+        {
+            return AimErrorMetres * (1f - Mathf.Clamp01(stat01)) * difficulty
+                 * DistanceFactor(dist);
+        }
+
         /// <summary>Signed sideways miss, in metres. Convert to an angle at the end.</summary>
         public static float AimError(float stat01, float dist, float difficulty)
         {
-            return AimErrorMetres * (1f - Mathf.Clamp01(stat01)) * difficulty
-                 * DistanceFactor(dist) * Bell();
+            return AimSpread(stat01, dist, difficulty) * Bell();
         }
 
         /// <summary>

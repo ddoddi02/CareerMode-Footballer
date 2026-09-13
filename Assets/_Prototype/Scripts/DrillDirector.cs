@@ -505,32 +505,66 @@ namespace Prototype
         }
 
         /// <summary>
-        /// The human's pass. He does NOT strike the direction he is holding - he picks
-        /// the nearest team-mate inside a wedge around it, which is what pressing a pass
-        /// button has always meant. Point at nobody and the ball goes down the line
-        /// anyway, and that ball is there to be picked off: the miss is the point.
+        /// Where the ball is being aimed: the patch of grass under the cursor.
+        ///
+        /// It used to pick the nearest team-mate inside a wedge instead (3.19), because
+        /// an arrow key only says one of eight directions and striking one of those is
+        /// bowling, not football. A cursor is not one of eight directions. It names a
+        /// square metre, so it can be taken at its word - and taking it at its word is
+        /// what makes the miss the player's own.
+        ///
+        /// Clamped to the longest ball anybody actually attempts. The reticle stops
+        /// following the cursor past that, which is how the limit tells you about itself
+        /// without a message.
+        /// </summary>
+        public Vector3 AimTarget()
+        {
+            Vector3 pp = player.transform.position;
+            Vector3 flat = new Vector3(pp.x, 0f, pp.z);
+
+            Vector3 want;
+            if (player.HasAim) want = new Vector3(player.AimPoint.x, 0f, player.AimPoint.z);
+            else
+            {
+                Vector2 f = player.BodyForward;
+                want = flat + new Vector3(f.x, 0f, f.y) * blindPassDistance;
+            }
+
+            float reach = attack != null ? attack.pass.groundRange : 30f;
+            Vector3 d = want - flat;
+            if (d.magnitude > reach) want = flat + d.normalized * reach;
+            return want;
+        }
+
+        /// <summary>
+        /// The radius of the circle the ball might go through, for the aim he is holding
+        /// right now. The reticle draws THIS - it does not work one out for itself.
+        /// </summary>
+        public float AimSpreadNow()
+        {
+            if (player == null) return 0f;
+            Vector3 pp = player.transform.position;
+            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), AimTarget());
+            return BallModel.AimSpread(player.passing, dist,
+                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, false, false));
+        }
+
+        /// <summary>
+        /// The human's pass. It goes where he is pointing, and how near that is to where
+        /// he wanted it is his problem: the spread grows with distance (3.9), so a ball
+        /// asked to travel further is a ball asked to be luckier.
         /// </summary>
         void PlayIt(PassType type, bool firstTime)
         {
             bool through = type == PassType.Through;
             Vector3 pp = player.transform.position;
-            // Where he is POINTING, not where he is running. Those used to be the same
-            // input and the ball went wherever his feet were taking him; now the cursor
-            // says it, and it says the same thing his head is already doing.
-            Vector2 aim = player.HasAim ? player.AimDir : player.BodyForward;
-
             PassRules rules = attack != null ? attack.pass : new PassRules();
-            PassPlan plan = PassPlanner.PickInCone(player.transform, pp, aim,
-                                                   attack != null ? attack.mates : null,
-                                                   rules, blindPassDistance);
 
-            Vector3 target = plan.target;
-            if (through && plan.receiver != null && attack != null)
+            Vector3 target = AimTarget();
+            if (through && attack != null)
             {
-                // Played in front of him rather than into him - and pulled back onto the
-                // right side of the offside line, which is what makes a run timed.
-                float dir = attack.attacksPositiveZ ? 1f : -1f;
-                target += new Vector3(0f, 0f, dir * throughLead);
+                // He has already said where with the cursor, so there is no lead to add -
+                // only the offside line to respect, which is what makes a run timed.
                 target = Offside.KeepOnside(target, attack.OffsideLine,
                                             attack.attacksPositiveZ, rules.maxLead * 0.25f);
             }
@@ -543,9 +577,7 @@ namespace Prototype
 
             lastAimErr = st.aimErrorM;
             lastSpeedErr = st.speedErrorPct;
-            lastStrike = plan.receiver != null
-                ? (through ? "스루패스" : "패스")
-                : "패스 (대상 없음)";
+            lastStrike = through ? "스루패스" : "패스";
 
             ball.Release(st.direction, st.speed);
 
@@ -555,11 +587,10 @@ namespace Prototype
             awaitingHumanPass = true;
             incomingForHuman = false;
 
-            if (plan.receiver == null)
-                Flash(string.Format("그 방향에 사람이 없습니다 — {0:0}° 안에 아무도 없어 그냥 찼습니다",
-                                    rules.coneHalfAngle));
-            else
-                Flash(string.Format("{0} → {1:0.0}m", plan.receiver.name, plan.distance));
+            float spread = BallModel.AimSpread(player.passing, dist,
+                              BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
+            Flash(string.Format("{0:0.0}m · 오차 ±{1:0.0}m (실제 {2:+0.0;-0.0}m)",
+                                dist, spread, st.aimErrorM));
         }
 
         void Shoot(bool firstTime)

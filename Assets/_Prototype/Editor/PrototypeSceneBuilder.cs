@@ -350,6 +350,13 @@ public static class PrototypeSceneBuilder
         lab.director = drill;
         view.lab = lab;
 
+        // The aiming circle under the cursor. Not a debug view - it is the interface,
+        // so it has no toggle and reads its numbers off the director that strikes the ball.
+        var reticle = director.AddComponent<AimReticle>();
+        reticle.player = fc;
+        reticle.director = drill;
+        reticle.ball = ball;
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
         AssetDatabase.SaveAssets();

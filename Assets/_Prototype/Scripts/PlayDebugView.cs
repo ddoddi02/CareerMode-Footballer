@@ -61,6 +61,7 @@ namespace Prototype
         public bool showPassCorridor = true;
         [Tooltip("Draw every option the pass bench is scoring, not just the one that won. Green survived the gates, red did not - which is the only way to see that the ball taken was taken over a better one.")]
         public bool showCandidates = true;
+        [Tooltip("The corridor the ball is about to travel down, red if somebody is standing in it. Where it is aimed and how wide it might miss is AimReticle's job, not this one's.")]
         public bool showAimCone = true;
         [Tooltip("Paint the control grid on the pitch: blue where we would get there first, red where they would.")]
         public bool showControl = true;
@@ -68,8 +69,6 @@ namespace Prototype
         public ControlView controlView = ControlView.Attack;
         [Tooltip("Strongest the paint ever gets. Kept low - it is under the play, not over it.")]
         [Range(0.05f, 0.9f)] public float controlAlpha = 0.34f;
-        [Tooltip("Length of the drawn wedge, in metres.")]
-        public float coneLength = 26f;
 
         [Header("Look")]
         public float height = 0.06f;
@@ -84,7 +83,6 @@ namespace Prototype
         public Color laneOpenCol = new Color(0.35f, 1f, 0.5f, 0.55f);
         public Color laneBlockedCol = new Color(1f, 0.3f, 0.3f, 0.6f);
         public Color shadowCol = new Color(0.6f, 0.6f, 0.7f, 0.28f);
-        public Color coneCol = new Color(0.5f, 0.8f, 1f, 0.5f);
         public Color pickCol = new Color(0.5f, 1f, 0.8f, 0.9f);
 
         readonly List<LineRenderer> pool = new List<LineRenderer>();
@@ -146,7 +144,7 @@ namespace Prototype
                 DrawDefenderRings();
                 DrawCandidates();
                 DrawPassCorridor();
-                DrawAimCone();
+                DrawAimLane();
             }
             for (int i = used; i < pool.Count; i++) pool[i].enabled = false;
 
@@ -266,40 +264,30 @@ namespace Prototype
             Segment(b + n, b - n, c);
         }
 
-        // --------------------------------------------------------------- cone ---
+        // --------------------------------------------------------------- lane ---
 
         /// <summary>
-        /// What the pass button would do right now: the wedge either side of the stick,
-        /// and the man it would pick out of it. Nothing here chooses anything - it calls
-        /// the same selector the strike does and throws the answer away.
+        /// What the pass button would do right now: the corridor the ball is about to
+        /// travel down, and whether anybody is standing in it.
+        ///
+        /// This used to draw a wedge either side of the stick and ring the team-mate the
+        /// pass would snap onto. It does not any more, because the pass does not snap any
+        /// more - the cursor names the target and the ball goes there (PROJECT.md 3.19).
+        /// Drawing the old wedge would be drawing a rule that no longer runs, which is
+        /// the one thing a debug view must never do.
+        ///
+        /// The aim point and how wide it might miss by belong to AimReticle. What is
+        /// added here is the part the reticle deliberately leaves out: the LANE. "How
+        /// accurate is this ball" and "is there a man in the way" are different
+        /// questions, and merging them into one drawing answers neither.
         /// </summary>
-        void DrawAimCone()
+        void DrawAimLane()
         {
             if (!showAimCone || player == null || attack == null || ball == null) return;
+            if (director == null) return;
             if (!ball.Carried || !ReferenceEquals(ball.Carrier, player)) return;
 
-            Vector3 pp = player.transform.position;
-            Vector2 aim = player.HasAim ? player.AimDir : player.BodyForward;
-
-            PassRules r = attack.pass;
-            Vector3 fwd = new Vector3(aim.x, 0f, aim.y);
-            if (fwd.sqrMagnitude < 1e-4f) return;
-            fwd.Normalize();
-
-            Vector3 left = Quaternion.Euler(0f, -r.coneHalfAngle, 0f) * fwd;
-            Vector3 right = Quaternion.Euler(0f, r.coneHalfAngle, 0f) * fwd;
-
-            Segment(pp, pp + left * coneLength, coneCol);
-            Segment(pp, pp + right * coneLength, coneCol);
-            Arc(pp, coneLength, aim, r.coneHalfAngle, coneCol);
-
-            PassPlan plan = PassPlanner.PickInCone(player.transform, pp, aim,
-                                                   attack.mates, r, coneLength);
-            if (plan.receiver != null)
-            {
-                Ring(plan.receiver.position, 1.0f, pickCol);
-                Corridor(pp, plan.target, r, attack.opponents);
-            }
+            Corridor(player.transform.position, director.AimTarget(), attack.pass, attack.opponents);
         }
 
         // ------------------------------------------------------- control grid ---
@@ -449,22 +437,6 @@ namespace Prototype
             {
                 float a = (float)i / segments * Mathf.PI * 2f;
                 lr.SetPosition(i, Flat(centre) + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius);
-            }
-            lr.startColor = c;
-            lr.endColor = c;
-        }
-
-        void Arc(Vector3 centre, float radius, Vector2 aim, float halfAngle, Color c)
-        {
-            int segs = Mathf.Max(4, Mathf.RoundToInt(halfAngle * 0.5f) * 2);
-            LineRenderer lr = Take(segs + 1);
-            lr.widthMultiplier = ringWidth;
-
-            float mid = Mathf.Atan2(aim.x, aim.y) * Mathf.Rad2Deg;
-            for (int i = 0; i <= segs; i++)
-            {
-                float a = (mid - halfAngle + 2f * halfAngle * i / segs) * Mathf.Deg2Rad;
-                lr.SetPosition(i, Flat(centre) + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * radius);
             }
             lr.startColor = c;
             lr.endColor = c;

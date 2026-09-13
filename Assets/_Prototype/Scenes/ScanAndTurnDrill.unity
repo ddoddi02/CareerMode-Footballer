@@ -1961,6 +1961,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -2274,6 +2283,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -2405,6 +2423,10 @@ MonoBehaviour:
     calmInterval: 1
     urgentInterval: 1.8
     urgentRange: 12
+  control:
+    cellSize: 2
+    decisiveness: 0.9
+  controlSpeed: 7.2
   lateralFollow: 0.35
   depthFollow: 0.45
   maxLateralShift: 10
@@ -2444,6 +2466,7 @@ MonoBehaviour:
     freeSpace: 8
     denseBlock: 3
     personalSpaceShare: 0.5
+    controlShare: 0.7
     riskTime: 2.4
     coneHalfAngle: 15
     leadFactor: 0.55
@@ -2530,6 +2553,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -2956,6 +2988,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -3991,6 +4032,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -4396,6 +4446,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -5034,6 +5093,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -6186,6 +6254,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -6929,6 +7006,10 @@ MonoBehaviour:
     calmInterval: 1
     urgentInterval: 1.8
     urgentRange: 12
+  control:
+    cellSize: 2
+    decisiveness: 0.9
+  controlSpeed: 7.2
   lateralFollow: 0.55
   depthFollow: 0.6
   maxLateralShift: 13
@@ -8856,6 +8937,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -9671,6 +9761,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -9778,6 +9877,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -10143,6 +10251,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -10191,6 +10308,7 @@ GameObject:
   - component: {fileID: 1801159578}
   - component: {fileID: 1801159580}
   - component: {fileID: 1801159581}
+  - component: {fileID: 1801159582}
   m_Layer: 0
   m_Name: GameDirector
   m_TagString: Untagged
@@ -10280,6 +10398,9 @@ MonoBehaviour:
   showPassCorridor: 1
   showCandidates: 1
   showAimCone: 1
+  showControl: 1
+  controlView: 0
+  controlAlpha: 0.34
   coneLength: 26
   height: 0.06
   ringWidth: 0.05
@@ -10319,6 +10440,33 @@ MonoBehaviour:
   flightTimeout: 8
   showTable: 1
   history: 6
+--- !u!114 &1801159582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801159577}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96136be893626fc44b218ae5f451abe9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Prototype.AimReticle
+  player: {fileID: 0}
+  director: {fileID: 0}
+  ball: {fileID: 0}
+  show: 1
+  onlyWithBall: 1
+  segments: 40
+  height: 0.07
+  ringWidth: 0.08
+  lineWidth: 0.045
+  showAimLine: 1
+  centreDotRadius: 0.22
+  tightCol: {r: 0.45, g: 1, b: 0.65, a: 0.85}
+  looseCol: {r: 1, g: 0.45, b: 0.35, a: 0.85}
+  looseAt: 2.5
+  lineCol: {r: 1, g: 1, b: 1, a: 0.3}
 --- !u!1 &1817441311
 GameObject:
   m_ObjectHideFlags: 0
@@ -10695,6 +10843,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -10915,6 +11072,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -11176,6 +11342,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -11370,6 +11545,15 @@ MonoBehaviour:
   speed: 6
   sprintSpeed: 7.9
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   runIntervalMin: 5
   runIntervalMax: 11
   runDuration: 1.8
@@ -12286,6 +12470,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -12544,6 +12737,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
@@ -12651,6 +12853,15 @@ MonoBehaviour:
   chase: {fileID: 0}
   speed: 5.8
   active: 1
+  motion:
+    accel: 10
+    brake: 16
+    turnAccel: 12
+    arriveRadius: 3
+    stopRadius: 0.35
+    bodyTurn: 480
+    backpedalSpeed: 0.55
+    backpedalAngle: 110
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
