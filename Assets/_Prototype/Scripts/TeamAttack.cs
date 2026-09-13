@@ -42,7 +42,7 @@ namespace Prototype
         public PitchIntel intel = new PitchIntel();
         [Tooltip("Who would reach each square of the pitch first. Rebuilt with every picture, from this side's own snapshot. See PitchControl.")]
         public PitchControl control = new PitchControl();
-        [Tooltip("Top speed the control grid assumes everybody runs at.")]
+        [Tooltip("Top speed the control grid falls back to for a body with no brain on it - a goalkeeper, say. Everyone else races at his own sprinting speed.")]
         public float controlSpeed = 7.2f;
 
         [Header("Shape")]
@@ -144,10 +144,8 @@ namespace Prototype
         Vector3 shift;
 
         readonly List<PassCandidate> candidates = new List<PassCandidate>();
-        readonly List<Vector3> ctrlOurs = new List<Vector3>();
-        readonly List<Vector3> ctrlOursVel = new List<Vector3>();
-        readonly List<Vector3> ctrlTheirs = new List<Vector3>();
-        readonly List<Vector3> ctrlTheirsVel = new List<Vector3>();
+        readonly List<PitchControl.Runner> ctrlOurs = new List<PitchControl.Runner>();
+        readonly List<PitchControl.Runner> ctrlTheirs = new List<PitchControl.Runner>();
         PassPlan lastPlan;
         PassPlan pending;
         bool hasPending;
@@ -439,23 +437,24 @@ namespace Prototype
         /// </summary>
         void RebuildControl()
         {
-            ctrlOurs.Clear(); ctrlOursVel.Clear();
+            ctrlOurs.Clear();
             for (int i = 0; mates != null && i < mates.Length; i++)
             {
                 if (mates[i] == null) continue;
-                ctrlOurs.Add(mates[i].position);
-                ctrlOursVel.Add(VelocityOf(mates[i]));
+                ctrlOurs.Add(PitchControl.Of(mates[i], mates[i].position,
+                                             VelocityOf(mates[i]), controlSpeed));
             }
 
-            ctrlTheirs.Clear(); ctrlTheirsVel.Clear();
+            ctrlTheirs.Clear();
             for (int k = 0; opponents != null && k < opponents.Length; k++)
             {
                 if (opponents[k] == null) continue;
-                ctrlTheirs.Add(intel.Projected(k, Time.time));
-                ctrlTheirsVel.Add(k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero);
+                Vector3 v = k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero;
+                ctrlTheirs.Add(PitchControl.Of(opponents[k], intel.Projected(k, Time.time),
+                                               v, controlSpeed));
             }
 
-            control.Rebuild(ctrlOurs, ctrlOursVel, ctrlTheirs, ctrlTheirsVel, controlSpeed);
+            control.Rebuild(ctrlOurs, ctrlTheirs);
         }
 
         static Vector3 VelocityOf(Transform t)

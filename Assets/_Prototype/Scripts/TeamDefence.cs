@@ -61,7 +61,7 @@ namespace Prototype
         public PitchIntel intel = new PitchIntel();
         [Tooltip("Who would reach each square first, from THIS side's point of view. Built from this side's own snapshot, never shared with the attack - a grid both teams read would let each of them see through the other's delay, and that delay is the difficulty (PROJECT.md 3.15, 3.24).")]
         public PitchControl control = new PitchControl();
-        [Tooltip("Top speed the control grid assumes everybody runs at.")]
+        [Tooltip("Top speed the control grid falls back to for a body with no brain on it - a goalkeeper, say. Everyone else races at his own sprinting speed.")]
         public float controlSpeed = 7.2f;
 
         [Header("1 - shape")]
@@ -169,10 +169,8 @@ namespace Prototype
         float prevBallAt;
 
         // Scratch for the control grid, kept so a rebuild every picture allocates nothing.
-        readonly List<Vector3> ctrlOurs = new List<Vector3>();
-        readonly List<Vector3> ctrlOursVel = new List<Vector3>();
-        readonly List<Vector3> ctrlTheirs = new List<Vector3>();
-        readonly List<Vector3> ctrlTheirsVel = new List<Vector3>();
+        readonly List<PitchControl.Runner> ctrlOurs = new List<PitchControl.Runner>();
+        readonly List<PitchControl.Runner> ctrlTheirs = new List<PitchControl.Runner>();
 
         void Update()
         {
@@ -269,25 +267,26 @@ namespace Prototype
         /// </summary>
         void RebuildControl()
         {
-            ctrlOurs.Clear(); ctrlOursVel.Clear();
+            ctrlOurs.Clear();
             for (int i = 0; members != null && i < members.Length; i++)
             {
                 // A frozen man is still a body standing in the way, so `active` is not
                 // consulted here - it stops him deciding things, not existing.
                 if (members[i] == null) continue;
-                ctrlOurs.Add(members[i].transform.position);
-                ctrlOursVel.Add(members[i].Velocity);
+                ctrlOurs.Add(PitchControl.Of(members[i].transform, members[i].transform.position,
+                                             members[i].Velocity, controlSpeed));
             }
 
-            ctrlTheirs.Clear(); ctrlTheirsVel.Clear();
+            ctrlTheirs.Clear();
             for (int k = 0; opponents != null && k < opponents.Length; k++)
             {
                 if (opponents[k] == null) continue;
-                ctrlTheirs.Add(intel.Projected(k, Time.time));
-                ctrlTheirsVel.Add(k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero);
+                Vector3 v = k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero;
+                ctrlTheirs.Add(PitchControl.Of(opponents[k], intel.Projected(k, Time.time),
+                                               v, controlSpeed));
             }
 
-            control.Rebuild(ctrlOurs, ctrlOursVel, ctrlTheirs, ctrlTheirsVel, controlSpeed);
+            control.Rebuild(ctrlOurs, ctrlTheirs);
         }
 
         /// <summary>
