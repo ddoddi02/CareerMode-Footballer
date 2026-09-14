@@ -88,6 +88,30 @@ namespace Prototype
         public float wShow = 1.30f;
         public float wUnstick = 0.65f;
 
+        [Header("Keeping out of each other's way")]
+        [Tooltip("How near a spot already taken by a team-mate counts as crowding him. Two men in one pocket is one man wasted and one marker who gets both.")]
+        public float claimRadius = 7f;
+        [Tooltip("The human's claim is bigger. He cannot be told to move, so everyone else works around him - and being crowded is far more annoying when it is your own space.")]
+        public float humanClaimRadius = 10f;
+        [Tooltip("How hard crowding is punished. This is what stops the side collapsing into one pocket.")]
+        public float wSeparation = 1.30f;
+
+        [Header("The back line while we have it")]
+        [Tooltip("Centre-backs and full-backs push up to squeeze the pitch instead of standing on their kickoff slot all game.")]
+        public bool pushBackLine = true;
+        [Tooltip("How far goal-side of their deepest attacker the back line sits.")]
+        public float backLineGap = 3f;
+        [Tooltip("Furthest up the pitch the back line will go, measured toward the goal we attack. A back four does not cross halfway.")]
+        public float backLineMaxAlong = 0f;
+        [Tooltip("How much more room a full-back gets to roam while we have the ball. He is the width, and the width is support.")]
+        public float fullBackSupport = 1.9f;
+        [Tooltip("How much more room a centre-back gets. Small - he is still the last line.")]
+        public float centreBackSupport = 1.35f;
+
+        [Header("Decoys")]
+        [Tooltip("How far out of his zone a dummy run goes, as a multiple of his roam radius.")]
+        public float decoyReach = 1.6f;
+
         [Header("Sampling")]
         [Range(6, 48)] public int samples = 24;
 
@@ -143,6 +167,11 @@ namespace Prototype
         int showAhead = -1, showBehind = -1;
         Vector3 shift;
 
+        readonly List<Vector3> claims = new List<Vector3>();
+        readonly List<float> claimRadii = new List<float>();
+        readonly List<int> pickOrder = new List<int>();
+        Vector3 teamSpace;
+        int pictures;
         readonly List<PassCandidate> candidates = new List<PassCandidate>();
         readonly List<PitchControl.Runner> ctrlOurs = new List<PitchControl.Runner>();
         readonly List<PitchControl.Runner> ctrlTheirs = new List<PitchControl.Runner>();
@@ -407,11 +436,20 @@ namespace Prototype
 
             shift = ShapeShift(ballPos);
             AssessNumbers();
+            pictures++;
 
-            for (int i = 0; i < members.Length; i++)
+            // The room the side is trying to play into. A decoy runs the other way.
+            teamSpace = control.Ready
+                ? control.BestSpaceNear(CarrierPos, 25f, attacksPositiveZ)
+                : CarrierPos;
+
+            OpenClaims();
+            OrderPicks();
+
+            for (int o = 0; o < pickOrder.Count; o++)
             {
+                int i = pickOrder[o];
                 var m = members[i];
-                if (m == null) continue;
 
                 // The man on the ball is not looking for a spot to stand in.
                 if (carrier != null && m.transform == carrier)
@@ -424,10 +462,82 @@ namespace Prototype
                 m.TickUnstick(squeezed);
 
                 if (Formation.RunsInBehind(m.role) && Time.time >= m.nextRunAt) m.BeginRun();
+                if (Time.time >= m.nextDecoyAt && !m.Running) m.BeginDecoy();
 
                 bool showing = i == showAhead || i == showBehind;
-                m.SetStation(BestSpot(m, showing, squeezed), showing, squeezed, ball);
+                Vector3 spot = BestSpot(m, i, showing, squeezed);
+
+                // Whatever he took is his. Everyone after him has to work around it.
+                claims.Add(spot);
+                claimRadii.Add(claimRadius);
+
+                m.SetStation(spot, showing, squeezed, ball);
             }
+        }
+
+        /// <summary>
+        /// Start the picture with the space that is already spoken for: the man on the
+        /// ball, and the human.
+        ///
+        /// The human is the reason this exists. He cannot be told to move over, so a bot
+        /// that scores his pocket highest simply walks into him - and the one player who
+        /// notices every time is the one holding the mouse. He gets a bigger claim than
+        /// anybody.
+        /// </summary>
+        void OpenClaims()
+        {
+            claims.Clear();
+            claimRadii.Clear();
+
+            for (int k = 0; mates != null && k < mates.Length; k++)
+            {
+                if (mates[k] == null) continue;
+                if (IsMember(mates[k])) continue;      // bots claim as they pick, below
+
+                claims.Add(mates[k].position);
+                claimRadii.Add(humanClaimRadius);
+            }
+
+            if (carrier != null)
+            {
+                claims.Add(CarrierPos);
+                claimRadii.Add(claimRadius);
+            }
+        }
+
+        bool IsMember(Transform t)
+        {
+            for (int i = 0; i < members.Length; i++)
+                if (members[i] != null && members[i].transform == t) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Who chooses first. Claims are sequential, so the order IS a priority: a man
+        /// with a job right now - running in behind, coming to show - gets the pocket he
+        /// wants, and the rest arrange themselves around him. Stable, so the same picture
+        /// always produces the same order.
+        /// </summary>
+        void OrderPicks()
+        {
+            pickOrder.Clear();
+            for (int i = 0; i < members.Length; i++)
+                if (members[i] != null) pickOrder.Add(i);
+
+            pickOrder.Sort(delegate (int a, int b)
+            {
+                int pa = Priority(a), pb = Priority(b);
+                return pa != pb ? pa.CompareTo(pb) : a.CompareTo(b);
+            });
+        }
+
+        int Priority(int i)
+        {
+            if (i == showAhead || i == showBehind) return 0;    // asked to come and help
+            var m = members[i];
+            if (m.Running) return 1;
+            if (m.Decoying) return 2;
+            return 3 + Formation.LineOf(m.role) * -1;           // front line before the back
         }
 
         /// <summary>
@@ -521,12 +631,17 @@ namespace Prototype
         /// Score a spread of spots in his zone and take the best. The spiral is fixed, so
         /// the same situation always produces the same movement.
         /// </summary>
-        Vector3 BestSpot(AttackerAI m, bool showing, bool squeezed)
+        Vector3 BestSpot(AttackerAI m, int index, bool showing, bool squeezed)
         {
-            Vector3 anchor = m.homeSlot + shift;
+            Vector3 anchor = Anchor(m);
             float radius = Formation.ZoneRadius(m.role);
             if (m.Running) radius *= 1.5f;      // a run is allowed out of the zone
             if (showing) radius *= 1.35f;
+            if (Formation.IsFullBack(m.role)) radius *= fullBackSupport;
+            else if (Formation.IsCentreBack(m.role)) radius *= centreBackSupport;
+
+            // A dummy run is not a search for a good spot. It is a deliberately bad one.
+            if (m.Decoying) return DecoySpot(m, anchor, radius);
 
             Vector3 here = m.transform.position;
             Vector3 unstickDir = m.UnstickDir();
@@ -542,8 +657,12 @@ namespace Prototype
                 else if (k == 1) cand = here;
                 else
                 {
-                    // Golden-angle spiral: even coverage, no randomness.
-                    float a = (k - 2) * 2.39996323f;
+                    // Golden-angle spiral: even coverage, no randomness. The phase turns
+                    // with the man and with each picture, because a spiral that is
+                    // identical every second offers the identical winning square every
+                    // second - which is most of why the movement looked like a loop.
+                    // Derived, not random, so a replay still reproduces it (PROJECT.md 3.6).
+                    float a = (k - 2) * 2.39996323f + index * 1.7f + pictures * 0.61f;
                     float r = radius * Mathf.Sqrt((k - 1.5f) / samples);
                     cand = anchor + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
                 }
@@ -562,6 +681,91 @@ namespace Prototype
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// Where this man is supposed to be standing for this picture, before he starts
+        /// looking around.
+        ///
+        /// For everybody but the back four that is just the slot, slid with the ball. The
+        /// back four also gets pushed UP: a defence that keeps its kickoff depth while its
+        /// own side has the ball leaves sixty metres between its centre-backs and its
+        /// centre-forwards, nobody can play through that, and the two of them spend the
+        /// whole possession standing still watching it.
+        /// </summary>
+        Vector3 Anchor(AttackerAI m)
+        {
+            Vector3 anchor = m.homeSlot + shift;
+            if (!pushBackLine) return anchor;
+            if (!Formation.IsCentreBack(m.role) && !Formation.IsFullBack(m.role)) return anchor;
+
+            float dir = attacksPositiveZ ? 1f : -1f;
+            float lineAlong = BackLineAlong();
+            float slotAlong = anchor.z * dir;
+
+            // Only ever forward. He squeezes the pitch; he never drops off his own slot.
+            anchor.z = Mathf.Max(slotAlong, lineAlong) * dir;
+            return anchor;
+        }
+
+        /// <summary>
+        /// Where the back line should sit, measured toward the goal we are attacking.
+        /// Goal-side of their deepest attacker, and never past halfway.
+        /// </summary>
+        float BackLineAlong()
+        {
+            float dir = attacksPositiveZ ? 1f : -1f;
+            float deepest = float.MaxValue;
+
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+            {
+                if (opponents[k] == null) continue;
+                if (Formation.IsKeeper(Formation.RoleOf(opponents[k]))) continue;
+
+                float along = intel.Projected(k, Time.time).z * dir;
+                if (along < deepest) deepest = along;
+            }
+
+            if (deepest == float.MaxValue) return backLineMaxAlong;
+            return Mathf.Min(deepest - backLineGap, backLineMaxAlong);
+        }
+
+        /// <summary>
+        /// A dummy run: away from the room the side is trying to use, fast enough that
+        /// the man marking him has to come too.
+        ///
+        /// It is computed rather than scored, because every term in the score is a reason
+        /// to go somewhere USEFUL and a decoy is the opposite of that. Scoring it would
+        /// just produce another ordinary run with a different name on it.
+        /// </summary>
+        Vector3 DecoySpot(AttackerAI m, Vector3 anchor, float radius)
+        {
+            Vector3 away = Flat(m.transform.position - teamSpace);
+            if (away.sqrMagnitude < 1f) away = Flat(anchor - CarrierPos);
+            if (away.sqrMagnitude < 1f) away = Vector3.right;
+            away.Normalize();
+
+            Vector3 p = anchor + away * radius * decoyReach;
+            p = Offside.KeepOnside(p, OffsideLine, attacksPositiveZ, onsideMargin);
+            p.x = Mathf.Clamp(p.x, -TacticalPitch.HalfW + pitchInset, TacticalPitch.HalfW - pitchInset);
+            p.z = Mathf.Clamp(p.z, -TacticalPitch.HalfL + pitchInset, TacticalPitch.HalfL - pitchInset);
+            return p;
+        }
+
+        /// <summary>
+        /// How much this spot treads on somebody else's. Summed, so standing between two
+        /// team-mates is worse than standing near one.
+        /// </summary>
+        float Crowding(Vector3 cand)
+        {
+            float sum = 0f;
+            for (int i = 0; i < claims.Count; i++)
+            {
+                float r = claimRadii[i];
+                float d = Flat(cand - claims[i]).magnitude;
+                if (d < r) sum += 1f - d / r;
+            }
+            return sum;
         }
 
         float Score(AttackerAI m, Vector3 cand, Vector3 anchor, float radius, Vector3 here,
@@ -584,6 +788,9 @@ namespace Prototype
                 float ang = Vector3.Angle(Flat(support.position - CarrierPos), Flat(cand - CarrierPos));
                 total += wTriangle * Mathf.Clamp01(1f - Mathf.Abs(ang - idealTriangleAngle) / 120f);
             }
+
+            // 0 - and none of it counts if he is standing in somebody else's space.
+            total -= wSeparation * Crowding(cand);
 
             // 2 - space, and staying in his own zone while he looks for it.
             total += wSpace * (control.Ready ? control.OursAt(cand)

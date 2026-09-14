@@ -38,6 +38,12 @@ namespace Prototype
         public float runIntervalMax = 11f;
         public float runDuration = 1.8f;
 
+        [Header("Decoys - dragging a marker out of the way")]
+        [Tooltip("Seconds between dummy runs. A decoy is not an attempt to receive: he goes somewhere he does NOT want the ball so that whoever is marking him goes too, and the space he leaves is the point.")]
+        public float decoyIntervalMin = 8f;
+        public float decoyIntervalMax = 16f;
+        public float decoyDuration = 2.2f;
+
         [Header("3 - unsticking")]
         [Tooltip("How long he commits to one direction before mixing it up.")]
         public float unstickPeriod = 1.4f;
@@ -53,6 +59,12 @@ namespace Prototype
 
         /// <summary>He is attacking the line right now, so he moves at pace.</summary>
         public bool Running { get { return Time.time < runUntil; } }
+
+        /// <summary>
+        /// He is making a dummy run. It has to be quick or the marker does not believe
+        /// it, and a marker who does not follow is a decoy that did nothing.
+        /// </summary>
+        public bool Decoying { get { return Time.time < decoyUntil; } }
 
         /// <summary>He has been asked to come and help an outnumbered team-mate.</summary>
         public bool Showing { get; private set; }
@@ -87,6 +99,8 @@ namespace Prototype
         // --- timers owned by the player, read and armed by TeamAttack ----------
         [HideInInspector] public float nextRunAt = -1f;
         [HideInInspector] public float runUntil = -99f;
+        [HideInInspector] public float nextDecoyAt = -1f;
+        [HideInInspector] public float decoyUntil = -99f;
         [HideInInspector] public float unstickFlipAt = -1f;
         [HideInInspector] public int unstickAxis;      // 0 = across the pitch, 1 = up and down it
         [HideInInspector] public int unstickSign = 1;
@@ -106,6 +120,7 @@ namespace Prototype
             station = transform.position;
             // Stagger the first run so the front three do not set off together.
             nextRunAt = Time.time + Random.Range(runIntervalMin, runIntervalMax);
+            nextDecoyAt = Time.time + Random.Range(decoyIntervalMin, decoyIntervalMax);
         }
 
         /// <summary>Put him back on his slot for a restart.</summary>
@@ -122,7 +137,9 @@ namespace Prototype
             Chasing = false;
             collectAt = -99f;
             runUntil = -99f;
+            decoyUntil = -99f;
             nextRunAt = Time.time + Random.Range(runIntervalMin, runIntervalMax);
+            nextDecoyAt = Time.time + Random.Range(decoyIntervalMin, decoyIntervalMax);
         }
 
         // -------------------------------------------------------------- the ball --
@@ -163,6 +180,13 @@ namespace Prototype
         {
             runUntil = Time.time + runDuration;
             nextRunAt = Time.time + runDuration + Random.Range(runIntervalMin, runIntervalMax);
+        }
+
+        /// <summary>Kick off a dummy run. Same shape as BeginRun, opposite purpose.</summary>
+        public void BeginDecoy()
+        {
+            decoyUntil = Time.time + decoyDuration;
+            nextDecoyAt = Time.time + decoyDuration + Random.Range(decoyIntervalMin, decoyIntervalMax);
         }
 
         /// <summary>
@@ -212,7 +236,8 @@ namespace Prototype
             }
 
             Vector3 goTo = Chasing ? chasePoint : station;
-            float top = Running || Chasing ? sprintSpeed : speed;
+            // A decoy at jogging pace fools nobody - the marker has to believe it.
+            float top = Running || Chasing || Decoying ? sprintSpeed : speed;
 
             vel = PlayerMotion.Step(vel, transform.position, goTo, top, yaw, motion, dt);
             cc.Move((vel + Vector3.down * 3f) * dt);
