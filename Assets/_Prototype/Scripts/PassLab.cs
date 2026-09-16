@@ -33,7 +33,7 @@ namespace Prototype
     /// one piece at a time (`unfreezeDefence`, `perfectStrike`) until it comes back.
     ///
     ///   P      freeze / unfreeze the whole pitch
-    ///   Space  play the pass at the top of the list
+    ///   Return play the pass at the top of the list
     ///   B      put the ball back at the centre-back's feet
     ///
     /// Everybody is frozen where they stand, so you can drag players around in the Scene
