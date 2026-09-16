@@ -228,8 +228,10 @@ namespace Prototype
             string carrier = "-";
             if (attack != null && attack.BallCarrier != null) carrier = Short(attack.BallCarrier.name);
             GUI.Label(new Rect(16f, y, w, 20f), string.Format(
-                "공: {0}    압박 강도: {1}", carrier,
-                defence != null ? defence.Press.ToString() : "-"), sRow);
+                "공: {0}    압박 강도: {1}    압박자: {2} {3}", carrier,
+                defence != null ? defence.Press.ToString() : "-",
+                defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-",
+                defence != null && defence.PresserByDuty ? "(담당)" : "(가장 가까움 — 압박이 뚫림)"), sRow);
             y += 18f;
 
             GUI.Label(new Rect(16f, y, w, 20f),

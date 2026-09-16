@@ -136,6 +136,13 @@ namespace Prototype
         /// <summary>The man currently closing the ball down. Everyone else holds shape.</summary>
         public DefenderAI Presser { get; private set; }
 
+        /// <summary>
+        /// True when the man going to the ball is the man whose duty it was, rather than
+        /// whoever happened to be nearest. False means the press was played through and
+        /// somebody is covering for it - worth seeing rather than hiding.
+        /// </summary>
+        public bool PresserByDuty { get; private set; }
+
         /// <summary>The one man sent to cut the ball out, if anybody can reach it.</summary>
         public DefenderAI Interceptor { get; private set; }
 
@@ -168,6 +175,7 @@ namespace Prototype
         float[] depthCap = new float[0];
         Vector3 prevBall;
         float prevBallAt;
+        int carrierIndex = -1;      // who the duties were resolved against, into `opponents`
 
         /// <summary>
         /// Who member i was told to pick up, as an index into `opponents`, or -1 for
@@ -609,6 +617,7 @@ namespace Prototype
                 oppTaken = new bool[m];
             }
 
+            carrierIndex = -1;
             int carrier = -1;
             float bestCarrier = float.MaxValue;
             for (int k = 0; k < m; k++)
@@ -618,6 +627,8 @@ namespace Prototype
                 float d = Flat(oppPos[k] - intel.Ball).sqrMagnitude;
                 if (d < bestCarrier) { bestCarrier = d; carrier = k; }
             }
+
+            carrierIndex = carrier;
 
             DutyPicture pic;
             pic.opp = oppPos;
@@ -738,8 +749,24 @@ namespace Prototype
         }
 
         /// <summary>
-        /// Whoever is closest to the man on the ball goes to him. Everyone else keeps
-        /// their station - the whole point is that only one man leaves.
+        /// Whoever was GIVEN the man on the ball goes to him. Everyone else keeps their
+        /// station - the whole point is that only one man leaves.
+        ///
+        /// It used to be whoever was nearest, measured straight off the pitch, and that
+        /// quietly undid the duties. The striker would be sent at the centre-back by the
+        /// press chain (3.19c) while a midfielder who happened to have drifted two metres
+        /// closer was sent at the same man by this - two of ours on one of theirs, and a
+        /// hole where the midfielder was supposed to be. Proximity is not an assignment;
+        /// it is a coincidence about where somebody is standing this frame.
+        ///
+        /// So the duty decides, and distance only breaks the tie that is left: if nobody
+        /// was given the carrier at all - he is out of everyone's reach, or he is the
+        /// keeper - then the nearest man goes, because somebody has to.
+        ///
+        /// A consequence worth knowing rather than patching: when the man who owns him is
+        /// far away, the carrier IS unpressed until he arrives, even with a team-mate
+        /// standing next to him. That is what a press being played through looks like,
+        /// and sending the near man anyway is how you end up with the duplicate again.
         ///
         /// WHAT HE DOES WHEN HE GETS THERE depends on principle 5. Normally he engages:
         /// goal-side, tight, shading the inside shoulder so the only ball left is
@@ -755,15 +782,32 @@ namespace Prototype
         void AssignPresser(int n, Vector3 ballPos)
         {
             int pick = -1;
-            float best = float.MaxValue;
-            for (int i = 0; i < n; i++)
+
+            // 1. the man whose job he already is.
+            if (carrierIndex >= 0)
             {
-                if (members[i] == null) continue;
-                float d = Flat(members[i].transform.position - ballPos).magnitude;
-                if (d < best) { best = d; pick = i; }
+                for (int i = 0; i < n; i++)
+                {
+                    if (members[i] == null || targets[i] != carrierIndex) continue;
+                    pick = i;
+                    break;
+                }
+            }
+
+            // 2. nobody was given him - then, and only then, the nearest man goes.
+            if (pick < 0)
+            {
+                float best = float.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    if (members[i] == null) continue;
+                    float d = Flat(members[i].transform.position - ballPos).magnitude;
+                    if (d < best) { best = d; pick = i; }
+                }
             }
 
             Presser = pick >= 0 ? members[pick] : null;
+            PresserByDuty = pick >= 0 && carrierIndex >= 0 && targets[pick] == carrierIndex;
 
             // Once he is in the box, delaying has run out of pitch - go and engage.
             bool contain = OnTheBreak && !TacticalPitch.InPenaltyBox(CarrierPos, defendsPositiveZ);
