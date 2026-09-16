@@ -165,8 +165,25 @@ namespace Prototype
         Vector3[] oppPos = new Vector3[0];
         bool[] oppTaken = new bool[0];
         int[] targets = new int[0];
+        float[] depthCap = new float[0];
         Vector3 prevBall;
         float prevBallAt;
+
+        /// <summary>
+        /// Who member i was told to pick up, as an index into `opponents`, or -1 for
+        /// nobody. Read-only and for looking at: the press drill draws it, because a
+        /// rotation you cannot see is a rotation you cannot check.
+        /// </summary>
+        public int DutyOf(int i)
+        {
+            return (targets != null && i >= 0 && i < targets.Length) ? targets[i] : -1;
+        }
+
+        /// <summary>The line member i has been told not to advance past, or NaN.</summary>
+        public float DepthCapOf(int i)
+        {
+            return (depthCap != null && i >= 0 && i < depthCap.Length) ? depthCap[i] : float.NaN;
+        }
 
         // Scratch for the control grid, kept so a rebuild every picture allocates nothing.
         readonly List<PitchControl.Runner> ctrlOurs = new List<PitchControl.Runner>();
@@ -321,6 +338,7 @@ namespace Prototype
                 pulled = new bool[n];
                 myRoles = new Role[n];
                 targets = new int[n];
+                depthCap = new float[n];
             }
 
             Vector3 ballPos = intel.Ball;
@@ -611,7 +629,7 @@ namespace Prototype
             pic.press = Press;
             pic.maxTravel = maxMarkTravel;
 
-            DefenceDuties.Assign(myRoles, slotNow, ref pic, targets);
+            DefenceDuties.Assign(myRoles, slotNow, ref pic, targets, depthCap);
 
             Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
 
@@ -645,7 +663,32 @@ namespace Prototype
                     // Watching, not marking. He keeps his shape and shades that way.
                     slotNow[i] = Vector3.Lerp(slotNow[i], markPos, watchBlend);
                 }
+
+                slotNow[i] = HoldTheLine(slotNow[i], depthCap[i]);
             }
+        }
+
+        /// <summary>
+        /// A man who rotated inside is not allowed past the line he was told to hold.
+        ///
+        /// It is the whole second half of the full-back's job in the press (see
+        /// DefenceDuties.PressChain): stepping up to the free full-back is right, and
+        /// following him up the pitch is not, because the winger left behind is then
+        /// simply free. Going up is a rotation; going past is a swap of one loose man
+        /// for another.
+        ///
+        /// NaN means nobody set a line, which is different from a line at zero.
+        /// </summary>
+        Vector3 HoldTheLine(Vector3 station, float cap)
+        {
+            if (float.IsNaN(cap)) return station;
+
+            // Forward is toward the goal we are attacking, which is the one we do not
+            // defend - so the cap is a floor at one end of the pitch and a ceiling at the
+            // other.
+            if (defendsPositiveZ) station.z = Mathf.Max(station.z, cap);
+            else station.z = Mathf.Min(station.z, cap);
+            return station;
         }
 
         /// <summary>

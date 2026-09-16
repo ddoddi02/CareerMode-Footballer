@@ -299,6 +299,20 @@ namespace Prototype
 #endif
         }
 
+        /// <summary>Hold the ball in the back four so the press keeps re-firing (PressDrill).</summary>
+        public static bool PressDrillPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.tKey.wasPressedThisFrame) return true;
+            return false;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.T);
+#else
+            return false;
+#endif
+        }
+
         /// <summary>Freeze everybody and pass on command - the pass-selection bench (PassLab).</summary>
         public static bool PassLabPressed()
         {

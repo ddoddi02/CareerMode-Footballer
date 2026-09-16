@@ -57,13 +57,15 @@ namespace Prototype
         /// and before everyone else, because the second one's job is defined by what the
         /// first one did.
         /// </summary>
-        public static void Assign(Role[] mine, Vector3[] stations, ref DutyPicture p, int[] targets)
+        public static void Assign(Role[] mine, Vector3[] stations, ref DutyPicture p,
+                                  int[] targets, float[] depthCap)
         {
             int n = mine.Length;
-            for (int i = 0; i < n; i++) targets[i] = -1;
+            for (int i = 0; i < n; i++) { targets[i] = -1; depthCap[i] = float.NaN; }
             for (int k = 0; k < p.oppTaken.Length; k++) p.oppTaken[k] = false;
 
             CentreBacks(mine, stations, ref p, targets);
+            PressChain(mine, stations, ref p, targets, depthCap);
 
             for (int i = 0; i < n; i++)
             {
@@ -77,6 +79,152 @@ namespace Prototype
 
                 if (targets[i] >= 0) p.oppTaken[targets[i]] = true;
             }
+        }
+
+        // ----------------------------------------------------------- press chain --
+
+        /// <summary>
+        /// The front three and the full-backs, resolved as ONE decision instead of five.
+        ///
+        /// This is the 4-3-3 against 4-3-3 sequence, and the reason it cannot be five
+        /// independent "pick your nearest" rules is that every step is defined by the
+        /// step before it:
+        ///
+        ///   1  the striker goes to a CENTRE-BACK - the one on the ball for preference,
+        ///      because pressing the man about to pass is the only press that does
+        ///      anything
+        ///   2  that leaves the other centre-back free, and the winger on THAT side comes
+        ///      inside to take him. The far one, not the near one: the near one is
+        ///      already the reason the ball went the other way
+        ///   3  that winger has left an opposing full-back unattended, so OUR full-back
+        ///      on that side steps up to take him
+        ///   4  and stops there. The man he walked away from is the opposing winger, and
+        ///      a full-back who goes past him has swapped one free man for another. He
+        ///      stands level with him - that is what depthCap carries.
+        ///
+        /// The full-back who did not have to rotate stays with his winger, and "stays
+        /// with" means watching rather than pressing: TeamDefence only goes tight when
+        /// the man is inside his zone, so a winger held at arm's length produces a lean
+        /// and not a duel.
+        ///
+        /// Dropped off (Low) none of it runs. The front three are coming back to defend
+        /// and there is no press left to sequence.
+        /// </summary>
+        static void PressChain(Role[] mine, Vector3[] stations, ref DutyPicture p,
+                               int[] targets, float[] depthCap)
+        {
+            if (p.press == PressIntensity.Low) return;
+
+            int st = FindStriker(mine, targets);
+            if (st < 0) return;
+
+            // --- 1. the striker takes a centre-back --------------------------------
+            int pressed = -1;
+            if (p.carrier >= 0 && !p.oppTaken[p.carrier]
+                && Formation.IsCentreBack(p.oppRole[p.carrier]))
+                pressed = p.carrier;
+            if (pressed < 0)
+                pressed = NearestOpponent(stations[st], ref p, Filter.CentreBack, p.maxTravel);
+
+            // No centre-back within reach: he falls back to hunting whoever is playing it
+            // out, which is what he did before this sequence existed.
+            if (pressed < 0)
+            {
+                targets[st] = Striker(stations[st], ref p);
+                Claim(ref p, targets[st]);
+                return;
+            }
+
+            targets[st] = pressed;
+            Claim(ref p, pressed);
+
+            // --- 2. the far winger takes the other centre-back ---------------------
+            int free = NearestOpponent(p.opp[pressed], ref p, Filter.CentreBack, 999f);
+            int stepIn = -1;
+            if (free >= 0)
+            {
+                // "The winger on that side", decided by where the free man actually is
+                // rather than by role name. The two sides mirror between the teams and
+                // matching on the label gets it backwards half the time.
+                stepIn = NearestWingerByX(mine, stations, targets, p.opp[free].x);
+                if (stepIn >= 0) { targets[stepIn] = free; Claim(ref p, free); }
+            }
+
+            // --- 3 and 4. the full-backs -------------------------------------------
+            for (int i = 0; i < mine.Length; i++)
+            {
+                if (targets[i] >= 0 || !Formation.IsFullBack(mine[i])) continue;
+
+                int myWinger = NearestWingerByX(mine, stations, null, stations[i].x);
+                bool rotated = myWinger >= 0 && myWinger == stepIn;
+
+                if (rotated)
+                {
+                    int theirs = NearestOpponent(stations[i], ref p, Filter.FullBack, 999f);
+                    if (theirs >= 0)
+                    {
+                        targets[i] = theirs;
+                        Claim(ref p, theirs);
+                        depthCap[i] = WingerLine(ref p, stations[i].x);
+                        continue;
+                    }
+                }
+
+                // Nobody rotated onto him: he keeps the winger on his side in view.
+                int w = NearestOpponent(stations[i], ref p, Filter.Winger, 999f);
+                if (w >= 0) { targets[i] = w; Claim(ref p, w); }
+            }
+        }
+
+        static void Claim(ref DutyPicture p, int k)
+        {
+            if (k >= 0) p.oppTaken[k] = true;
+        }
+
+        static int FindStriker(Role[] mine, int[] targets)
+        {
+            for (int i = 0; i < mine.Length; i++)
+                if (targets[i] < 0 && Formation.IsStriker(mine[i])) return i;
+            return -1;
+        }
+
+        /// <summary>
+        /// Our winger standing nearest this x. Pass `targets` to skip men already given a
+        /// job, or null to ask purely "whose side is this".
+        /// </summary>
+        static int NearestWingerByX(Role[] mine, Vector3[] stations, int[] targets, float x)
+        {
+            int best = -1;
+            float bd = float.MaxValue;
+            for (int i = 0; i < mine.Length; i++)
+            {
+                if (!Formation.IsWinger(mine[i])) continue;
+                if (targets != null && targets[i] >= 0) continue;
+                float d = Mathf.Abs(stations[i].x - x);
+                if (d < bd) { bd = d; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// How far up the opposing winger on this side is standing. A full-back who has
+        /// rotated inside may not go beyond this line: past it the winger he left is
+        /// simply free, and he has swapped one loose man for another.
+        ///
+        /// NaN when there is no winger on that side to stand level with - which means no
+        /// cap at all, not a cap at zero.
+        /// </summary>
+        static float WingerLine(ref DutyPicture p, float x)
+        {
+            float bd = float.MaxValue;
+            float z = float.NaN;
+            for (int k = 0; k < p.opp.Length; k++)
+            {
+                if (!Formation.IsWinger(p.oppRole[k])) continue;
+                float d = Mathf.Abs(p.opp[k].x - x);
+                if (d < bd) { bd = d; z = p.opp[k].z; }
+            }
+            return z;
         }
 
         // --------------------------------------------------------- centre-backs --
@@ -179,7 +327,7 @@ namespace Prototype
 
         // ------------------------------------------------------------- searching --
 
-        enum Filter { Any, Striker, Winger, FullBack, Midfield, BuildUp, Forward }
+        enum Filter { Any, Striker, Winger, FullBack, CentreBack, Midfield, BuildUp, Forward }
 
         static bool Matches(Filter f, Role r)
         {
@@ -188,6 +336,7 @@ namespace Prototype
                 case Filter.Striker: return Formation.IsStriker(r);
                 case Filter.Winger: return Formation.IsWinger(r);
                 case Filter.FullBack: return Formation.IsFullBack(r);
+                case Filter.CentreBack: return Formation.IsCentreBack(r);
                 case Filter.Midfield: return Formation.IsMidfield(r);
                 case Filter.BuildUp: return Formation.IsBuildUp(r);
                 case Filter.Forward: return Formation.IsForward(r);

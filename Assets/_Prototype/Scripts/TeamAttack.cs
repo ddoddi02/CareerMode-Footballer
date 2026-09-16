@@ -118,6 +118,8 @@ namespace Prototype
         [Header("On the ball")]
         [Tooltip("Who the ball can be played to, how far, and through what. See PassPlanner.")]
         public PassRules pass = new PassRules();
+        [Tooltip("Keep the ball among the back four. Not a tactic - a rig: it holds the ball in the one place that makes the opposition's pressing sequence run, so the rotation can be watched instead of waited for. See PressDrill.")]
+        public bool backFourOnly;
         [Tooltip("How long a bot stands on the ball before releasing it. Not a delay for its own sake - it is the window the defence has to close the lane he was going to use.")]
         public float holdMin = 0.55f;
         public float holdMax = 1.40f;
@@ -352,7 +354,7 @@ namespace Prototype
 
             if (!hasPending)
             {
-                pending = PassPlanner.Choose(who.transform, from, mates, opponents,
+                pending = PassPlanner.Choose(who.transform, from, PassableMates(), opponents,
                                              pass, attacksPositiveZ, ballBody, candidates, control);
                 if (!pending.valid) { holdUntil = Time.time + 0.4f; return; }
                 hasPending = true;
@@ -396,6 +398,33 @@ namespace Prototype
             hasPending = false;
             holdUntil = -1f;
         }
+
+        /// <summary>
+        /// Who may be passed to. Everyone, unless the back-four rig is on - and then only
+        /// the back four, so the ball keeps being played across the line the opposition
+        /// has to come out and press.
+        ///
+        /// It filters the OPTIONS rather than freezing anybody: the defence is fully
+        /// live, chooses its own duties and runs at whoever it likes. The only thing
+        /// being held still is where the ball is allowed to go.
+        /// </summary>
+        IList<Transform> PassableMates()
+        {
+            if (!backFourOnly || mates == null) return mates;
+
+            backFour.Clear();
+            for (int i = 0; i < mates.Length; i++)
+            {
+                if (mates[i] == null) continue;
+                Role r = Formation.RoleOf(mates[i]);
+                if (Formation.IsCentreBack(r) || Formation.IsFullBack(r)) backFour.Add(mates[i]);
+            }
+            // If the rig has left him nobody at all, let him look at the whole side again
+            // rather than stand on the ball until the round dies.
+            return backFour.Count > 0 ? (IList<Transform>)backFour : mates;
+        }
+
+        readonly List<Transform> backFour = new List<Transform>();
 
         /// <summary>How closed down the man on the ball is, 0..1.</summary>
         float Pressure(Vector3 p)

@@ -357,6 +357,13 @@ public static class PrototypeSceneBuilder
         reticle.director = drill;
         reticle.ball = ball;
 
+        // The pressing rig (T). Holds the ball in the back four so the 4-3-3 rotation
+        // keeps re-firing instead of happening once and being gone.
+        var press = director.AddComponent<PressDrill>();
+        press.attack = teamAtk;
+        press.defence = teamDef;
+        press.ball = ball;
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
         AssetDatabase.SaveAssets();
@@ -368,7 +375,7 @@ public static class PrototypeSceneBuilder
             "defends and cuts passes out. " +
             "WASD moves, the MOUSE looks and aims, E = pass, R = shoot, F = through, C = cross, " +
             "Q = shoulder check, Shift = sprint, Space = shield, G = ranges and lanes, " +
-            "P = pass bench (freeze everybody, Return to pass).",
+            "P = pass bench (freeze everybody, Return to pass), T = press drill (ball stays in the back four).",
             ScenePath, HalfW * 2f, HalfL * 2f, PlayerHeight));
     }
 

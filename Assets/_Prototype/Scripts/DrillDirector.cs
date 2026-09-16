@@ -900,25 +900,26 @@ namespace Prototype
             GUILayout.EndArea();
 
             GUILayout.BeginArea(new Rect(w - 316, 14, 302, 292), GUI.skin.box);
-            GUILayout.Label("방향키 / 좌스틱    이동 · 패스 방향", sSmall);
-            GUILayout.Label("W / Y (△)         스루패스", sSmall);
-            GUILayout.Label("A / X (□)         크로스", sSmall);
-            GUILayout.Label("S / A (✕)         패스 · 레이오프", sSmall);
-            GUILayout.Label("D / B (○)         슛", sSmall);
+            GUILayout.Label("WASD / 좌스틱     이동", sSmall);
+            GUILayout.Label("마우스 / 우스틱   시선 · 조준", sSmall);
+            GUILayout.Label("E / A (✕)         패스 · 레이오프", sSmall);
+            GUILayout.Label("R / B (○)         슛", sSmall);
+            GUILayout.Label("F / Y (△)         스루패스", sSmall);
+            GUILayout.Label("C / X (□)         크로스", sSmall);
             GUILayout.Label("Q                 어깨 너머 확인", sSmall);
-            GUILayout.Label("E / LT            몸으로 지키기", sSmall);
             GUILayout.Label("Shift / RB        스프린트", sSmall);
-            GUILayout.Label("LeftCtrl / LB     제자리 고정", sSmall);
+            GUILayout.Label("Space / LT        몸으로 지키기", sSmall);
             GUILayout.Label("G                 수비 범위 · 패스 레인 표시", sSmall);
-            GUILayout.Label("R  리셋      Tab  시야제한 " + (PerceptionSystem.xrayDebug ? "OFF" : "ON"), sSmall);
+            GUILayout.Label("P  패스 벤치   T  압박 드릴", sSmall);
+            GUILayout.Label("Backspace 리셋   Tab  시야제한 " + (PerceptionSystem.xrayDebug ? "OFF" : "ON"), sSmall);
             GUILayout.EndArea();
 
             string prompt = "";
             if (humanHasIt)
             {
                 prompt = ball.Exposure > 0.9f
-                    ? "터치가 깁니다 — 속도를 줄이거나 몸을 넣으세요 (E)"
-                    : "드리블 중 — 방향키로 겨냥하고 S 패스 · W 스루 · D 슛";
+                    ? "터치가 깁니다 — 속도를 줄이거나 몸을 넣으세요 (Space)"
+                    : "드리블 중 — 마우스로 겨냥하고 E 패스 · F 스루 · R 슛";
             }
             else if (incomingForHuman && ball != null && ball.InFlight)
             {
