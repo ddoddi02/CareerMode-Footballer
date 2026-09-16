@@ -188,6 +188,9 @@ namespace Prototype
         public static bool IsCentreBack(Role r) { return r == Role.LCB || r == Role.RCB; }
         public static bool IsFullBack(Role r) { return r == Role.LB || r == Role.RB; }
         public static bool IsMidfield(Role r) { return r == Role.DM || r == Role.LCM || r == Role.RCM; }
+
+        /// <summary>The single pivot. He marks last, so he is the one left screening.</summary>
+        public static bool IsPivot(Role r) { return r == Role.DM; }
         public static bool IsWinger(Role r) { return r == Role.LW || r == Role.RW; }
         public static bool IsStriker(Role r) { return r == Role.ST; }
 
@@ -245,16 +248,30 @@ namespace Prototype
         /// Whatever role this body is playing, whichever component happens to own it.
         /// Looked up once per picture rather than per frame.
         /// </summary>
+        /// <summary>
+        /// What role this body plays, read off whichever brain it carries.
+        ///
+        /// The fallback is GK, and it is not arbitrary. Nothing in this scene is without
+        /// a brain except the goalkeeper - he has not got one yet - so an unknown body IS
+        /// one in practice. It also fails in the safe direction: a keeper is excluded
+        /// from marking (IsMidfield, IsWinger and the rest are all false for him) and
+        /// included in build-up, which is what a keeper actually is.
+        ///
+        /// It used to fall back to DM, and that quietly made every keeper a defensive
+        /// midfielder. Nobody noticed while duties were range-gated, because he was
+        /// always too far away to be picked; the moment they were not, a midfielder was
+        /// assigned to mark the opposition goalkeeper.
+        /// </summary>
         public static Role RoleOf(Transform t)
         {
-            if (t == null) return Role.DM;
+            if (t == null) return Role.GK;
             AttackerAI a = t.GetComponent<AttackerAI>();
             if (a != null) return a.role;
             DefenderAI d = t.GetComponent<DefenderAI>();
             if (d != null) return d.role;
             FootballerController f = t.GetComponent<FootballerController>();
             if (f != null) return f.role;
-            return Role.DM;
+            return Role.GK;
         }
 
         /// <summary>Which way this body faces at kickoff - down the pitch, at the other goal.</summary>

@@ -65,20 +65,112 @@ namespace Prototype
             for (int k = 0; k < p.oppTaken.Length; k++) p.oppTaken[k] = false;
 
             CentreBacks(mine, stations, ref p, targets);
-            PressChain(mine, stations, ref p, targets, depthCap);
 
-            for (int i = 0; i < n; i++)
+            // The chain is a BUILD-UP press. It only means anything while they are
+            // actually playing out from the back, which is what High says.
+            if (p.press == PressIntensity.High)
+                PressChain(mine, stations, ref p, targets, depthCap);
+
+            Positional(mine, stations, ref p, targets);
+        }
+
+        // ------------------------------------------------------------ positional --
+
+        /// <summary>
+        /// Everybody still without a man gets his opposite number, by ROLE and by SIDE.
+        ///
+        /// This is the part that was missing, and the symptom was not double-marking - it
+        /// was the reverse. In a mid block the opposing back four sits about 28 m away,
+        /// every duty here was gated on maxTravel (26 m), so nobody could be given
+        /// anybody: eight of ten defenders came back with no man at all. Nothing then
+        /// anchored them, the block's ball-side shift slid them all toward the ball, and
+        /// the winger ended up seventeen metres infield. Ten men converging on the middle
+        /// is what "no duty" looks like from the outside, not what "too much duty" looks
+        /// like.
+        ///
+        /// So there is NO RANGE GATE on being given a man. Distance already has its say
+        /// downstream and it says it properly: TeamDefence goes tight only when the man
+        /// is inside your zone, and leans the rest of the time. Being given a man is not
+        /// the same as being sent after him - which the code has claimed all along while
+        /// quietly refusing to give anyone a man he could not reach.
+        ///
+        /// Sides are judged by world x, for the same reason as the chain: the two teams
+        /// mirror, so a role label is not a side.
+        ///
+        ///   winger      the full-back on his side          full-back   the winger on his
+        ///   midfielder  the midfielder on his side         striker     their pivot
+        ///
+        /// The striker taking the pivot is what a front three does when it is not
+        /// pressing the back four: stand in front of the man they want to play through.
+        /// His station sits at x = 0, so asking for the central midfielder nearest his
+        /// own x picks the pivot without naming it.
+        /// </summary>
+        static void Positional(Role[] mine, Vector3[] stations, ref DutyPicture p, int[] targets)
+        {
+            // Wingers and full-backs first: they own the two widest men on each side, and
+            // resolving them before midfield stops a drifting midfielder claiming a
+            // winger and dragging the middle apart.
+            // Dropped off, a winger does NOT keep a full-back. His station has already
+            // been pulled 9 m back (3.15) and leaning toward a full-back who is now high
+            // up the pitch would drag him straight back out of the block - cancelling the
+            // drop with the duty. Deep, he defends alongside the midfield instead.
+            Filter wide = p.press == PressIntensity.Low ? Filter.Midfield : Filter.FullBack;
+
+            Claim(mine, stations, ref p, targets, Formation.IsWinger, wide);
+            Claim(mine, stations, ref p, targets, Formation.IsFullBack, Filter.Winger);
+
+            // The striker claims BEFORE the midfield, and that order is the whole shape
+            // of a mid block. Four of ours want one of three central opponents, so
+            // somebody ends up without a man - and it must not be the striker. His job is
+            // to stand in front of the pivot; a striker with nobody drifts wherever the
+            // block drifts, which is how the front three ended up in the middle.
+            Claim(mine, stations, ref p, targets, Formation.IsStriker, Filter.Midfield);
+            Claim(mine, stations, ref p, targets, IsCentreMid, Filter.Midfield);
+
+            // Our own pivot goes last, so HE is the one left over. That is not a gap: a
+            // six with nobody to mark is screening the space in front of the back four,
+            // which is what he is for.
+            Claim(mine, stations, ref p, targets, Formation.IsPivot, Filter.Midfield);
+
+            // Anyone still empty - a spare centre-back with nobody dangerous, or a man
+            // whose counterpart has already been taken - holds his station. That is a
+            // real answer, not a gap: see CentreBacks.
+        }
+
+        static bool IsCentreMid(Role r) { return r == Role.LCM || r == Role.RCM; }
+
+        static void Claim(Role[] mine, Vector3[] stations, ref DutyPicture p, int[] targets,
+                          System.Func<Role, bool> isMine, Filter want)
+        {
+            for (int i = 0; i < mine.Length; i++)
             {
-                if (targets[i] >= 0) continue;
-                Role r = mine[i];
-
-                if (Formation.IsFullBack(r)) targets[i] = FullBack(stations[i], ref p);
-                else if (Formation.IsMidfield(r)) targets[i] = Midfielder(stations[i], ref p);
-                else if (Formation.IsWinger(r)) targets[i] = Winger(stations[i], ref p);
-                else if (Formation.IsStriker(r)) targets[i] = Striker(stations[i], ref p);
-
-                if (targets[i] >= 0) p.oppTaken[targets[i]] = true;
+                if (targets[i] >= 0 || !isMine(mine[i])) continue;
+                int k = CounterpartByX(ref p, want, stations[i].x);
+                if (k < 0) continue;
+                targets[i] = k;
+                p.oppTaken[k] = true;
             }
+        }
+
+        /// <summary>
+        /// The unclaimed opponent of this kind standing nearest this x.
+        ///
+        /// Across the pitch, not across the ground: the man on your side is your man
+        /// whether he is ten metres away or forty. Judging it by true distance is what
+        /// lets a deep block hand the same central opponent to three different people
+        /// while the touchlines go unwatched.
+        /// </summary>
+        static int CounterpartByX(ref DutyPicture p, Filter f, float x)
+        {
+            int best = -1;
+            float bd = float.MaxValue;
+            for (int k = 0; k < p.opp.Length; k++)
+            {
+                if (p.oppTaken[k] || !Matches(f, p.oppRole[k])) continue;
+                float d = Mathf.Abs(p.opp[k].x - x);
+                if (d < bd) { bd = d; best = k; }
+            }
+            return best;
         }
 
         // ----------------------------------------------------------- press chain --
@@ -126,14 +218,11 @@ namespace Prototype
             if (pressed < 0)
                 pressed = NearestOpponent(stations[st], ref p, Filter.CentreBack, p.maxTravel);
 
-            // No centre-back within reach: he falls back to hunting whoever is playing it
-            // out, which is what he did before this sequence existed.
-            if (pressed < 0)
-            {
-                targets[st] = Striker(stations[st], ref p);
-                Claim(ref p, targets[st]);
-                return;
-            }
+            // No centre-back within reach - the press is not on. Leave him, and leave the
+            // rest of the chain alone too: it used to return here, which silently
+            // cancelled the winger and full-back steps as well and sent everybody into
+            // the positional fallback with no man. Positional() picks them all up now.
+            if (pressed < 0) return;
 
             targets[st] = pressed;
             Claim(ref p, pressed);
@@ -274,55 +363,6 @@ namespace Prototype
                 targets[spare] = runner;
                 p.oppTaken[runner] = true;
             }
-        }
-
-        // ------------------------------------------------------------ the others --
-
-        static int FullBack(Vector3 station, ref DutyPicture p)
-        {
-            int w = NearestOpponent(station, ref p, Filter.Winger, p.maxTravel);
-            if (w >= 0) return w;
-            // No winger on his side: take whoever is nearest in his channel instead of
-            // standing and watching.
-            return NearestOpponent(station, ref p, Filter.Any, Formation.DefensiveZone(Role.LB));
-        }
-
-        static int Midfielder(Vector3 station, ref DutyPicture p)
-        {
-            float reach = Formation.DefensiveZone(Role.LCM);
-            int m = NearestOpponent(station, ref p, Filter.Midfield, reach);
-            if (m >= 0) return m;
-            return NearestOpponent(station, ref p, Filter.Any, reach);
-        }
-
-        /// <summary>
-        /// The full-back on his side - but only while the side is actually pressing. Once
-        /// the striker has dropped in (Low), the winger drops with him: a lone winger
-        /// still pressing a full-back is not a press, it is a man out of the game.
-        /// </summary>
-        static int Winger(Vector3 station, ref DutyPicture p)
-        {
-            if (p.press == PressIntensity.Low)
-                return NearestOpponent(station, ref p, Filter.Midfield, Formation.DefensiveZone(Role.LW));
-
-            return NearestOpponent(station, ref p, Filter.FullBack, p.maxTravel);
-        }
-
-        /// <summary>
-        /// Pressing, he goes at whoever is playing it out - and at the man ON the ball by
-        /// preference, because pressing the passer is the only press that does anything.
-        /// Dropped off, he comes back and defends as an extra midfielder.
-        /// </summary>
-        static int Striker(Vector3 station, ref DutyPicture p)
-        {
-            if (p.press == PressIntensity.Low)
-                return NearestOpponent(station, ref p, Filter.Midfield, Formation.DefensiveZone(Role.ST));
-
-            if (p.carrier >= 0 && !p.oppTaken[p.carrier]
-                && Formation.IsBuildUp(p.oppRole[p.carrier]))
-                return p.carrier;
-
-            return NearestOpponent(station, ref p, Filter.BuildUp, p.maxTravel);
         }
 
         // ------------------------------------------------------------- searching --
