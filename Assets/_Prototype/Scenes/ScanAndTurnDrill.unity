@@ -381,11 +381,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -839,11 +839,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -1446,11 +1446,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -1762,11 +1762,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -2600,11 +2600,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -4106,11 +4106,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -4972,11 +4972,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -7645,11 +7645,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -8178,11 +8178,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -8751,11 +8751,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -9586,11 +9586,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -10067,11 +10067,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -10483,11 +10483,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -11108,11 +11108,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -11660,11 +11660,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -12348,11 +12348,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -12507,11 +12507,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -13036,11 +13036,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1
@@ -14194,11 +14194,11 @@ MonoBehaviour:
   denyGap: 1.05
   shoulderShade: 0.85
   breakShade: 1.5
-  tightRange: 1.5
+  tightRange: 1.9
   turnedInAngle: 75
   interceptSpeed: 7.4
-  lungeRange: 1.9
-  exposureTrigger: 0.9
+  lungeRange: 2.4
+  exposureTrigger: 0.7
   gambleChance: 0.05
   tackleCooldown: 1.1
   missRecovery: 1

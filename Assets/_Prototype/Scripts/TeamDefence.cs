@@ -136,6 +136,10 @@ namespace Prototype
         /// <summary>The man currently closing the ball down. Everyone else holds shape.</summary>
         public DefenderAI Presser { get; private set; }
 
+        /// <summary>Challenges this side has made on a bot carrier, and how many won the ball.</summary>
+        public int TacklesTried { get; private set; }
+        public int TacklesWon { get; private set; }
+
         /// <summary>
         /// True when the man going to the ball is the man whose duty it was, rather than
         /// whoever happened to be nearest. False means the press was played through and
@@ -206,9 +210,126 @@ namespace Prototype
             // to make the REST of the picture stale - not this. Acting on a one-second-old
             // snapshot of a pass means never reaching one.
             TickIntercept();
+            TickTackle();
 
             if (intel.Tick(Time.time, opponents, ball.position, BlockCentre()))
                 Recompute();
+        }
+
+        // ---------------------------------------------------------------- tackle --
+
+        /// <summary>
+        /// Challenge a BOT on the ball. Live, every frame, beside the interception - a
+        /// man standing on the ball is the thing the presser is directly engaged with,
+        /// and a one-second-old picture of him is a man he can never reach.
+        ///
+        /// Until this existed a bot could not be tackled at all. Tackle.Resolve had one
+        /// caller, the director, and the director only ever asked about the human. So
+        /// every turnover in a match between two sides of bots had to come from a pass
+        /// being cut out, and the selector goes out of its way not to play those.
+        ///
+        /// Only the Presser goes, and the Presser is the man whose duty the carrier is
+        /// (AssignPresser) - so this cannot bring back the two-on-one it was built to
+        /// remove. The human is left to the director, which reads his shielding input and
+        /// scores the touch; tackling him from here as well would challenge him twice.
+        ///
+        /// A won tackle knocks the ball only a little way loose. It stays a genuine loose
+        /// ball - an attacker nearby can still get there first - but it no longer rolls
+        /// five metres away from the man who won it, which is what made winning a tackle
+        /// and winning the ball two different things.
+        /// </summary>
+        void TickTackle()
+        {
+            if (ballBody == null || !ballBody.Carried) return;
+
+            AttackerAI carrier = ballBody.Carrier as AttackerAI;
+            if (carrier == null || !IsOpponent(carrier.transform)) return;
+
+            Vector3 bp = ballBody.transform.position;
+            DefenderAI d = Challenger(bp);
+            if (d == null) return;
+            if (!d.WantsTackle(bp, ballBody.Exposure, carrier)) return;
+
+            d.BeganTackle();
+            TacklesTried++;
+
+            Tackle.Input ti;
+            ti.defenderPos = d.transform.position;
+            ti.ballPos = bp;
+            ti.attackerPos = carrier.transform.position;
+            ti.attackerFacing = carrier.CarrierForward;
+            // A bot standing it up is not fighting for it; one on the move is.
+            ti.attackerResisting = carrier.Velocity.sqrMagnitude > 1f;
+            ti.tackling01 = d.tackling01;
+            ti.strength01 = 0.5f;
+            ti.reach = Tackle.Reach;
+
+            string why;
+            bool shielded;
+            TackleResult r = Tackle.Resolve(ti, out why, out shielded);
+
+            if (r == TackleResult.Won)
+            {
+                TacklesWon++;
+                Vector3 away = bp - d.transform.position;
+                away.y = 0f;
+                carrier.ReleaseBall();
+                ballBody.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, TackleKnock);
+                return;
+            }
+
+            // A foul is a free kick, and the side that was fouled keeps the ball - so for a
+            // bot it changes nothing about possession. He just loses his footing.
+            d.MissedTackle();
+        }
+
+        /// <summary>
+        /// Who gets to put a foot in: whoever is ALREADY within lunging range of the ball,
+        /// the presser first if he is one of them.
+        ///
+        /// It was the presser alone, and that was why bots were almost never tackled. The
+        /// presser is chosen when the side takes a new picture - once every 1 to 1.8 s,
+        /// deliberately (3.15) - while a bot is on the ball for about a second before he
+        /// plays it. So the "presser" was nearly always the man who had been sent at the
+        /// PREVIOUS carrier, somewhere else entirely, and the defender standing right next
+        /// to the ball was not allowed to touch it.
+        ///
+        /// A ball a man can reach is the one thing he is directly engaged with, which is
+        /// the same reason interception is live (3.18). And it cannot bring back the
+        /// two-on-one the duty-based presser removed: that was about who is SENT to the
+        /// ball, and nobody is sent anywhere here - only a man who is already there gets
+        /// a go.
+        /// </summary>
+        DefenderAI Challenger(Vector3 ballPos)
+        {
+            ballPos.y = 0f;
+            DefenderAI best = null;
+            float bd = float.MaxValue;
+
+            for (int i = 0; members != null && i < members.Length; i++)
+            {
+                DefenderAI d = members[i];
+                if (d == null || !d.enabled || !d.active || d.Recovering) continue;
+
+                Vector3 p = d.transform.position; p.y = 0f;
+                float dist = (p - ballPos).magnitude;
+                if (dist > d.lungeRange) continue;
+
+                if (d == Presser) return d;          // he owns it, if he is close enough
+                if (dist < bd) { bd = dist; best = d; }
+            }
+            return best;
+        }
+
+        /// <summary>How hard a won tackle knocks the ball loose: enough to make it loose, not
+        /// enough to send it away from the man who won it (about a metre on this grass).</summary>
+        public const float TackleKnock = 3.2f;
+
+        bool IsOpponent(Transform t)
+        {
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+                if (opponents[k] == t) return true;
+            return false;
         }
 
         // ---------------------------------------------------------- interception --

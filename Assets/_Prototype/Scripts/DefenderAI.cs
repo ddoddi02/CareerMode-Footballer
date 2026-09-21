@@ -61,7 +61,7 @@ namespace Prototype
         [Tooltip("Extra shading on a break - showing him wide matters more when he is running at you.")]
         public float breakShade = 1.5f;
         [Tooltip("He counts as tight inside this. Only from here does an attempted turn become a tackle.")]
-        public float tightRange = 1.5f;
+        public float tightRange = 1.9f;
         [Tooltip("Degrees off our goal within which the carrier counts as having turned in.")]
         public float turnedInAngle = 75f;
 
@@ -71,9 +71,9 @@ namespace Prototype
 
         [Header("Tackle")]
         [Tooltip("He will commit from this far off the ball.")]
-        public float lungeRange = 1.9f;
+        public float lungeRange = 2.4f;
         [Tooltip("Touch distance that reads as a heavy touch and invites the challenge.")]
-        public float exposureTrigger = 0.9f;
+        public float exposureTrigger = 0.7f;
         [Tooltip("Chance per second of going in on a tucked-in ball with no turn on. Deliberately near zero - he is not trying to win it.")]
         public float gambleChance = 0.05f;
         public float tackleCooldown = 1.1f;
@@ -221,21 +221,40 @@ namespace Prototype
         /// </summary>
         public bool CarrierIsTurningIn()
         {
-            if (target == null) return false;
-            var fc = target.GetComponent<FootballerController>();
-            if (fc == null) return false;
+            return IsTurningIn(target != null ? target.GetComponent<IBallCarrier>() : null);
+        }
+
+        /// <summary>
+        /// Is THIS carrier coming round to face our goal? Reads whoever is on the ball
+        /// through IBallCarrier, which the human and every bot all implement.
+        ///
+        /// It used to read only `target`, and `target` is only ever the human - so a
+        /// defender could time a tackle on him and on nobody else. Against a bot the one
+        /// trigger that matters simply never fired, which is part of why bots could not
+        /// be tackled at all.
+        /// </summary>
+        public bool IsTurningIn(IBallCarrier c)
+        {
+            if (c == null) return false;
 
             Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
-            Vector3 d = goal - target.position;
+            Vector3 d = goal - c.CarrierTransform.position;
             Vector2 toGoal = new Vector2(d.x, d.z);
             if (toGoal.sqrMagnitude < 1e-4f) return false;
 
-            float ang = Vector2.Angle(fc.BodyForward, toGoal.normalized);
+            float ang = Vector2.Angle(c.CarrierForward, toGoal.normalized);
             return ang < turnedInAngle;
         }
 
         /// <summary>Does he go in this frame?</summary>
         public bool WantsTackle(Vector3 ballPos, float exposure)
+        {
+            return WantsTackle(ballPos, exposure,
+                               target != null ? target.GetComponent<IBallCarrier>() : null);
+        }
+
+        /// <summary>Does he go in this frame, against this particular carrier?</summary>
+        public bool WantsTackle(Vector3 ballPos, float exposure, IBallCarrier carrier)
         {
             if (Time.time < nextTackle || Recovering) return false;
 
@@ -250,7 +269,7 @@ namespace Prototype
             if (gap > lungeRange) return false;
 
             // The one trigger that matters: tight, and he is coming round anyway.
-            if (gap <= tightRange && CarrierIsTurningIn()) return true;
+            if (gap <= tightRange && IsTurningIn(carrier)) return true;
 
             // A touch that has run away from him is free money either way.
             if (exposure > exposureTrigger) return true;

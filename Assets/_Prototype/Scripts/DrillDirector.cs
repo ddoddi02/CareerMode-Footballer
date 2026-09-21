@@ -576,7 +576,7 @@ namespace Prototype
                 // straight back off the tackler's foot.
                 Vector3 away = ball.transform.position - d.transform.position;
                 away.y = 0f;
-                ball.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, 7f);
+                ball.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, TeamDefence.TackleKnock);
                 humanCollectAt = Time.time + selfPassLock;
                 Flash(string.Format("태클당했습니다 — {0} (터치 거리 {1:0.00}m)", why, exposureAtTackle));
                 return;

@@ -35,7 +35,7 @@ namespace Prototype
     /// </summary>
     public static class Tackle
     {
-        public const float Reach = 1.0f;          // condition 1: defender to ball
+        public const float Reach = 1.25f;         // condition 1: defender to ball
         public const float ShieldRadius = 0.45f;  // roughly a torso
 
         /// <summary>Is p inside the corridor from a to b?</summary>
@@ -109,7 +109,10 @@ namespace Prototype
             }
 
             // Contested: he is between the defender and the ball, and he is working.
-            float p = Mathf.Clamp(0.5f + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
+            // Even attributes used to be a coin toss. The defender who has got himself
+            // into range and committed now wins it more often than not - a shield buys
+            // time, it does not make a man untouchable.
+            float p = Mathf.Clamp(0.6f + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
             if (Random.value < p)
             {
                 reason = "몸싸움에서 밀렸습니다";
@@ -122,7 +125,7 @@ namespace Prototype
             Vector2 td = new Vector2(toDef.x, toDef.z).normalized;
             bool fromBehind = Vector2.Dot(td, i.attackerFacing) < -0.30f;
 
-            float foulChance = fromBehind ? 0.55f : 0.18f;
+            float foulChance = fromBehind ? 0.45f : 0.12f;
             foulChance *= Mathf.Lerp(1.4f, 0.6f, i.tackling01);   // clumsy tacklers foul
 
             if (Random.value < foulChance)
