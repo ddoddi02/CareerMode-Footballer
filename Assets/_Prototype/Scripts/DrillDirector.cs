@@ -45,6 +45,8 @@ namespace Prototype
         public Ball ball;
         public TeamAttack attack;
         public TeamDefence defence;
+        [Tooltip("Who has the ball. With it, winning the ball back hands the pitch over instead of ending the round - see Possession.")]
+        public Possession possession;
 
         [Header("Layout")]
         public Vector3 startPos = Vector3.zero;
@@ -111,6 +113,10 @@ namespace Prototype
         float flashUntil = -1f;
 
         int rounds, kept, tackled, fouls;
+        int homeGoals, awayGoals;
+        Side kickOff = Side.Home;       // who restarts the next round
+        int seenTurnovers;
+        float homeHeldSince;            // when home last came into possession
         int freshTry, freshOk, staleTry, staleOk;
 
         string title = "";
@@ -157,7 +163,7 @@ namespace Prototype
         void Update()
         {
             if (ProtoInput.XrayPressed()) PerceptionSystem.xrayDebug = !PerceptionSystem.xrayDebug;
-            if (ProtoInput.RestartPressed()) { phase = Phase.Setup; phaseT = 0f; }
+            if (ProtoInput.RestartPressed()) { kickOff = Side.Home; phase = Phase.Setup; phaseT = 0f; }
 
             phaseT += Time.deltaTime;
 
@@ -184,29 +190,43 @@ namespace Prototype
                 player.TrackBall = true;
             }
 
-            if (attack != null)
+            if (possession != null)
             {
-                attack.ResetPossession();
-                for (int i = 0; attack.members != null && i < attack.members.Length; i++)
-                    if (attack.members[i] != null) attack.members[i].Warp(attack.members[i].homeSlot);
+                // Every body back on its slot, through BOTH brains - each keeps its own
+                // idea of where it is standing, and a brain that is switched off at the
+                // warp would come back on still heading for wherever it last was.
+                WarpAll(possession.homeAttack, possession.homeDefence);
+                WarpAll(possession.awayAttack, possession.awayDefence);
+                possession.Restart(kickOff);
             }
-
-            if (defence != null)
+            else
             {
-                defence.intel.Clear();
-                defence.control.Clear();
-                for (int i = 0; defence.members != null && i < defence.members.Length; i++)
+                if (attack != null)
                 {
-                    var d = defence.members[i];
-                    if (d == null) continue;
-                    d.Warp(d.homeSlot);
-                    d.chase = null;
+                    attack.ResetPossession();
+                    for (int i = 0; attack.members != null && i < attack.members.Length; i++)
+                        if (attack.members[i] != null) attack.members[i].Warp(attack.members[i].homeSlot);
+                }
+                if (defence != null)
+                {
+                    defence.intel.Clear();
+                    defence.control.Clear();
+                    for (int i = 0; defence.members != null && i < defence.members.Length; i++)
+                    {
+                        var d = defence.members[i];
+                        if (d == null) continue;
+                        d.Warp(d.homeSlot);
+                        d.chase = null;
+                    }
                 }
             }
 
-            // The centre-back starts with it at his feet, and TeamAttack takes it from
-            // there - he chooses his own pass like everybody else.
-            AttackerAI opener = passer != null ? passer.GetComponent<AttackerAI>() : null;
+            // A centre-back starts with it at his feet, and his side's TeamAttack takes it
+            // from there. Home's is the drill's own passer; away's is whichever of theirs
+            // plays left centre-back, the mirror of him.
+            AttackerAI opener = kickOff == Side.Home || possession == null
+                ? (passer != null ? passer.GetComponent<AttackerAI>() : null)
+                : OpenerOf(possession.awayAttack);
             if (ball != null)
             {
                 if (opener != null) { ball.Attach(opener); opener.TakeBall(); }
@@ -221,6 +241,8 @@ namespace Prototype
             humanCollectAt = -99f;
             deadSince = -1f;
             seenPassSerial = attack != null ? attack.PassSerial : -1;
+            seenTurnovers = possession != null ? possession.Turnovers : 0;
+            homeHeldSince = Time.time;
 
             phase = Phase.Play;
             phaseT = 0f;
@@ -231,6 +253,7 @@ namespace Prototype
             if (ball == null || player == null) return;
 
             WatchForNewPass();
+            WatchForTurnover();
             DrawLive();
 
             bool humanHasIt = ball.Carried && ReferenceEquals(ball.Carrier, player);
@@ -249,11 +272,17 @@ namespace Prototype
                 // touch worked: the possession survived it, which is the whole question
                 // the confirmed-vs-blind number is asking.
                 deadSince = -1f;
-                if (awaitingHumanPass) Settle(true);
+                bool ours = possession == null || possession.SideOf(ball.CarrierTransform) == Side.Home;
+                if (ours && awaitingHumanPass) Settle(true);
                 if (incomingForHuman) { incomingForHuman = false; player.EndReceive(); }
             }
 
-            if (phaseT > roundSeconds)
+            // "Kept it" means HOME held it that long, unbroken - not that the clock ran
+            // while the other side was attacking.
+            bool heldLongEnough = possession == null
+                ? phaseT > roundSeconds
+                : possession.InPossession == Side.Home && Time.time - homeHeldSince > roundSeconds;
+            if (heldLongEnough)
             {
                 rounds++; kept++;
                 Settle(true);
@@ -284,7 +313,7 @@ namespace Prototype
                 player.UpdateReceive(ball.transform.position, ball.Velocity, ball.InFlight);
 
             if (OffThePitch()) return;
-            if (DefenceTookIt()) return;
+            if (DefendingSideWonIt()) return;
 
             Vector3 bp = ball.transform.position; bp.y = 0f;
             Vector3 pp = player.transform.position; pp.y = 0f;
@@ -316,34 +345,104 @@ namespace Prototype
         /// played across a man is his, and that is the entire point of the lane rule the
         /// passing side is now working to.
         /// </summary>
-        bool DefenceTookIt()
+        /// <summary>
+        /// Whichever side is defending gets to the loose ball first.
+        ///
+        /// This used to be DefenceTookIt, and it ended the round - "INTERCEPTED" - because
+        /// the side that won it had no way to attack. Now it hands the pitch over: the
+        /// man who got there has the ball, his side attacks, and play goes on. It also
+        /// works in both directions, which it could not before: it asks whoever is
+        /// defending NOW, and that is home as often as away.
+        /// </summary>
+        bool DefendingSideWonIt()
         {
-            if (defence == null || defence.members == null) return false;
+            TeamDefence def = possession != null ? possession.Defending : defence;
+            if (def == null || def.members == null) return false;
             if (ball.transform.position.y > interceptHeight) return false;
             if (ball.InFlight && ball.Travelled < passEscape) return false;
 
             Vector3 bp = ball.transform.position; bp.y = 0f;
 
-            for (int i = 0; i < defence.members.Length; i++)
+            for (int i = 0; i < def.members.Length; i++)
             {
-                var d = defence.members[i];
-                if (d == null || !d.active || d.Recovering) continue;
+                var d = def.members[i];
+                if (d == null || !d.enabled || !d.active || d.Recovering) continue;
 
                 Vector3 dp = d.transform.position; dp.y = 0f;
                 if (Vector3.Distance(dp, bp) > interceptRadius) continue;
 
+                bool humansBall = awaitingHumanPass;
                 ball.Stop();
-                rounds++;
-                Settle(false);
-                EndRound();
-                Finish("INTERCEPTED",
-                       awaitingHumanPass
-                           ? "내 패스가 끊겼습니다 — 수비수가 서 있는 길로 보냈습니다."
-                           : "패스 길이 열려 있지 않았습니다.",
-                       new Color(0.95f, 0.35f, 0.35f));
+
+                if (possession == null)
+                {
+                    // An old scene with no Possession in it: the only thing that can
+                    // happen is what always happened.
+                    rounds++;
+                    Settle(false);
+                    EndRound();
+                    Finish("INTERCEPTED", "패스 길이 열려 있지 않았습니다.", new Color(0.95f, 0.35f, 0.35f));
+                    return true;
+                }
+
+                Side winner = possession.InPossession == Side.Home ? Side.Away : Side.Home;
+                possession.TurnOver(winner, d.transform);
+                if (winner == Side.Away)
+                    Flash(humansBall ? "내 패스가 끊겼습니다 — 원정 공격" : "공을 뺏겼습니다 — 원정 공격");
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The side on the ball changed. Nothing ends - the match carries on the other
+        /// way - but the human's last touch has its answer now, and that answer is the
+        /// number this prototype exists to measure (PROJECT.md 1).
+        /// </summary>
+        void WatchForTurnover()
+        {
+            if (possession == null || possession.Turnovers == seenTurnovers) return;
+            seenTurnovers = possession.Turnovers;
+
+            if (possession.InPossession == Side.Away)
+            {
+                tackled++;              // 뺏김
+                Settle(false);
+                incomingForHuman = false;
+                awaitingHumanPass = false;
+                player.EndReceive();
+                player.TrackBall = true;
+            }
+            else
+            {
+                homeHeldSince = Time.time;
+                Flash("되찾았습니다 — 홈 공격");
+            }
+        }
+
+        /// <summary>The left centre-back of a side - who a restart is given to.</summary>
+        static AttackerAI OpenerOf(TeamAttack side)
+        {
+            if (side == null || side.members == null) return null;
+            for (int i = 0; i < side.members.Length; i++)
+                if (side.members[i] != null && side.members[i].role == Role.LCB) return side.members[i];
+            for (int i = 0; i < side.members.Length; i++)
+                if (side.members[i] != null && Formation.IsCentreBack(side.members[i].role)) return side.members[i];
+            return side.members.Length > 0 ? side.members[0] : null;
+        }
+
+        static void WarpAll(TeamAttack atk, TeamDefence def)
+        {
+            if (atk != null && atk.members != null)
+                for (int i = 0; i < atk.members.Length; i++)
+                    if (atk.members[i] != null) atk.members[i].Warp(atk.members[i].homeSlot);
+            if (def != null && def.members != null)
+                for (int i = 0; i < def.members.Length; i++)
+                {
+                    if (def.members[i] == null) continue;
+                    def.members[i].Warp(def.members[i].homeSlot);
+                    def.members[i].chase = null;
+                }
         }
 
         bool OffThePitch()
@@ -351,17 +450,30 @@ namespace Prototype
             Vector3 p = ball.transform.position;
             if (Mathf.Abs(p.z) <= pitchHalfZ && Mathf.Abs(p.x) <= pitchHalfX) return false;
 
-            bool goal = Mathf.Abs(p.z) > pitchHalfZ && Mathf.Abs(p.x) < goalHalfWidth
-                        && p.z > 0f;      // the home side attacks +Z
+            bool inMouth = Mathf.Abs(p.x) < goalHalfWidth;
+            bool homeGoal = p.z > pitchHalfZ && inMouth;      // home attacks +Z
+            bool awayGoal = p.z < -pitchHalfZ && inMouth;     // away attacks -Z
 
             ball.Stop();
             rounds++;
-            if (goal) kept++;
-            Settle(goal);
+
+            // Who restarts. The side that conceded kicks off; a ball that simply went out
+            // goes to whoever did NOT have it, which is what a throw-in or a goal kick is.
+            if (homeGoal) { homeGoals++; kept++; kickOff = Side.Away; }
+            else if (awayGoal) { awayGoals++; kickOff = Side.Home; }
+            else kickOff = possession != null && possession.InPossession == Side.Home ? Side.Away : Side.Home;
+
+            Settle(homeGoal);
             EndRound();
-            Finish(goal ? "GOAL" : "OUT",
-                   goal ? "골망을 흔들었습니다." : "공이 라인을 벗어났습니다.",
-                   goal ? new Color(0.45f, 0.9f, 0.5f) : new Color(0.95f, 0.6f, 0.25f));
+            if (homeGoal)
+                Finish("GOAL", string.Format("골망을 흔들었습니다.  {0} : {1}", homeGoals, awayGoals),
+                       new Color(0.45f, 0.9f, 0.5f));
+            else if (awayGoal)
+                Finish("실점", string.Format("원정이 넣었습니다.  {0} : {1}", homeGoals, awayGoals),
+                       new Color(0.95f, 0.35f, 0.35f));
+            else
+                Finish("OUT", kickOff == Side.Home ? "공이 라인을 벗어났습니다 — 홈 공" : "공이 라인을 벗어났습니다 — 원정 공",
+                       new Color(0.95f, 0.6f, 0.25f));
             return true;
         }
 
@@ -457,18 +569,16 @@ namespace Prototype
 
             if (r == TackleResult.Won)
             {
+                // Knocked off him and loose - NOT handed to anybody, and NOT the end of
+                // anything. Whoever gets to it first has it: usually the man who won the
+                // tackle, sometimes a team-mate of the human's, and either way the match
+                // goes on (DefendingSideWonIt / TryCollect). He cannot just take it
+                // straight back off the tackler's foot.
                 Vector3 away = ball.transform.position - d.transform.position;
                 away.y = 0f;
                 ball.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, 7f);
-                rounds++; tackled++;
-                Settle(false);
-                EndRound();
-                Finish("TACKLED", string.Format("{0}\n내 터치 거리 {1:0.00}m — 공이 그만큼 몸에서 떨어져 있었습니다\n{2}",
-                    why, exposureAtTackle,
-                    exposureAtTackle > 0.9f
-                        ? "터치가 길면 수비수가 공까지 닿기 쉬워집니다."
-                        : "사이에 몸을 넣었어야 합니다."),
-                    new Color(0.95f, 0.35f, 0.35f));
+                humanCollectAt = Time.time + selfPassLock;
+                Flash(string.Format("태클당했습니다 — {0} (터치 거리 {1:0.00}m)", why, exposureAtTackle));
                 return;
             }
 
@@ -894,6 +1004,9 @@ namespace Prototype
             }
 
             GUILayout.BeginArea(new Rect(14, 14, 348, 316), GUI.skin.box);
+            GUILayout.Label(string.Format("홈 {0} : {1} 원정    ·    공: {2}",
+                            homeGoals, awayGoals,
+                            possession == null ? "홈" : (possession.InPossession == Side.Home ? "홈" : "원정")), sMid);
             GUILayout.Label(string.Format("라운드 {0}  ·  지킴 {1}  ·  뺏김 {2}  ·  파울 {3}",
                             rounds, kept, tackled, fouls), sSmall);
             GUILayout.Space(6);

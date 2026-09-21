@@ -40,6 +40,9 @@ namespace Prototype
         public TeamAttack awayAttack;
         public TeamDefence awayDefence;
 
+        [Header("The ball")]
+        public Ball ball;
+
         [Header("Kick-off")]
         [Tooltip("Who has it when play starts. The possession starts with home's centre-back (PROJECT.md 6), so home.")]
         public Side startsWith = Side.Home;
@@ -59,6 +62,116 @@ namespace Prototype
         void Start()
         {
             Apply(startsWith);
+        }
+
+        /// <summary>
+        /// The one turnover nobody announces: the ball is simply AT somebody from the
+        /// other side. The human stepping into an opposing pass is the usual case - he
+        /// takes a touch like any other and never goes through a steal - so possession is
+        /// read off the ball rather than waited for.
+        /// </summary>
+        void Update()
+        {
+            if (ball == null || !ball.Carried) return;
+            Side? s = SideOf(ball.CarrierTransform);
+            if (s.HasValue && s.Value != InPossession) TurnOver(s.Value, null);
+        }
+
+        /// <summary>
+        /// The whole pitch changes hands. Different from Apply in one way that matters:
+        /// both sides are coming OUT of a state rather than starting fresh, and each has
+        /// something left over that would otherwise leak across.
+        ///
+        ///   the side that lost it   had a pass half-planned and a carrier who still
+        ///                           thinks he has the ball
+        ///   the side that won it    has not attacked since the last time, and its attack
+        ///                           coordinator is holding a picture from back then
+        ///   every body              keeps running - the new brain inherits the stride
+        ///
+        /// `winner` gets the ball at his feet. Pass null when the ball is already with
+        /// somebody (Update) and nothing needs handing over.
+        /// </summary>
+        public void TurnOver(Side to, Transform winner)
+        {
+            TeamAttack lostAtk = to == Side.Home ? awayAttack : homeAttack;
+            TeamAttack wonAtk = to == Side.Home ? homeAttack : awayAttack;
+            TeamDefence nowDefending = to == Side.Home ? awayDefence : homeDefence;
+
+            // The loser's carrier may still believe he is on the ball. He is not.
+            if (lostAtk != null && lostAtk.members != null)
+                for (int i = 0; i < lostAtk.members.Length; i++)
+                    if (lostAtk.members[i] != null && lostAtk.members[i].HasBall)
+                        lostAtk.members[i].ReleaseBall();
+
+            if (lostAtk != null) lostAtk.ResetPossession();
+            if (wonAtk != null) wonAtk.ResetPossession();
+            if (nowDefending != null) { nowDefending.intel.Clear(); nowDefending.control.Clear(); }
+
+            CarryMomentum(to);
+            Apply(to);
+
+            if (winner == null || ball == null) return;
+            AttackerAI a = winner.GetComponent<AttackerAI>();
+            if (a != null) { ball.Attach(a); a.TakeBall(); return; }
+            IBallCarrier c = winner.GetComponent<IBallCarrier>();
+            if (c != null) ball.Attach(c);
+        }
+
+        /// <summary>Every body that is about to change brains hands its stride across.</summary>
+        void CarryMomentum(Side to)
+        {
+            // Home is switching TO attacking if home is winning it, and vice versa.
+            Carry(homeAttack, homeDefence, to == Side.Home);
+            Carry(awayAttack, awayDefence, to == Side.Away);
+        }
+
+        static void Carry(TeamAttack atk, TeamDefence def, bool toAttack)
+        {
+            if (atk == null || def == null || atk.members == null || def.members == null) return;
+            for (int i = 0; i < atk.members.Length; i++)
+            {
+                AttackerAI a = atk.members[i];
+                if (a == null) continue;
+                DefenderAI d = a.GetComponent<DefenderAI>();
+                if (d == null) continue;
+                if (toAttack) a.CarryVelocity(d.Velocity);
+                else d.CarryVelocity(a.Velocity);
+            }
+        }
+
+        /// <summary>
+        /// Which side a body plays for, or null for a body on neither roster (a keeper,
+        /// who has no brain yet). Read off the rosters, so it is never out of step with
+        /// who the coordinators think they are coaching.
+        /// </summary>
+        public Side? SideOf(Transform t)
+        {
+            if (t == null) return null;
+            if (Lists(homeAttack, t)) return Side.Home;
+            if (Lists(awayAttack, t)) return Side.Away;
+            return null;
+        }
+
+        static bool Lists(TeamAttack atk, Transform t)
+        {
+            if (atk == null) return false;
+            if (atk.mates != null)
+                for (int i = 0; i < atk.mates.Length; i++) if (atk.mates[i] == t) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Back to a clean start with this side on the ball - a kick-off or a restart.
+        /// Clears every coordinator, not just the pair about to be switched on, because a
+        /// restart after a turnover has four half-finished pictures lying around.
+        /// </summary>
+        public void Restart(Side side)
+        {
+            if (homeAttack != null) homeAttack.ResetPossession();
+            if (awayAttack != null) awayAttack.ResetPossession();
+            if (homeDefence != null) { homeDefence.intel.Clear(); homeDefence.control.Clear(); }
+            if (awayDefence != null) { awayDefence.intel.Clear(); awayDefence.control.Clear(); }
+            Apply(side);
         }
 
         /// <summary>

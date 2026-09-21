@@ -321,6 +321,7 @@ public static class PrototypeSceneBuilder
         possession.homeDefence = homeDefence;
         possession.awayAttack = awayAttack;
         possession.awayDefence = teamDef;
+        possession.ball = ball;
         var ballPerc = ballGo.AddComponent<Perceivable>();
         ballPerc.tint = Color.white;
         ballPerc.ghostScale = Vector3.one * 0.5f;
@@ -369,6 +370,7 @@ public static class PrototypeSceneBuilder
         drill.ball = ball;
         drill.attack = teamAtk;
         drill.defence = teamDef;
+        drill.possession = possession;      // a steal hands the pitch over instead of ending the round
         drill.startPos = Vector3.zero;
         drill.passerHome = passerHome;      // the LCB slot he now stands in
         drill.pitchHalfX = HalfW;    // the ball is in play until it crosses a real line

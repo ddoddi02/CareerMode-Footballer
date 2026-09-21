@@ -112,6 +112,14 @@ namespace Prototype
         /// </summary>
         public Vector3 Velocity { get { return vel; } }
 
+        /// <summary>
+        /// Take over the body mid-stride. This brain and the other one share a body but
+        /// not a velocity, so without this a turnover would switch a sprinting man onto
+        /// a brain that last moved him seconds ago - and he would stop dead and set off
+        /// again, in the middle of the one moment that is meant to be sudden.
+        /// </summary>
+        public void CarryVelocity(Vector3 v) { vel = v; }
+
         Vector3 station;
         Vector3 interceptPoint;
         PressMode mode = PressMode.Deny;

@@ -206,6 +206,12 @@ namespace Prototype
 
             BallCarrier = ballBody.Carrier as AttackerAI;
 
+            // Only OUR man on the ball is our carrier. With both sides running both brains,
+            // the frame a turnover happens can have this coordinator still switched on
+            // while the ball sits at an opponent's feet - and without this it would pick
+            // a pass for him.
+            if (BallCarrier != null && !IsMember(BallCarrier)) BallCarrier = null;
+
             if (BallCarrier == null)
             {
                 hasPending = false;
@@ -425,6 +431,13 @@ namespace Prototype
         }
 
         readonly List<Transform> backFour = new List<Transform>();
+
+        bool IsMember(AttackerAI a)
+        {
+            for (int i = 0; members != null && i < members.Length; i++)
+                if (members[i] == a) return true;
+            return false;
+        }
 
         /// <summary>How closed down the man on the ball is, 0..1.</summary>
         float Pressure(Vector3 p)
