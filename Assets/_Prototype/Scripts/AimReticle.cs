@@ -62,6 +62,19 @@ namespace Prototype
         public float looseAt = 2.5f;
         public Color lineCol = new Color(1f, 1f, 1f, 0.30f);
 
+        [Header("The shot")]
+        [Tooltip("Also draw where a shot would cross the goal line, as a bar on the line itself. Read it against the posts: all of it inside them is a shot that cannot miss the frame.")]
+        public bool showShot = true;
+        [Tooltip("Only while the goal line is within this far. Past it a shot is not an option worth drawing, it is a hope.")]
+        public float shotRange = 40f;
+        public float shotBarWidth = 0.22f;
+        [Tooltip("Every line through the spread crosses between the posts.")]
+        public Color shotSafeCol = new Color(0.45f, 1f, 0.65f, 0.95f);
+        [Tooltip("Some of it goes in, some of it goes wide - the corner is a gamble.")]
+        public Color shotRiskCol = new Color(1f, 0.8f, 0.3f, 0.95f);
+        [Tooltip("None of it can go in.")]
+        public Color shotWideCol = new Color(1f, 0.4f, 0.35f, 0.95f);
+
         readonly List<LineRenderer> pool = new List<LineRenderer>();
         Material mat;
         Transform holder;
@@ -139,6 +152,45 @@ namespace Prototype
             if (showAimLine) Segment(from, target, lineCol);
             Ring(target, spread, c, ringWidth);
             if (centreDotRadius > 0f) Ring(target, centreDotRadius, c, ringWidth * 0.7f);
+
+            if (showShot) DrawShot(from);
+        }
+
+        /// <summary>
+        /// The shot, drawn where it is judged: a bar ON the goal line, as wide as the
+        /// spread, centred where the cursor's line crosses it.
+        ///
+        /// The pass circle is the wrong picture for a shot. It sits at the cursor, it uses
+        /// the passing attribute, and it answers "how near that point" when the only
+        /// question a shot asks is "inside the posts or not". A bar on the line reads
+        /// straight against the posts: all of it inside them and the frame cannot be
+        /// missed, some of it outside and aiming for the corner is a bet, none of it
+        /// inside and it is not a shot.
+        ///
+        /// Same rule as the circle - the director owns the target and the spread, and
+        /// the strike rolls against exactly those numbers.
+        /// </summary>
+        void DrawShot(Vector3 from)
+        {
+            Vector3 t = director.ShotTarget();
+
+            // ShotTarget only lands on the goal line when he is pointing at the goal end.
+            if (Mathf.Abs(t.z - director.goalZ) > 0.05f) return;
+            if (Mathf.Abs(director.goalZ - from.z) > shotRange) return;
+
+            float spread = director.ShotSpreadNow();
+            float post = director.goalHalfWidth;
+            float near = Mathf.Abs(t.x) - spread;     // closest a line through it gets to the middle
+            float far = Mathf.Abs(t.x) + spread;      // and furthest
+
+            Color c = far <= post ? shotSafeCol : (near >= post ? shotWideCol : shotRiskCol);
+
+            LineRenderer lr = Take(2);
+            lr.widthMultiplier = shotBarWidth;
+            lr.SetPosition(0, Flat(new Vector3(t.x - spread, 0f, t.z)));
+            lr.SetPosition(1, Flat(new Vector3(t.x + spread, 0f, t.z)));
+            lr.startColor = c;
+            lr.endColor = c;
         }
 
         // ------------------------------------------------------------- drawing --

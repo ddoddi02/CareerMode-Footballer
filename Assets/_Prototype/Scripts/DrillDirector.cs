@@ -593,30 +593,80 @@ namespace Prototype
                                 dist, spread, st.aimErrorM));
         }
 
+        /// <summary>
+        /// Where the shot is aimed: the point on the goal line that the cursor's direction
+        /// passes through.
+        ///
+        /// The DIRECTION comes from the cursor - the player points where he wants it - but
+        /// the target is pushed out to the goal line rather than left at the cursor,
+        /// because the goal line is where a shot is judged. That also makes the error
+        /// honest: the spread is worked out at the distance the ball actually has to
+        /// travel, so a shot from 30 m has a 30 m spread even if the cursor was resting
+        /// 10 m in front of him.
+        ///
+        /// Aiming away from the goal still strikes it - down the line he is pointing - and
+        /// the ball goes wherever that is. That is a choice, not something to correct.
+        /// </summary>
+        public Vector3 ShotTarget()
+        {
+            Vector3 pp = player.transform.position;
+            Vector3 from = new Vector3(pp.x, 0f, pp.z);
+
+            Vector3 dir;
+            if (player.HasAim) dir = new Vector3(player.AimDir.x, 0f, player.AimDir.y);
+            else dir = new Vector3(player.BodyForward.x, 0f, player.BodyForward.y);
+            if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
+            dir.Normalize();
+
+            if (dir.z > 0.05f)
+                return from + dir * ((goalZ - from.z) / dir.z);
+            return from + dir * 30f;
+        }
+
+        /// <summary>
+        /// How wide this shot might go, measured ON the goal line - the reticle draws it
+        /// there, next to the posts, so it can be read against them.
+        /// </summary>
+        public float ShotSpreadNow()
+        {
+            if (player == null) return 0f;
+            Vector3 pp = player.transform.position;
+            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), ShotTarget());
+            return BallModel.AimSpread(playerShooting, dist,
+                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, false, false));
+        }
+
+        /// <summary>
+        /// Strike it where he is aiming, and then LET IT GO.
+        ///
+        /// This used to decide ON TARGET or OFF TARGET the instant the ball left his foot,
+        /// by checking whether the aim error was smaller than half the goal - and end the
+        /// round there, with the ball still at his feet. That only worked because every
+        /// shot was aimed at the centre of the goal. Aim at the post and the same check
+        /// is measuring the error from the post, and calls a ball that goes straight in
+        /// a miss.
+        ///
+        /// So there is no verdict here. The ball flies, and whatever it actually does is
+        /// the answer: crosses between the posts is a goal, crosses outside them is out,
+        /// hits a body on the way is blocked (OffThePitch, DefenceTookIt). A prediction
+        /// that has to agree with the physics is a prediction that can disagree with it.
+        /// </summary>
         void Shoot(bool firstTime)
         {
             Vector3 pp = player.transform.position;
-            var sh = BallModel.Resolve(pp, new Vector3(0f, 0f, goalZ), BallModel.Base.Shot, 0f,
+            var sh = BallModel.Resolve(pp, ShotTarget(), BallModel.Base.Shot, 0f,
                                        playerShooting,
                                        BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
-            lastAimErr = sh.aimErrorM; lastSpeedErr = sh.speedErrorPct; lastStrike = "슛";
+            lastAimErr = sh.aimErrorM; lastSpeedErr = sh.speedErrorPct;
+            lastStrike = firstTime ? "첫 터치 슛" : "슛";
             ball.Release(sh.direction, sh.speed);
 
             humanCollectAt = Time.time + selfPassLock;
             awaitingHumanPass = false;
+            player.EndReceive();
             player.TrackBall = true;
 
-            float miss = Mathf.Abs(sh.aimErrorM);
-            bool onTarget = miss < goalHalfWidth;
-            rounds++;
-            if (onTarget) kept++;
-            Settle(onTarget);
-            EndRound();
-            Finish(onTarget ? "ON TARGET" : "OFF TARGET",
-                   string.Format("{0}\n수비수 {1:0.0}m · {2}\n조준 오차 {3:0.00}m",
-                                 firstTime ? "첫 터치 슛" : "슛", gapAtTouch,
-                                 freshAtTouch ? "터치 전에 확인함" : "확인하지 못함", miss),
-                   onTarget ? new Color(0.45f, 0.9f, 0.5f) : new Color(0.95f, 0.35f, 0.35f));
+            Flash(string.Format("{0} — 오차 {1:+0.00;-0.00}m", lastStrike, sh.aimErrorM));
         }
 
         void Cross(bool firstTime)
