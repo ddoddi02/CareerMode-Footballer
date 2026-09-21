@@ -103,8 +103,8 @@ namespace Prototype
             // scene, and a debug view that silently draws nothing because a field was
             // empty is a debug view that lies about what it is showing you.
             if (ball == null) ball = FindAnyObjectByType<Ball>();
-            if (attack == null) attack = FindAnyObjectByType<TeamAttack>();
-            if (defence == null) defence = FindAnyObjectByType<TeamDefence>();
+            if (attack == null) attack = Possession.FindHomeAttack();
+            if (defence == null) defence = Possession.FindAwayDefence();
             if (player == null) player = FindAnyObjectByType<FootballerController>();
             if (director == null) director = FindAnyObjectByType<DrillDirector>();
             if (lab == null) lab = FindAnyObjectByType<PassLab>();

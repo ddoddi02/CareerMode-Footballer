@@ -72,8 +72,8 @@ namespace Prototype
         void Awake()
         {
             mat = ProtoMat.UnlitFade(new Color(1f, 1f, 1f, 0.6f));
-            if (attack == null) attack = FindAnyObjectByType<TeamAttack>();
-            if (defence == null) defence = FindAnyObjectByType<TeamDefence>();
+            if (attack == null) attack = Possession.FindHomeAttack();
+            if (defence == null) defence = Possession.FindAwayDefence();
             if (ball == null) ball = FindAnyObjectByType<Ball>();
             AdoptStrays();
         }

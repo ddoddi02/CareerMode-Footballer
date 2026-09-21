@@ -126,6 +126,7 @@ public static class PrototypeSceneBuilder
 
         var dai = defender.AddComponent<DefenderAI>();
         dai.target = player.transform;
+        var daiAtk = defender.AddComponent<AttackerAI>();   // when away have it, he leads their line
 
         var dPerc = defender.AddComponent<Perceivable>();
         dPerc.tint = new Color(0.86f, 0.22f, 0.22f);
@@ -146,6 +147,7 @@ public static class PrototypeSceneBuilder
         passerCc.slopeLimit = 60f;
         passerCc.stepOffset = 0.3f;
         var passerAi = passer.AddComponent<AttackerAI>();
+        var passerDef = passer.AddComponent<DefenderAI>();   // when home lose it, he defends
         AddCapsule(passer.transform, "Body", new Vector3(0f, PlayerHeight * 0.5f, 0f),
                    new Vector3(PlayerWidth, PlayerHeight * 0.5f, PlayerWidth), mPasser);
         var passerPerc = passer.AddComponent<Perceivable>();
@@ -167,14 +169,19 @@ public static class PrototypeSceneBuilder
         Color keeperTint = new Color(0.20f, 0.78f, 0.42f);
         Vector3 passerHome = new Vector3(0f, 0f, -13f);   // overwritten by the LCB slot
 
-        var awayBots = new System.Collections.Generic.List<DefenderAI>();
-        var homeBots = new System.Collections.Generic.List<AttackerAI>();
+        // One attacking and one defending roster per side. Every outfield body appears
+        // in BOTH of its side's rosters - the same man, two brains.
+        var homeAtk = new System.Collections.Generic.List<AttackerAI>();
+        var homeDef = new System.Collections.Generic.List<DefenderAI>();
+        var awayAtk = new System.Collections.Generic.List<AttackerAI>();
+        var awayDef = new System.Collections.Generic.List<DefenderAI>();
         var homeBodies = new System.Collections.Generic.List<Transform>();
         var awayBodies = new System.Collections.Generic.List<Transform>();
         // Everyone on the home side who can receive a pass. The keeper is deliberately
         // not in it: he has no brain to control the ball with, so a ball played back to
         // him would simply roll past and die.
         var homeMates = new System.Collections.Generic.List<Transform>();
+        var awayMates = new System.Collections.Generic.List<Transform>();
 
         for (int t = 0; t < 2; t++)
         {
@@ -199,7 +206,10 @@ public static class PrototypeSceneBuilder
                     passerAi.role = slot.role;
                     passerAi.homeSlot = pos;
                     passerAi.passing = Formation.PassingFor(slot.role);
-                    homeBots.Add(passerAi);
+                    passerDef.role = slot.role;
+                    passerDef.homeSlot = pos;
+                    homeAtk.Add(passerAi);
+                    homeDef.Add(passerDef);
                     homeBodies.Add(passer.transform);
                     homeMates.Add(passer.transform);
                     passerHome = pos;
@@ -210,8 +220,13 @@ public static class PrototypeSceneBuilder
                     Slot(defender, root, pos, away, "Defender (Away ST)");
                     dai.role = slot.role;
                     dai.homeSlot = pos;
-                    awayBots.Add(dai);
+                    daiAtk.role = slot.role;
+                    daiAtk.homeSlot = pos;
+                    daiAtk.passing = Formation.PassingFor(slot.role);
+                    awayDef.Add(dai);
+                    awayAtk.Add(daiAtk);
                     awayBodies.Add(defender.transform);
+                    awayMates.Add(defender.transform);
                     continue;
                 }
 
@@ -224,24 +239,31 @@ public static class PrototypeSceneBuilder
                 var body = SpawnSquadMember(root, prefix + slot.label, pos, away,
                                             gk ? mKeeper : (away ? mDefender : mPasser), mNose,
                                             gk ? keeperTint : (away ? awayTint : homeTint), kind);
-                if (kind == 1)
-                {
-                    var b = body.GetComponent<DefenderAI>();
-                    b.role = slot.role;
-                    b.homeSlot = pos;
-                    b.target = player.transform;
-                    awayBots.Add(b);
-                }
-                else if (kind == 2)
+                if (!gk)
                 {
                     var a = body.GetComponent<AttackerAI>();
                     a.role = slot.role;
                     a.homeSlot = pos;
                     a.passing = Formation.PassingFor(slot.role);
-                    homeBots.Add(a);
+
+                    var b = body.GetComponent<DefenderAI>();
+                    b.role = slot.role;
+                    b.homeSlot = pos;
+
+                    // The away side reads the human's torso to time its tackles (he is the
+                    // man they are defending against). Home's defenders are defending
+                    // against bots, and have nobody to read.
+                    if (away) b.target = player.transform;
+
+                    if (away) { awayAtk.Add(a); awayDef.Add(b); }
+                    else { homeAtk.Add(a); homeDef.Add(b); }
                 }
 
-                if (away) awayBodies.Add(body.transform);
+                if (away)
+                {
+                    awayBodies.Add(body.transform);
+                    if (!gk) awayMates.Add(body.transform);
+                }
                 else
                 {
                     homeBodies.Add(body.transform);
@@ -250,17 +272,30 @@ public static class PrototypeSceneBuilder
             }
         }
 
-        // Each side's shared picture and standing orders.
-        var teamDef = awayRoot.gameObject.AddComponent<TeamDefence>();
-        teamDef.defendsPositiveZ = true;               // away protects the goal at +Z
-        teamDef.members = awayBots.ToArray();
-        teamDef.opponents = homeBodies.ToArray();
-
+        // Each side runs BOTH coordinators - an attack for when it has the ball and a
+        // defence for when it has not. Possession switches exactly one of each pair on.
+        // Home attacks the goal at +Z and so defends the one at -Z; away the reverse.
         var teamAtk = homeRoot.gameObject.AddComponent<TeamAttack>();
-        teamAtk.attacksPositiveZ = true;               // home attacks the goal at +Z
-        teamAtk.members = homeBots.ToArray();
+        teamAtk.attacksPositiveZ = true;
+        teamAtk.members = homeAtk.ToArray();
         teamAtk.mates = homeMates.ToArray();
         teamAtk.opponents = awayBodies.ToArray();      // keeper included - he is usually the last man
+
+        var homeDefence = homeRoot.gameObject.AddComponent<TeamDefence>();
+        homeDefence.defendsPositiveZ = false;
+        homeDefence.members = homeDef.ToArray();
+        homeDefence.opponents = awayBodies.ToArray();
+
+        var teamDef = awayRoot.gameObject.AddComponent<TeamDefence>();
+        teamDef.defendsPositiveZ = true;
+        teamDef.members = awayDef.ToArray();
+        teamDef.opponents = homeBodies.ToArray();
+
+        var awayAttack = awayRoot.gameObject.AddComponent<TeamAttack>();
+        awayAttack.attacksPositiveZ = false;
+        awayAttack.members = awayAtk.ToArray();
+        awayAttack.mates = awayMates.ToArray();
+        awayAttack.opponents = homeBodies.ToArray();
 
         // -------------------------------------------------------------- ball ----
         var ballGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -275,6 +310,17 @@ public static class PrototypeSceneBuilder
         teamDef.ballBody = ball;            // he cuts passes out, so he reads its path
         teamAtk.ball = ballGo.transform;
         teamAtk.ballBody = ball;            // and this side actually plays it
+        homeDefence.ball = ballGo.transform;
+        homeDefence.ballBody = ball;
+        awayAttack.ball = ballGo.transform;
+        awayAttack.ballBody = ball;
+
+        // Who has it, and therefore which brain every body is running.
+        var possession = new GameObject("Possession").AddComponent<Possession>();
+        possession.homeAttack = teamAtk;
+        possession.homeDefence = homeDefence;
+        possession.awayAttack = awayAttack;
+        possession.awayDefence = teamDef;
         var ballPerc = ballGo.AddComponent<Perceivable>();
         ballPerc.tint = Color.white;
         ballPerc.ghostScale = Vector3.one * 0.5f;
@@ -538,8 +584,10 @@ public static class PrototypeSceneBuilder
             cc.center = new Vector3(0f, PlayerHeight * 0.5f, 0f);
             cc.slopeLimit = 60f;
             cc.stepOffset = 0.3f;
-            if (kind == 1) go.AddComponent<DefenderAI>();
-            else go.AddComponent<AttackerAI>();
+            // Both brains on every outfield body. Possession decides which is switched
+            // on; neither is ever taken off, so a turnover is a flag, not a rebuild.
+            go.AddComponent<AttackerAI>();
+            go.AddComponent<DefenderAI>();
         }
 
         AddCapsule(go.transform, "Body", new Vector3(0f, PlayerHeight * 0.5f, 0f),
