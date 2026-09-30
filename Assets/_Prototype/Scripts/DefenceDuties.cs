@@ -36,8 +36,12 @@ namespace Prototype
     ///               midfield instead
     ///   winger      the full-back on his side, in step with the striker: if the striker
     ///               has dropped, so has he, or the press has a hole where he was
-    ///   midfield    the nearest opposing midfielder inside his own area
-    ///   centre-back the forwards. One takes the striker; the OTHER one is then not
+    ///   mezzala     their mezzala on his side. High press - the one nearest their
+    ///               pivot jumps onto him, the other keeps his man
+    ///   pivot       their striker in a mid block. High press - he slides across to the
+    ///               mezzala the jumper left, and a centre-back takes the striker
+    ///   centre-back the forwards. One takes the striker unless the pivot already has
+    ///               him (mid block); the OTHER one is then not
     ///               allowed to take a second forward - he watches the box, because the
     ///               man who hurts you is the one arriving into it, not the one already
     ///               marked
@@ -63,6 +67,12 @@ namespace Prototype
             int n = mine.Length;
             for (int i = 0; i < n; i++) { targets[i] = -1; depthCap[i] = float.NaN; }
             for (int k = 0; k < p.oppTaken.Length; k++) p.oppTaken[k] = false;
+
+            // Mid block: our pivot sits on their striker, so he claims him BEFORE the
+            // centre-backs get a look. Both of them are then spare - one holds, one
+            // watches the box - which is the back four's half of the normal picture.
+            if (p.press == PressIntensity.Mid)
+                PivotOnStriker(mine, stations, ref p, targets);
 
             CentreBacks(mine, stations, ref p, targets);
 
@@ -129,7 +139,9 @@ namespace Prototype
 
             // Our own pivot goes last, so HE is the one left over. That is not a gap: a
             // six with nobody to mark is screening the space in front of the back four,
-            // which is what he is for.
+            // which is what he is for. (Mid and High give him a man before this runs -
+            // their striker, or the mezzala left by the rotation - so this is Low's case,
+            // or a press that never got going.)
             Claim(mine, stations, ref p, targets, Formation.IsPivot, Filter.Midfield);
 
             // Anyone still empty - a spare centre-back with nobody dangerous, or a man
@@ -173,6 +185,26 @@ namespace Prototype
             return best;
         }
 
+        // -------------------------------------------------------- pivot on nine --
+
+        /// <summary>
+        /// The normal (Mid) picture is five one-to-one pairs:
+        ///
+        ///   striker  -> their pivot        mezzala  -> their mezzala on his side
+        ///   pivot    -> their striker      winger   -> their full-back
+        ///   full-back-> their winger
+        ///
+        /// Everything but the pivot's pair comes out of Positional(). This one has to go
+        /// first because the centre-backs would otherwise take the striker themselves;
+        /// with him claimed, they are the spare men behind, which is where a mid block
+        /// wants them. When the press goes on (High) the pivot is needed further up and
+        /// the striker falls back to a centre-back - see MidfieldRotation.
+        /// </summary>
+        static void PivotOnStriker(Role[] mine, Vector3[] stations, ref DutyPicture p, int[] targets)
+        {
+            Claim(mine, stations, ref p, targets, Formation.IsPivot, Filter.Striker);
+        }
+
         // ----------------------------------------------------------- press chain --
 
         /// <summary>
@@ -193,6 +225,9 @@ namespace Prototype
         ///   4  and stops there. The man he walked away from is the opposing winger, and
         ///      a full-back who goes past him has swapped one free man for another. He
         ///      stands level with him - that is what depthCap carries.
+        ///   5  their pivot was the striker's man in the mid block. A mezzala jumps onto
+        ///      him and our pivot slides across to the mezzala left free, so a
+        ///      centre-back ends up on their striker - see MidfieldRotation.
         ///
         /// The full-back who did not have to rotate stays with his winger, and "stays
         /// with" means watching rather than pressing: TeamDefence only goes tight when
@@ -263,6 +298,54 @@ namespace Prototype
                 int w = NearestOpponent(stations[i], ref p, Filter.Winger, 999f);
                 if (w >= 0) { targets[i] = w; Claim(ref p, w); }
             }
+
+            // --- 5. the midfield rotates up behind him -----------------------------
+            // Their pivot was the striker's man. With the striker gone to a centre-back,
+            // somebody has to pick him up or he is the free pass out of the press.
+            MidfieldRotation(mine, stations, ref p, targets);
+        }
+
+        /// <summary>
+        /// The man the striker left behind (their pivot) is taken by a mezzala, and the
+        /// hole that opens is closed by sliding everyone behind one place:
+        ///
+        ///   mezzala 1  -> their pivot            (the one nearest him: the shortest jump)
+        ///   our pivot  -> the mezzala that mezzala 1 walked away from
+        ///   mezzala 2  -> keeps his own mezzala  (Positional)
+        ///   centre-back-> their striker          (CentreBacks, already done)
+        ///
+        /// Our pivot can only move up because a centre-back has their striker - which is
+        /// why the Mid pairing (pivot on the nine) is not run under High.
+        /// </summary>
+        static void MidfieldRotation(Role[] mine, Vector3[] stations, ref DutyPicture p, int[] targets)
+        {
+            int theirPivot = -1;
+            for (int k = 0; k < p.opp.Length; k++)
+                if (!p.oppTaken[k] && Formation.IsPivot(p.oppRole[k])) { theirPivot = k; break; }
+            if (theirPivot < 0) return;
+
+            int jump = -1;
+            float bd = float.MaxValue;
+            for (int i = 0; i < mine.Length; i++)
+            {
+                if (targets[i] >= 0 || !IsCentreMid(mine[i])) continue;
+                float d = Flat(p.opp[theirPivot] - stations[i]).sqrMagnitude;
+                if (d < bd) { bd = d; jump = i; }
+            }
+            if (jump < 0) return;
+
+            targets[jump] = theirPivot;
+            Claim(ref p, theirPivot);
+
+            // Our pivot slides across to the mezzala left behind - chosen by the jumper's
+            // side, not by our pivot's, because the jumper is who left him free.
+            int pivot = -1;
+            for (int i = 0; i < mine.Length; i++)
+                if (targets[i] < 0 && Formation.IsPivot(mine[i])) { pivot = i; break; }
+            if (pivot < 0) return;
+
+            int left = CounterpartByX(ref p, Filter.CentreMid, stations[jump].x);
+            if (left >= 0) { targets[pivot] = left; Claim(ref p, left); }
         }
 
         static void Claim(ref DutyPicture p, int k)
@@ -367,7 +450,7 @@ namespace Prototype
 
         // ------------------------------------------------------------- searching --
 
-        enum Filter { Any, Striker, Winger, FullBack, CentreBack, Midfield, BuildUp, Forward }
+        enum Filter { Any, Striker, Winger, FullBack, CentreBack, Midfield, CentreMid, BuildUp, Forward }
 
         static bool Matches(Filter f, Role r)
         {
@@ -378,6 +461,7 @@ namespace Prototype
                 case Filter.FullBack: return Formation.IsFullBack(r);
                 case Filter.CentreBack: return Formation.IsCentreBack(r);
                 case Filter.Midfield: return Formation.IsMidfield(r);
+                case Filter.CentreMid: return IsCentreMid(r);
                 case Filter.BuildUp: return Formation.IsBuildUp(r);
                 case Filter.Forward: return Formation.IsForward(r);
                 default: return !Formation.IsKeeper(r);
