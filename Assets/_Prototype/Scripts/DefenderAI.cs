@@ -90,6 +90,9 @@ namespace Prototype
         /// <summary>Set by TeamDefence: he is filling a hole rather than holding his own slot.</summary>
         [HideInInspector] public bool covering;
 
+        /// <summary>Set by TeamDefence.manMarkOnly: follow the man, never go in for the ball.</summary>
+        [HideInInspector] public bool markOnly;
+
         /// <summary>True while he is the one closing the ball down.</summary>
         public bool Pressing { get { return pressing; } }
 
@@ -256,7 +259,7 @@ namespace Prototype
         /// <summary>Does he go in this frame, against this particular carrier?</summary>
         public bool WantsTackle(Vector3 ballPos, float exposure, IBallCarrier carrier)
         {
-            if (Time.time < nextTackle || Recovering) return false;
+            if (markOnly || Time.time < nextTackle || Recovering) return false;
 
             // Delaying and tackling are opposites. A man told to stand off who then dives
             // in has thrown away the only thing delay buys - the seconds the rest of the

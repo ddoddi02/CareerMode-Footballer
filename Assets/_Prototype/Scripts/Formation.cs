@@ -274,6 +274,39 @@ namespace Prototype
             return Role.GK;
         }
 
+        /// <summary>
+        /// Man-marking: which opposition slot each of ours follows, or null for nobody.
+        ///
+        /// The two sides face each other, so left and right swap: our left-back meets
+        /// their RIGHT winger. Each pairing is the man already standing nearest in the
+        /// mirrored 4-1-2-3:
+        ///
+        ///   our full-backs    on their wingers
+        ///   our pivot         on their striker, and our striker on their pivot
+        ///   our two eights    on their two eights, crossed
+        ///   our wingers       on their full-backs
+        ///   our centre-backs  nobody - they hold, and their centre-backs are left free
+        ///
+        /// The centre-backs are the spare men. In a high press ONE of them steps onto the
+        /// striker and the pivot is released (TeamDefence.ManMarkOnly), which is a
+        /// rotation this table cannot express, so it lives there.
+        /// </summary>
+        public static Role? MarksRole(Role r)
+        {
+            switch (r)
+            {
+                case Role.LB: return Role.RW;
+                case Role.DM: return Role.ST;
+                case Role.RB: return Role.LW;
+                case Role.LCM: return Role.RCM;
+                case Role.RCM: return Role.LCM;
+                case Role.LW: return Role.RB;
+                case Role.ST: return Role.DM;
+                case Role.RW: return Role.LB;
+                default: return null;            // GK, LCB, RCB
+            }
+        }
+
         /// <summary>Which way this body faces at kickoff - down the pitch, at the other goal.</summary>
         public static Quaternion Facing(bool away)
         {

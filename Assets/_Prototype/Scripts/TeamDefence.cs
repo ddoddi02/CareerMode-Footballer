@@ -57,6 +57,14 @@ namespace Prototype
         [Tooltip("True if this side defends the goal at +Z.")]
         public bool defendsPositiveZ = true;
 
+        [Header("Man-marking only")]
+        [Tooltip("Strip the defence down to one job: every man follows the opposition slot Formation.MarksRole gives him, goal-side, and does nothing else - no shape, no press, no cover, no interceptions, no tackles. For checking where the pairings put people before any of the rest is layered back on.")]
+        public bool manMarkOnly = true;
+        [Tooltip("A second man on the same opponent stands this much further goal-side than the first, so the two are not stacked on one spot.")]
+        public float doubleMarkGap = 2.5f;
+        [Tooltip("Let the side go into a high press. In one, the centre-back nearer their striker steps onto him and the pivot is released. Off, a ball in their build-up is treated as Mid.")]
+        public bool allowHighPress = false;
+
         [Header("What it knows, and when")]
         public PitchIntel intel = new PitchIntel();
         [Tooltip("Who would reach each square first, from THIS side's point of view. Built from this side's own snapshot, never shared with the attack - a grid both teams read would let each of them see through the other's delay, and that delay is the difficulty (PROJECT.md 3.15, 3.24).")]
@@ -161,6 +169,12 @@ namespace Prototype
         /// <summary>How hard the side is going after it right now.</summary>
         public PressIntensity Press { get; private set; }
 
+        /// <summary>What the ball's position alone asks for, before allowHighPress caps it.</summary>
+        public PressIntensity PressWanted { get; private set; }
+
+        /// <summary>In man-marking, the centre-back who stepped onto the striker in a high press.</summary>
+        DefenderAI steppedCB;
+
         /// <summary>True while the back four is pinned on its floor and the block has stopped dropping.</summary>
         public bool LineOnFloor { get; private set; }
 
@@ -205,6 +219,10 @@ namespace Prototype
         {
             if (ball == null || members == null || members.Length == 0) return;
 
+            if (manMarkOnly) { ManMarkOnly(); return; }
+            for (int i = 0; i < members.Length; i++)
+                if (members[i] != null) members[i].markOnly = false;
+
             // Live, every frame, unlike everything else here. A ball already travelling
             // is the one thing a defender is directly engaged with, and PitchIntel exists
             // to make the REST of the picture stale - not this. Acting on a one-second-old
@@ -214,6 +232,86 @@ namespace Prototype
 
             if (intel.Tick(Time.time, opponents, ball.position, BlockCentre()))
                 Recompute();
+        }
+
+        // ----------------------------------------------------------- man-marking --
+
+        /// <summary>
+        /// Every frame, off the opponents' real positions: find the man whose slot this
+        /// one is told to mark, and stand goal-side of him. Everything else this class
+        /// does is skipped, and every order it could have left on a body is cleared, so
+        /// nothing from before the switch keeps steering him.
+        /// </summary>
+        void ManMarkOnly()
+        {
+            int n = members.Length;
+            if (targets.Length != n) { targets = new int[n]; depthCap = new float[n]; }
+
+            Presser = null;
+            Interceptor = null;
+            OnTheBreak = false;
+            Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
+            int m = opponents != null ? opponents.Length : 0;
+
+            PressWanted = DefenceDuties.IntensityFor(ball.position, defendsPositiveZ, highPressBeyond, lowPressWithin);
+            Press = PressWanted == PressIntensity.High && !allowHighPress ? PressIntensity.Mid : PressWanted;
+
+            // High press: ONE centre-back takes their striker, and the pivot lets him go.
+            // Chosen once, when the press starts - picking the nearer man every frame
+            // would swap them back and forth whenever the striker drifts across.
+            if (Press != PressIntensity.High) steppedCB = null;
+            else if (steppedCB == null)
+            {
+                Transform st = null;
+                for (int k = 0; k < m; k++)
+                    if (opponents[k] != null && Formation.RoleOf(opponents[k]) == Role.ST) { st = opponents[k]; break; }
+                float best = float.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    if (members[i] == null || !Formation.IsCentreBack(members[i].role)) continue;
+                    float d = st != null ? Flat(members[i].transform.position - st.position).sqrMagnitude : i;
+                    if (d < best) { best = d; steppedCB = members[i]; }
+                }
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                DefenderAI me = members[i];
+                targets[i] = -1;
+                depthCap[i] = float.NaN;
+                if (me == null) continue;
+
+                me.markOnly = true;
+                me.covering = false;
+                me.ClearIntercept();
+                me.SetPressing(false, PressMode.Deny, Vector3.zero, defendsPositiveZ, false);
+
+                Role? want = Formation.MarksRole(me.role);
+                if (steppedCB != null)
+                {
+                    if (me == steppedCB) want = Role.ST;
+                    else if (me.role == Role.DM) want = null;
+                }
+                if (want.HasValue)
+                    for (int k = 0; k < m; k++)
+                        if (opponents[k] != null && Formation.RoleOf(opponents[k]) == want.Value) { targets[i] = k; break; }
+
+                if (targets[i] < 0)
+                {
+                    me.markTarget = null;
+                    me.SetStation(me.homeSlot);
+                    continue;
+                }
+
+                // Somebody earlier in the list already on him? Stand behind that man.
+                int ahead = 0;
+                for (int j = 0; j < i; j++) if (targets[j] == targets[i]) ahead++;
+
+                Vector3 man = Flat(opponents[targets[i]].position);
+                Vector3 toGoal = Flat(goal - man).normalized;
+                me.markTarget = man;
+                me.SetStation(man + toGoal * (markGap + ahead * doubleMarkGap));
+            }
         }
 
         // ---------------------------------------------------------------- tackle --
@@ -473,7 +571,8 @@ namespace Prototype
             Vector3 ballPos = intel.Ball;
             MeasureBreak(ballPos);
             CarrierPos = NearestOpponentTo(ballPos, ballPos);
-            Press = DefenceDuties.IntensityFor(ballPos, defendsPositiveZ, highPressBeyond, lowPressWithin);
+            PressWanted = DefenceDuties.IntensityFor(ballPos, defendsPositiveZ, highPressBeyond, lowPressWithin);
+            Press = PressWanted == PressIntensity.High && !allowHighPress ? PressIntensity.Mid : PressWanted;
 
             for (int i = 0; i < n; i++)
                 myRoles[i] = members[i] == null ? Role.DM : members[i].role;
