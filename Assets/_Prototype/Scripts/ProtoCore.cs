@@ -259,6 +259,19 @@ namespace Prototype
 #endif
         }
 
+        /// <summary>Name every body by the slot he is meant to be standing in.</summary>
+        public static bool RoleLabelsPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            return kb != null && kb.lKey.wasPressedThisFrame;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.L);
+#else
+            return false;
+#endif
+        }
+
         /// <summary>Plant your feet: the stick designates where you want the ball instead of moving you.</summary>
         public static bool HoldHeld()
         {
