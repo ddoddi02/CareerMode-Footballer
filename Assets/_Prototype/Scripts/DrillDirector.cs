@@ -527,15 +527,11 @@ namespace Prototype
 
             if (r == TackleResult.Won)
             {
-                // Knocked off him and loose - NOT handed to anybody, and NOT the end of
-                // anything. Whoever gets to it first has it: usually the man who won the
-                // tackle, sometimes a team-mate of the human's, and either way the match
-                // goes on (DefendingSideWonIt / TryCollect). He cannot just take it
-                // straight back off the tackler's foot.
-                Vector3 away = ball.transform.position - d.transform.position;
-                away.y = 0f;
-                ball.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, TeamDefence.TackleKnock);
-                humanCollectAt = Time.time + selfPassLock;
+                // The tackler has it, and the match carries on the other way - the same
+                // rule as a bot being tackled (TeamDefence.TickTackle). WatchForTurnover
+                // scores the touch as lost.
+                Side them = possession.InPossession == Side.Home ? Side.Away : Side.Home;
+                possession.TurnOver(them, d.transform);
                 Flash(string.Format("태클당했습니다 — {0} (터치 거리 {1:0.00}m)", why, exposureAtTackle));
                 return;
             }

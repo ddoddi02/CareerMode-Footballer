@@ -54,6 +54,8 @@ namespace Prototype
         public float markGap = 1.7f;
         [Tooltip("A second man on the same opponent stands this much further goal-side than the first, so the two are not stacked on one spot.")]
         public float doubleMarkGap = 2.5f;
+        [Tooltip("How tight a marker gets once HIS man has the ball. At markGap the ball, which sits in front of the man, is 2.1-2.3 m away - outside tightRange, so the turn-in trigger could never fire and the tackle was decoration. Set it equal to markGap to switch this off.")]
+        public float onBallGap = 1.0f;
 
         [Header("Press")]
         [Tooltip("Ball this far from our goal or beyond is their build-up: a high press, if allowed.")]
@@ -164,10 +166,14 @@ namespace Prototype
                 int ahead = 0;
                 for (int j = 0; j < i; j++) if (targets[j] == targets[i]) ahead++;
 
+                // His man has the ball: step tight, so a turn is something he can punish.
+                // Only the first man on him - a second marker stays where he was.
+                float gap = targets[i] == carrier && ahead == 0 ? onBallGap : markGap;
+
                 Vector3 man = Flat(opponents[targets[i]].position);
                 Vector3 toGoal = Flat(goal - man).normalized;
                 me.markTarget = man;
-                me.SetStation(man + toGoal * (markGap + ahead * doubleMarkGap));
+                me.SetStation(man + toGoal * (gap + ahead * doubleMarkGap));
             }
         }
 
@@ -188,10 +194,12 @@ namespace Prototype
         /// shielding input and scores the touch; tackling him from here as well would
         /// challenge him twice.
         ///
-        /// A won tackle knocks the ball only a little way loose. It stays a genuine loose
-        /// ball - an attacker nearby can still get there first - but it does not roll five
-        /// metres away from the man who won it, which made winning a tackle and winning
-        /// the ball two different events.
+        /// WINNING THE TACKLE WINS THE BALL. It used to knock it a metre loose, on the
+        /// theory that whoever reached it first should have it. Under man-marking nobody
+        /// on the defending side has a loose ball as his job - every man is on a man - so
+        /// the side that had just lost the tackle collected it every time: five tackles,
+        /// two won, no turnovers. The tackler keeps it, and Possession sees who is on it
+        /// now and turns the pitch over.
         /// </summary>
         void TickTackle()
         {
@@ -226,10 +234,11 @@ namespace Prototype
             if (r == TackleResult.Won)
             {
                 TacklesWon++;
-                Vector3 away = bp - d.transform.position;
-                away.y = 0f;
                 carrier.ReleaseBall();
-                ballBody.Release(away.sqrMagnitude > 0.01f ? away : Vector3.forward, TackleKnock);
+                // Onto the same body's attacking brain - it is switched off now, and
+                // Possession switches it on the moment it reads who has the ball.
+                AttackerAI mine = d.GetComponent<AttackerAI>();
+                if (mine != null) { ballBody.Attach(mine); mine.TakeBall(); }
                 return;
             }
 
@@ -265,10 +274,6 @@ namespace Prototype
             }
             return best;
         }
-
-        /// <summary>How hard a won tackle knocks the ball loose: enough to make it loose, not
-        /// enough to send it away from the man who won it (about a metre on this grass).</summary>
-        public const float TackleKnock = 3.2f;
 
         bool IsOpponent(Transform t)
         {
