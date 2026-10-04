@@ -2,6 +2,14 @@ using UnityEngine;
 
 namespace Prototype
 {
+    /// <summary>How hard a defender runs to where he has been told to stand.</summary>
+    public enum DefendPace
+    {
+        Hold,   // getting back into shape: a jog
+        Mark,   // on a man who is not on the ball
+        Press   // going out to the ball: flat out
+    }
+
     /// <summary>
     /// One defender. He does not decide who to mark or where to stand - <see cref="TeamDefence"/>
     /// hands him a station goal-side of his man every frame - but he decides how to get
@@ -23,7 +31,14 @@ namespace Prototype
         [Header("Refs")]
         [Tooltip("The human. His torso is read to time a tackle on him (CarrierIsTurningIn).")]
         public Transform target;
+        [Tooltip("Marking a man who is not on the ball.")]
         public float speed = 5.8f;
+        [Tooltip("Going out to the man on the ball. The one run the side makes at full pace.")]
+        public float sprintSpeed = 7.9f;
+        [Tooltip("Getting back into shape. A jog - it is the run he makes most often, and the one that should cost least.")]
+        public float jogSpeed = 4.5f;
+        [Tooltip("Faster than this counts toward SprintDistance.")]
+        public float sprintLogAbove = 6.5f;
         public bool active = true;
         [Tooltip("What his body can actually do: how fast he starts, stops and turns. See PlayerMotion.")]
         public MotionModel motion = new MotionModel();
@@ -51,6 +66,18 @@ namespace Prototype
 
         /// <summary>Set by TeamDefence: which goal is his. Read when judging a turn.</summary>
         [HideInInspector] public bool defendsPositiveZ = true;
+
+        /// <summary>Set by TeamDefence: how hard he runs to his station.</summary>
+        [HideInInspector] public DefendPace pace = DefendPace.Mark;
+
+        /// <summary>
+        /// Metres he has covered on this brain, and how many of them above sprintLogAbove.
+        /// Read by the press drill, to see who a shape makes run before there is any
+        /// stamina to spend.
+        /// </summary>
+        public float Distance { get; private set; }
+        public float SprintDistance { get; private set; }
+        public void ResetRunLog() { Distance = 0f; SprintDistance = 0f; }
 
         /// <summary>His current orders - where TeamDefence wants him standing.</summary>
         public Vector3 Station { get { return station; } }
@@ -173,8 +200,13 @@ namespace Prototype
                 ? markTarget.Value - transform.position
                 : station - transform.position;
 
-            vel = PlayerMotion.Step(vel, transform.position, station, speed, yaw, motion, dt);
+            float top = pace == DefendPace.Press ? sprintSpeed : pace == DefendPace.Hold ? jogSpeed : speed;
+            vel = PlayerMotion.Step(vel, transform.position, station, top, yaw, motion, dt);
             cc.Move((vel + Vector3.down * 3f) * dt);
+
+            float step = new Vector2(vel.x, vel.z).magnitude * dt;
+            Distance += step;
+            if (step > sprintLogAbove * dt) SprintDistance += step;
 
             // He watches the man, not his own feet - so the body angle is solved from
             // where he is LOOKING, and running backwards is priced in by PlayerMotion.

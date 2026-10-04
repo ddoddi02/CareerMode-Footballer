@@ -36,6 +36,8 @@ namespace Prototype
         public bool showTable = true;
         [Tooltip("Draw a line from each defender to the man he is marking.")]
         public bool showDuties = true;
+        [Tooltip("Draw each man's zone (TeamDefence.holdShape) round his slot.")]
+        public bool showZones = true;
 
         [Header("Look")]
         public float height = 0.05f;
@@ -43,6 +45,10 @@ namespace Prototype
         public Color dutyCol = new Color(1f, 0.85f, 0.35f, 0.55f);
         [Tooltip("A marker inside his own tackling range.")]
         public Color tightCol = new Color(1f, 0.45f, 0.35f, 0.85f);
+        [Tooltip("A zone whose marker is on his man.")]
+        public Color zoneOnCol = new Color(0.45f, 0.85f, 1f, 0.7f);
+        [Tooltip("A zone whose marker is waiting.")]
+        public Color zoneIdleCol = new Color(0.45f, 0.85f, 1f, 0.18f);
 
         readonly List<LineRenderer> pool = new List<LineRenderer>();
         Material mat;
@@ -50,6 +56,7 @@ namespace Prototype
         int used;
         bool taken;
         bool wasBackFourOnly;
+        float startedAt;
 
         GUIStyle sHead, sRow;
         Texture2D texPanel;
@@ -109,6 +116,10 @@ namespace Prototype
             wasBackFourOnly = attack.backFourOnly;
             attack.backFourOnly = true;
             taken = true;
+            startedAt = Time.time;
+            if (defence != null && defence.members != null)
+                for (int i = 0; i < defence.members.Length; i++)
+                    if (defence.members[i] != null) defence.members[i].ResetRunLog();
         }
 
         void Stop()
@@ -124,7 +135,35 @@ namespace Prototype
         {
             used = 0;
             if (taken && showDuties) DrawDuties();
+            if (taken && showZones) DrawZones();
             for (int i = used; i < pool.Count; i++) pool[i].enabled = false;
+        }
+
+        /// <summary>
+        /// Each man's zone round his slot. Bright while he is out of the shape - pressing
+        /// or tracking a runner; faint while he holds.
+        /// </summary>
+        void DrawZones()
+        {
+            if (defence == null || defence.members == null) return;
+            const int seg = 32;
+
+            for (int i = 0; i < defence.members.Length; i++)
+            {
+                Vector3 c; float r;
+                if (!defence.ZoneOf(i, out c, out r)) continue;
+
+                Color col = defence.DutyOf(i) >= 0 ? zoneOnCol : zoneIdleCol;
+                LineRenderer lr = Take(seg + 1);
+                lr.widthMultiplier = lineWidth;
+                lr.startColor = col;
+                lr.endColor = col;
+                for (int s = 0; s <= seg; s++)
+                {
+                    float a = s * Mathf.PI * 2f / seg;
+                    lr.SetPosition(s, Flat3(c + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r)));
+                }
+            }
         }
 
         void DrawDuties()
@@ -190,7 +229,7 @@ namespace Prototype
             if (!taken || !showTable) return;
             EnsureStyles();
 
-            const float w = 460f;
+            const float w = 560f;
             int rows = defence != null && defence.members != null ? defence.members.Length : 0;
             float h = 86f + rows * 17f;
 
@@ -213,10 +252,12 @@ namespace Prototype
                 defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-"), sRow);
             y += 18f;
 
-            GUI.Label(new Rect(16f, y, w, 20f), "수비수        담당            거리", sHead);
+            GUI.Label(new Rect(16f, y, w, 20f), "수비수        담당            거리     뛴 거리/분  전력질주/분", sHead);
             y += 18f;
 
             if (defence == null || defence.members == null) return;
+            // Per minute since the drill started, so a short run and a long one compare.
+            float minutes = Mathf.Max(1f / 60f, (Time.time - startedAt) / 60f);
             for (int i = 0; i < defence.members.Length; i++)
             {
                 DefenderAI d = defence.members[i];
@@ -228,9 +269,11 @@ namespace Prototype
 
                 GUI.color = tight ? new Color(1f, 0.6f, 0.5f) : new Color(0.85f, 0.9f, 0.95f);
                 GUI.Label(new Rect(16f, y, w, 18f), string.Format(
-                    "{0,-12} {1,-14} {2}",
+                    "{0,-12} {1,-14} {2,-8} {3,-11} {4}",
                     Short(d.name), man != null ? Short(man.name) : "- (자리 유지)",
-                    man != null ? gap.ToString("0.0") + "m" : ""), sRow);
+                    man != null ? gap.ToString("0.0") + "m" : "",
+                    (d.Distance / minutes).ToString("0") + "m",
+                    (d.SprintDistance / minutes).ToString("0") + "m"), sRow);
                 y += 17f;
             }
             GUI.color = Color.white;
