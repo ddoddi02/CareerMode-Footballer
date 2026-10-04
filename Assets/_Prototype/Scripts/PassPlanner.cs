@@ -6,8 +6,7 @@ namespace Prototype
     public enum PassKind
     {
         Ground,   // along the floor, through a lane nobody is standing in
-        Lofted,   // over the top, because there was no lane left
-        Blind     // nobody was there - struck down the line anyway, which is a mistake
+        Lofted    // over the top, because there was no lane left
     }
 
     /// <summary>One option, with the reasoning left attached so it can be drawn and logged.</summary>
@@ -92,10 +91,6 @@ namespace Prototype
         [Range(0f, 1f)] public float controlShare = 0.7f;
         [Tooltip("Flight time that counts as a full point of risk. Has to sit ABOVE the longest ball actually attempted or every pass past ~16 m scores the same maximum and the term stops separating them - at which point the shortest ball always wins and nothing else in the score matters. It therefore has to be re-tuned whenever arrivePace moves, because arrivePace is what sets the longest flight there is: at 9 m/s a 30 m ball lands in 2.1 s, so 2.4 keeps the spread at 0.20..0.88 instead of pinning half the pitch at 1.00.")]
         public float riskTime = 2.4f;
-
-        [Header("The human's wedge")]
-        [Tooltip("Half-angle of the wedge a human's stick input picks a team-mate out of. Outside it he strikes the raw direction instead and the pass goes nowhere.")]
-        [Range(2f, 60f)] public float coneHalfAngle = 15f;
 
         [Header("Ball")]
         [Tooltip("How much of the receiver's own run the ball is played in front of. 0 puts every ball on his standing foot.")]
@@ -329,62 +324,6 @@ namespace Prototype
                 if (d < best) best = d;
             }
             return best == float.MaxValue ? 99f : best;
-        }
-
-        /// <summary>
-        /// The human's version. He points, and the ball goes to the nearest team-mate
-        /// inside the wedge - not down the raw stick direction, which is a direction no
-        /// footballer has ever passed in.
-        ///
-        /// Nearest, not best: this one IS his decision, and scoring it for him would be
-        /// playing the game on his behalf. The bots score because nobody is holding
-        /// their stick.
-        ///
-        /// If the wedge is empty he strikes the line anyway. That is not a fallback, it
-        /// is the mistake: he has passed into space nobody was running into, and the ball
-        /// is there to be picked off.
-        /// </summary>
-        public static PassPlan PickInCone(Transform self, Vector3 from, Vector2 aim,
-                                          IList<Transform> mates, PassRules r,
-                                          float straightDistance)
-        {
-            PassPlan plan = new PassPlan();
-            plan.from = from;
-
-            Vector3 f = Flat(from);
-            Vector3 dir = new Vector3(aim.x, 0f, aim.y);
-            if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
-            dir.Normalize();
-
-            Transform best = null;
-            float bestDist = float.MaxValue;
-
-            for (int i = 0; mates != null && i < mates.Count; i++)
-            {
-                if (mates[i] == null || mates[i] == self) continue;
-                Vector3 d = Flat(mates[i].position - f);
-                float dist = d.magnitude;
-                if (dist < 1.5f) continue;
-                if (Vector3.Angle(dir, d) > r.coneHalfAngle) continue;
-                if (dist < bestDist) { bestDist = dist; best = mates[i]; }
-            }
-
-            plan.valid = true;
-            if (best != null)
-            {
-                plan.receiver = best;
-                plan.target = Flat(best.position);
-                plan.distance = bestDist;
-                plan.kind = PassKind.Ground;
-            }
-            else
-            {
-                plan.receiver = null;
-                plan.target = f + dir * straightDistance;
-                plan.distance = straightDistance;
-                plan.kind = PassKind.Blind;
-            }
-            return plan;
         }
 
         /// <summary>

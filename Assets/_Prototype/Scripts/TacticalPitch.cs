@@ -42,8 +42,6 @@ namespace Prototype
 
         /// <summary>How many bands the pitch is cut into along its length. PROJECT.md §3.12.</summary>
         public const int BandCount = 6;
-        public const int LaneCount = 5;
-
         /// <summary>
         /// Which sixth of the pitch, counted in the attacking direction: 0 is the deepest
         /// band a side plays out of, 5 is the one it scores in. Together with the lane
@@ -63,12 +61,6 @@ namespace Prototype
         public static int CellOf(Vector3 p, bool attacksPositiveZ)
         {
             return (int)LaneOf(p.x) * BandCount + BandOf(p.z, attacksPositiveZ);
-        }
-
-        /// <summary>Centre and both half-spaces. The channels a shot or a turn comes from.</summary>
-        public static bool IsCentral(Lane l)
-        {
-            return l == Lane.Centre || l == Lane.LeftHalf || l == Lane.RightHalf;
         }
 
         /// <summary>The goal a side defending toward this end is protecting.</summary>
@@ -125,19 +117,5 @@ namespace Prototype
             return Mathf.Clamp01(d);
         }
 
-        /// <summary>
-        /// Unit vector from a point toward the touchline it is nearest to. Principle 4
-        /// works by making this the only comfortable direction left.
-        /// </summary>
-        public static Vector3 OutsideDir(Vector3 p)
-        {
-            return new Vector3(p.x >= 0f ? 1f : -1f, 0f, 0f);
-        }
-
-        /// <summary>Toward the middle of the pitch - the side a presser must shut off.</summary>
-        public static Vector3 InsideDir(Vector3 p)
-        {
-            return -OutsideDir(p);
-        }
     }
 }

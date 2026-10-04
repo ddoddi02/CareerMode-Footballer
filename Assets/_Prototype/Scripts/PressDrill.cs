@@ -4,30 +4,20 @@ using UnityEngine;
 namespace Prototype
 {
     /// <summary>
-    /// A rig for watching the press, and nothing else.
+    /// A rig for watching the marking against a build-up, and nothing else.
     ///
-    /// The 4-3-3 pressing sequence (DefenceDuties.PressChain) only happens when the ball
-    /// is in the opposition's back four, and in a live match it is there for about two
-    /// seconds at a time before somebody plays forward and the whole picture becomes
-    /// something else. You cannot check a rotation you only glimpse.
+    /// A ball in the opposition's back four is there for about two seconds in a live
+    /// match before somebody plays forward and the picture becomes something else. Hold
+    /// it there, and the same picture plays over and over: every marker on his man, and -
+    /// with TeamDefence.allowHighPress on - the centre-back stepping onto their striker
+    /// while our pivot lets him go.
     ///
-    /// So: hold the ball in the back four and let everything else run normally. The
-    /// defence is NOT frozen - this is the opposite of PassLab. Every defender chooses
-    /// his own duty, runs at his own man and covers his own holes; the only thing
-    /// constrained is where the ball is allowed to go, so the trigger keeps re-firing
-    /// and the same rotation plays over and over until you have seen it properly.
+    /// The defence is NOT frozen - the opposite of PassLab. Every defender marks and
+    /// tackles as he would in a match; the only thing constrained is where the ball is
+    /// allowed to go.
     ///
-    /// What to watch, in order:
-    ///
-    ///   1  the striker leaves the man on the ball alone until he is a CENTRE-BACK,
-    ///      then goes
-    ///   2  the FAR winger comes inside to the other centre-back - not the near one
-    ///   3  the full-back behind that winger steps up onto the full-back he abandoned
-    ///   4  and stops level with the winger he left. The cap line is drawn: if he is
-    ///      sitting on it, rule 4 is doing something
-    ///
-    /// The table says who was given to whom. A rotation that looks right on the grass but
-    /// reads wrong in the table is two bugs cancelling.
+    /// The table says who is on whom and how far off him he is. Red is inside tackling
+    /// range: if that man's opponent gets the ball, he is the one who goes in.
     ///
     ///   T   hold the ball in the back four / let it go again
     /// </summary>
@@ -44,18 +34,15 @@ namespace Prototype
 
         [Header("Readout")]
         public bool showTable = true;
-        [Tooltip("Draw a line from each defender to the man he was given.")]
+        [Tooltip("Draw a line from each defender to the man he is marking.")]
         public bool showDuties = true;
-        [Tooltip("Draw the line a rotated full-back has been told not to advance past.")]
-        public bool showDepthCap = true;
 
         [Header("Look")]
         public float height = 0.05f;
         public float lineWidth = 0.06f;
         public Color dutyCol = new Color(1f, 0.85f, 0.35f, 0.55f);
-        [Tooltip("The line for a man who has actually gone tight rather than just leaning.")]
+        [Tooltip("A marker inside his own tackling range.")]
         public Color tightCol = new Color(1f, 0.45f, 0.35f, 0.85f);
-        public Color capCol = new Color(0.45f, 0.8f, 1f, 0.7f);
 
         readonly List<LineRenderer> pool = new List<LineRenderer>();
         Material mat;
@@ -79,10 +66,10 @@ namespace Prototype
         }
 
         /// <summary>
-        /// Our lines live under a child of our own and only that child is scanned. Three
-        /// components on this GameObject pool LineRenderers the same way now, and a sweep
-        /// of everything below us would adopt somebody else's pool - after which the two
-        /// of us spend every frame switching each other's drawings off (PROJECT.md 3.20).
+        /// Our lines live under a child of our own and only that child is scanned. Several
+        /// components on this GameObject pool LineRenderers the same way, and a sweep of
+        /// everything below us would adopt somebody else's pool - after which the two of
+        /// us spend every frame switching each other's drawings off (PROJECT.md 3.20).
         /// </summary>
         void AdoptStrays()
         {
@@ -147,25 +134,18 @@ namespace Prototype
             for (int i = 0; i < defence.members.Length; i++)
             {
                 DefenderAI d = defence.members[i];
-                if (d == null) continue;
+                Transform man = ManOf(i);
+                if (d == null || man == null) continue;
 
-                int t = defence.DutyOf(i);
-                if (t >= 0 && t < defence.opponents.Length && defence.opponents[t] != null)
-                {
-                    // Tight or merely leaning - the difference is the whole point of
-                    // rule 3, so it is drawn rather than left to be guessed.
-                    float gap = Flat(defence.opponents[t].position - d.transform.position).magnitude;
-                    bool tight = gap <= Formation.DefensiveZone(d.role);
-                    Segment(d.transform.position, defence.opponents[t].position,
-                            tight ? tightCol : dutyCol);
-                }
-
-                if (!showDepthCap) continue;
-                float cap = defence.DepthCapOf(i);
-                if (float.IsNaN(cap)) continue;
-                Segment(new Vector3(d.transform.position.x - 4f, 0f, cap),
-                        new Vector3(d.transform.position.x + 4f, 0f, cap), capCol);
+                float gap = Flat(man.position - d.transform.position).magnitude;
+                Segment(d.transform.position, man.position, gap <= d.lungeRange ? tightCol : dutyCol);
             }
+        }
+
+        Transform ManOf(int i)
+        {
+            int t = defence.DutyOf(i);
+            return t >= 0 && t < defence.opponents.Length ? defence.opponents[t] : null;
         }
 
         LineRenderer Take(int points)
@@ -210,7 +190,7 @@ namespace Prototype
             if (!taken || !showTable) return;
             EnsureStyles();
 
-            const float w = 520f;
+            const float w = 460f;
             int rows = defence != null && defence.members != null ? defence.members.Length : 0;
             float h = 86f + rows * 17f;
 
@@ -228,14 +208,12 @@ namespace Prototype
             string carrier = "-";
             if (attack != null && attack.BallCarrier != null) carrier = Short(attack.BallCarrier.name);
             GUI.Label(new Rect(16f, y, w, 20f), string.Format(
-                "공: {0}    압박 강도: {1}    압박자: {2} {3}", carrier,
+                "공: {0}    압박 강도: {1}    공 담당: {2}", carrier,
                 defence != null ? defence.Press.ToString() : "-",
-                defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-",
-                defence != null && defence.PresserByDuty ? "(담당)" : "(가장 가까움 — 압박이 뚫림)"), sRow);
+                defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-"), sRow);
             y += 18f;
 
-            GUI.Label(new Rect(16f, y, w, 20f),
-                "수비수        담당            거리   상태", sHead);
+            GUI.Label(new Rect(16f, y, w, 20f), "수비수        담당            거리", sHead);
             y += 18f;
 
             if (defence == null || defence.members == null) return;
@@ -244,24 +222,15 @@ namespace Prototype
                 DefenderAI d = defence.members[i];
                 if (d == null) continue;
 
-                int t = defence.DutyOf(i);
-                string mark = "-";
-                string state = "";
-                float gap = 0f;
+                Transform man = ManOf(i);
+                float gap = man != null ? Flat(man.position - d.transform.position).magnitude : 0f;
+                bool tight = man != null && gap <= d.lungeRange;
 
-                if (t >= 0 && t < defence.opponents.Length && defence.opponents[t] != null)
-                {
-                    mark = Short(defence.opponents[t].name);
-                    gap = Flat(defence.opponents[t].position - d.transform.position).magnitude;
-                    state = gap <= Formation.DefensiveZone(d.role) ? "압박" : "견제";
-                }
-                if (!float.IsNaN(defence.DepthCapOf(i))) state += " · 라인유지";
-
-                GUI.color = state.StartsWith("압박") ? new Color(1f, 0.6f, 0.5f)
-                                                     : new Color(0.85f, 0.9f, 0.95f);
+                GUI.color = tight ? new Color(1f, 0.6f, 0.5f) : new Color(0.85f, 0.9f, 0.95f);
                 GUI.Label(new Rect(16f, y, w, 18f), string.Format(
-                    "{0,-12} {1,-14} {2,5:0.0}m  {3}",
-                    Short(d.name), mark, gap, state), sRow);
+                    "{0,-12} {1,-14} {2}",
+                    Short(d.name), man != null ? Short(man.name) : "- (자리 유지)",
+                    man != null ? gap.ToString("0.0") + "m" : ""), sRow);
                 y += 17f;
             }
             GUI.color = Color.white;

@@ -105,18 +105,6 @@ namespace Prototype
             return new Vector3(x, 0f, z);
         }
 
-        /// <summary>
-        /// The players principle 2 is written about: wingers, the striker, the two
-        /// eights, and full-backs who push on. Centre-backs and the pivot hold their
-        /// slot instead of hunting for space in it.
-        /// </summary>
-        public static bool IsFrontLine(Role r)
-        {
-            return r == Role.LW || r == Role.ST || r == Role.RW
-                || r == Role.LCM || r == Role.RCM
-                || r == Role.LB || r == Role.RB;
-        }
-
         /// <summary>Who actually runs in behind. A full-back overlaps; he does not lead the line.</summary>
         public static bool RunsInBehind(Role r)
         {
@@ -149,8 +137,6 @@ namespace Prototype
                 default: return 2;
             }
         }
-
-        public const int LineCount = 3;
 
         /// <summary>
         /// How well this slot passes, 0..1.
@@ -187,62 +173,7 @@ namespace Prototype
         public static bool IsKeeper(Role r) { return r == Role.GK; }
         public static bool IsCentreBack(Role r) { return r == Role.LCB || r == Role.RCB; }
         public static bool IsFullBack(Role r) { return r == Role.LB || r == Role.RB; }
-        public static bool IsMidfield(Role r) { return r == Role.DM || r == Role.LCM || r == Role.RCM; }
 
-        /// <summary>The single pivot. He marks last, so he is the one left screening.</summary>
-        public static bool IsPivot(Role r) { return r == Role.DM; }
-        public static bool IsWinger(Role r) { return r == Role.LW || r == Role.RW; }
-        public static bool IsStriker(Role r) { return r == Role.ST; }
-
-        /// <summary>The men a centre-back is watching: the front three.</summary>
-        public static bool IsForward(Role r) { return r == Role.LW || r == Role.ST || r == Role.RW; }
-
-        /// <summary>Who a striker hunts when he presses: the men who play it out.</summary>
-        public static bool IsBuildUp(Role r)
-        {
-            return r == Role.GK || IsCentreBack(r) || IsFullBack(r);
-        }
-
-        /// <summary>
-        /// How far from his station an opponent has to be before he counts as being IN
-        /// this man's area - the trigger for common principle 3.
-        ///
-        /// Wider out wide, because a full-back covers a channel rather than a point, and
-        /// tightest through the middle where the goal is.
-        /// </summary>
-        public static float DefensiveZone(Role r)
-        {
-            if (IsCentreBack(r)) return 8f;
-            if (IsFullBack(r)) return 11f;
-            if (IsMidfield(r)) return 10f;
-            if (IsWinger(r)) return 12f;
-            if (IsStriker(r)) return 13f;
-            return 6f;      // keeper
-        }
-
-        /// <summary>
-        /// How far from his slot a defender may be dragged by anything at all - marking,
-        /// covering, pressing, delaying a break.
-        ///
-        /// This is the TOP principle, not a courtesy: whatever the rest of the defending
-        /// decides, the answer is clamped back inside this radius before it becomes an
-        /// order. A side that will follow its man anywhere does not have a shape, it has
-        /// eleven separate chases, and the space it leaves behind is worth more than
-        /// every duel it wins.
-        ///
-        /// Tightest at the back and loosest at the front, because that is where the cost
-        /// of being out of position is paid. A striker twelve metres out of his slot has
-        /// made a bad press; a centre-back twelve metres out of his has opened the goal.
-        /// </summary>
-        public static float PositionLeash(Role r)
-        {
-            if (IsKeeper(r)) return 6f;
-            if (IsCentreBack(r)) return 9f;
-            if (IsFullBack(r)) return 12f;
-            if (IsMidfield(r)) return 13f;
-            if (IsWinger(r)) return 15f;
-            return 16f;      // striker
-        }
 
         /// <summary>
         /// Whatever role this body is playing, whichever component happens to own it.
@@ -253,9 +184,8 @@ namespace Prototype
         ///
         /// The fallback is GK, and it is not arbitrary. Nothing in this scene is without
         /// a brain except the goalkeeper - he has not got one yet - so an unknown body IS
-        /// one in practice. It also fails in the safe direction: a keeper is excluded
-        /// from marking (IsMidfield, IsWinger and the rest are all false for him) and
-        /// included in build-up, which is what a keeper actually is.
+        /// one in practice. It also fails in the safe direction: no outfield slot is
+        /// told to mark a keeper (Formation.MarksRole), so he is never picked up.
         ///
         /// It used to fall back to DM, and that quietly made every keeper a defensive
         /// midfielder. Nobody noticed while duties were range-gated, because he was

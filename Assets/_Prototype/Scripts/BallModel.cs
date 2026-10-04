@@ -25,10 +25,7 @@ namespace Prototype
         [System.Serializable]
         public struct Base
         {
-            public const float ShortPass = 14f;
-            public const float ThroughBall = 18f;
             public const float Cross = 20f;
-            public const float LongPass = 22f;
             public const float Shot = 26f;
         }
 

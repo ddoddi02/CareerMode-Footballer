@@ -27,18 +27,11 @@ namespace Prototype
         [Tooltip("Distance from the ball inside which the situation counts as urgent.")]
         public float urgentRange = 12f;
 
-        /// <summary>Last picture of where the opposition were.</summary>
-        public Vector3[] Opponents { get { return oppSnap; } }
-
         /// <summary>How each of them was moving when the picture was taken.</summary>
         public Vector3[] OpponentVel { get { return oppVel; } }
 
         /// <summary>Last picture of the ball. Not live unless someone is engaged with it.</summary>
         public Vector3 Ball { get { return ballSnap; } }
-
-        public float TakenAt { get { return takenAt; } }
-        public bool Urgent { get { return urgent; } }
-        public float Age(float now) { return now - takenAt; }
 
         Vector3[] oppSnap = new Vector3[0];
         Vector3[] oppVel = new Vector3[0];

@@ -364,8 +364,7 @@ namespace Prototype
         {
             flightT += Time.deltaTime;
 
-            float head = defence != null ? defence.interceptHeight
-                       : (director != null ? director.interceptHeight : 1.1f);
+            float head = director != null ? director.interceptHeight : 1.1f;
             Vector3 bp = ball.transform.position;
 
             if (bp.y <= head)

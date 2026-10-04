@@ -50,9 +50,6 @@ namespace Prototype
         /// <summary>The side with the ball, which is the side attacking.</summary>
         public Side InPossession { get; private set; }
 
-        /// <summary>The coordinator currently running the attack, whichever side that is.</summary>
-        public TeamAttack Attacking { get { return InPossession == Side.Home ? homeAttack : awayAttack; } }
-
         /// <summary>The coordinator currently running the defence.</summary>
         public TeamDefence Defending { get { return InPossession == Side.Home ? awayDefence : homeDefence; } }
 
@@ -95,7 +92,6 @@ namespace Prototype
         {
             TeamAttack lostAtk = to == Side.Home ? awayAttack : homeAttack;
             TeamAttack wonAtk = to == Side.Home ? homeAttack : awayAttack;
-            TeamDefence nowDefending = to == Side.Home ? awayDefence : homeDefence;
 
             // The loser's carrier may still believe he is on the ball. He is not.
             if (lostAtk != null && lostAtk.members != null)
@@ -105,7 +101,6 @@ namespace Prototype
 
             if (lostAtk != null) lostAtk.ResetPossession();
             if (wonAtk != null) wonAtk.ResetPossession();
-            if (nowDefending != null) { nowDefending.intel.Clear(); nowDefending.control.Clear(); }
 
             CarryMomentum(to);
             Apply(to);
@@ -162,15 +157,14 @@ namespace Prototype
 
         /// <summary>
         /// Back to a clean start with this side on the ball - a kick-off or a restart.
-        /// Clears every coordinator, not just the pair about to be switched on, because a
-        /// restart after a turnover has four half-finished pictures lying around.
+        /// Clears both attacks, not just the one about to be switched on, because a restart
+        /// after a turnover leaves a half-finished pass plan on each side. The defences
+        /// keep no picture to clear - they mark off live positions every frame.
         /// </summary>
         public void Restart(Side side)
         {
             if (homeAttack != null) homeAttack.ResetPossession();
             if (awayAttack != null) awayAttack.ResetPossession();
-            if (homeDefence != null) { homeDefence.intel.Clear(); homeDefence.control.Clear(); }
-            if (awayDefence != null) { awayDefence.intel.Clear(); awayDefence.control.Clear(); }
             Apply(side);
         }
 

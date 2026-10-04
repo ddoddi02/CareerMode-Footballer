@@ -371,9 +371,5 @@ namespace Prototype
             return q;
         }
 
-        public float StopDistance(float v0)
-        {
-            return v0 * v0 / (2f * Mathf.Max(rollDecel, 0.01f));
-        }
     }
 }

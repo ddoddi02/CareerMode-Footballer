@@ -63,8 +63,6 @@ namespace Prototype
         [Range(0f, 1f)] public float playerStrength = 0.60f;
 
         [Header("The human's pass")]
-        [Tooltip("How far in front of the receiver a through ball is played, before the offside line claws it back.")]
-        public float throughLead = 9f;
         [Tooltip("Length of a pass struck into an empty wedge - nobody was in the direction he pointed, so it goes nowhere in particular.")]
         public float blindPassDistance = 14f;
         [Tooltip("How long after passing he cannot collect the ball back himself.")]
@@ -123,14 +121,12 @@ namespace Prototype
         string body = "";
         Color titleCol = Color.white;
 
-        LineRenderer passLine, passRing, interceptRing, receiveGuide;
+        LineRenderer passLine, passRing, receiveGuide;
         GUIStyle sBig, sMid, sSmall;
         Texture2D texWhite;
 
         static readonly Color FeetCol = new Color(1f, 1f, 1f, 1f);
         static readonly Color LoftCol = new Color(1f, 0.78f, 0.35f, 1f);
-        static readonly Color CutCol = new Color(1f, 0.35f, 0.35f, 1f);
-
         // ------------------------------------------------------------- setup ----
 
         void Start()
@@ -138,7 +134,6 @@ namespace Prototype
             Material dim = ProtoMat.UnlitFade(new Color(1f, 1f, 1f, 0.3f));
             passLine = MakeLine("PassLine", dim, 0.10f, 2);
             passRing = MakeLine("PassTarget", dim, 0.08f, 33);
-            interceptRing = MakeLine("InterceptPoint", dim, 0.07f, 33);
             receiveGuide = MakeLine("ReceiveGuide", dim, 0.07f, 2);
 
             phase = Phase.Setup;
@@ -190,41 +185,17 @@ namespace Prototype
                 player.TrackBall = true;
             }
 
-            if (possession != null)
-            {
-                // Every body back on its slot, through BOTH brains - each keeps its own
-                // idea of where it is standing, and a brain that is switched off at the
-                // warp would come back on still heading for wherever it last was.
-                WarpAll(possession.homeAttack, possession.homeDefence);
-                WarpAll(possession.awayAttack, possession.awayDefence);
-                possession.Restart(kickOff);
-            }
-            else
-            {
-                if (attack != null)
-                {
-                    attack.ResetPossession();
-                    for (int i = 0; attack.members != null && i < attack.members.Length; i++)
-                        if (attack.members[i] != null) attack.members[i].Warp(attack.members[i].homeSlot);
-                }
-                if (defence != null)
-                {
-                    defence.intel.Clear();
-                    defence.control.Clear();
-                    for (int i = 0; defence.members != null && i < defence.members.Length; i++)
-                    {
-                        var d = defence.members[i];
-                        if (d == null) continue;
-                        d.Warp(d.homeSlot);
-                        d.chase = null;
-                    }
-                }
-            }
+            // Every body back on its slot, through BOTH brains - each keeps its own idea
+            // of where it is standing, and a brain that is switched off at the warp would
+            // come back on still heading for wherever it last was.
+            WarpAll(possession.homeAttack, possession.homeDefence);
+            WarpAll(possession.awayAttack, possession.awayDefence);
+            possession.Restart(kickOff);
 
             // A centre-back starts with it at his feet, and his side's TeamAttack takes it
             // from there. Home's is the drill's own passer; away's is whichever of theirs
             // plays left centre-back, the mirror of him.
-            AttackerAI opener = kickOff == Side.Home || possession == null
+            AttackerAI opener = kickOff == Side.Home
                 ? (passer != null ? passer.GetComponent<AttackerAI>() : null)
                 : OpenerOf(possession.awayAttack);
             if (ball != null)
@@ -241,7 +212,7 @@ namespace Prototype
             humanCollectAt = -99f;
             deadSince = -1f;
             seenPassSerial = attack != null ? attack.PassSerial : -1;
-            seenTurnovers = possession != null ? possession.Turnovers : 0;
+            seenTurnovers = possession.Turnovers;
             homeHeldSince = Time.time;
 
             phase = Phase.Play;
@@ -272,16 +243,15 @@ namespace Prototype
                 // touch worked: the possession survived it, which is the whole question
                 // the confirmed-vs-blind number is asking.
                 deadSince = -1f;
-                bool ours = possession == null || possession.SideOf(ball.CarrierTransform) == Side.Home;
+                bool ours = possession.SideOf(ball.CarrierTransform) == Side.Home;
                 if (ours && awaitingHumanPass) Settle(true);
                 if (incomingForHuman) { incomingForHuman = false; player.EndReceive(); }
             }
 
             // "Kept it" means HOME held it that long, unbroken - not that the clock ran
             // while the other side was attacking.
-            bool heldLongEnough = possession == null
-                ? phaseT > roundSeconds
-                : possession.InPossession == Side.Home && Time.time - homeHeldSince > roundSeconds;
+            bool heldLongEnough = possession.InPossession == Side.Home
+                                  && Time.time - homeHeldSince > roundSeconds;
             if (heldLongEnough)
             {
                 rounds++; kept++;
@@ -356,7 +326,7 @@ namespace Prototype
         /// </summary>
         bool DefendingSideWonIt()
         {
-            TeamDefence def = possession != null ? possession.Defending : defence;
+            TeamDefence def = possession.Defending;
             if (def == null || def.members == null) return false;
             if (ball.transform.position.y > interceptHeight) return false;
             if (ball.InFlight && ball.Travelled < passEscape) return false;
@@ -374,17 +344,6 @@ namespace Prototype
                 bool humansBall = awaitingHumanPass;
                 ball.Stop();
 
-                if (possession == null)
-                {
-                    // An old scene with no Possession in it: the only thing that can
-                    // happen is what always happened.
-                    rounds++;
-                    Settle(false);
-                    EndRound();
-                    Finish("INTERCEPTED", "패스 길이 열려 있지 않았습니다.", new Color(0.95f, 0.35f, 0.35f));
-                    return true;
-                }
-
                 Side winner = possession.InPossession == Side.Home ? Side.Away : Side.Home;
                 possession.TurnOver(winner, d.transform);
                 if (winner == Side.Away)
@@ -401,7 +360,7 @@ namespace Prototype
         /// </summary>
         void WatchForTurnover()
         {
-            if (possession == null || possession.Turnovers == seenTurnovers) return;
+            if (possession.Turnovers == seenTurnovers) return;
             seenTurnovers = possession.Turnovers;
 
             if (possession.InPossession == Side.Away)
@@ -441,7 +400,6 @@ namespace Prototype
                 {
                     if (def.members[i] == null) continue;
                     def.members[i].Warp(def.members[i].homeSlot);
-                    def.members[i].chase = null;
                 }
         }
 
@@ -461,7 +419,7 @@ namespace Prototype
             // goes to whoever did NOT have it, which is what a throw-in or a goal kick is.
             if (homeGoal) { homeGoals++; kept++; kickOff = Side.Away; }
             else if (awayGoal) { awayGoals++; kickOff = Side.Home; }
-            else kickOff = possession != null && possession.InPossession == Side.Home ? Side.Away : Side.Home;
+            else kickOff = possession.InPossession == Side.Home ? Side.Away : Side.Home;
 
             Settle(homeGoal);
             EndRound();
@@ -827,7 +785,6 @@ namespace Prototype
         {
             if (passLine != null) passLine.enabled = false;
             if (passRing != null) passRing.enabled = false;
-            if (interceptRing != null) interceptRing.enabled = false;
             if (receiveGuide != null) receiveGuide.enabled = false;
         }
 
@@ -838,7 +795,6 @@ namespace Prototype
             incomingForHuman = false;
             passLine.enabled = false;
             passRing.enabled = false;
-            interceptRing.enabled = false;
             receiveGuide.enabled = false;
         }
 
@@ -916,14 +872,6 @@ namespace Prototype
                 passLine.enabled = false;
                 passRing.enabled = false;
             }
-
-            // Where the defence thinks it can get to it first.
-            if (defence != null && defence.Interceptor != null)
-            {
-                Color c = CutCol; c.a = 0.45f;
-                SetRing(interceptRing, defence.InterceptAt, 0.6f, c, 24);
-            }
-            else interceptRing.enabled = false;
 
             if (!incomingForHuman || ball.Carried) { receiveGuide.enabled = false; return; }
 
@@ -1006,7 +954,7 @@ namespace Prototype
             GUILayout.BeginArea(new Rect(14, 14, 348, 316), GUI.skin.box);
             GUILayout.Label(string.Format("홈 {0} : {1} 원정    ·    공: {2}",
                             homeGoals, awayGoals,
-                            possession == null ? "홈" : (possession.InPossession == Side.Home ? "홈" : "원정")), sMid);
+                            possession.InPossession == Side.Home ? "홈" : "원정"), sMid);
             GUILayout.Label(string.Format("라운드 {0}  ·  지킴 {1}  ·  뺏김 {2}  ·  파울 {3}",
                             rounds, kept, tackled, fouls), sSmall);
             GUILayout.Space(6);
@@ -1048,10 +996,6 @@ namespace Prototype
             {
                 GUILayout.Label("센터백이 공을 잡고 있습니다", sSmall);
             }
-
-            if (defence != null && defence.Interceptor != null)
-                GUILayout.Label(string.Format("차단 시도 — {0} 이 {1:0.00}초 뒤 도달",
-                                defence.Interceptor.name, defence.InterceptIn), sSmall);
 
             GUILayout.Label(string.Format("{0}  오차 {1:+0.00;-0.00}m  ·  강약 {2:+0.0;-0.0}%",
                             lastStrike, lastAimErr, lastSpeedErr), sSmall);

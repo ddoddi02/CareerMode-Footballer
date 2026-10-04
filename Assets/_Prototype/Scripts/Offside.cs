@@ -53,12 +53,6 @@ namespace Prototype
             return line * dir;
         }
 
-        /// <summary>Is this position past the line - i.e. offside if the ball were played now?</summary>
-        public static bool Beyond(Vector3 p, float lineZ, bool attacksPositiveZ)
-        {
-            return attacksPositiveZ ? p.z > lineZ : p.z < lineZ;
-        }
-
         /// <summary>
         /// Pulls a target back onto the right side of the line, leaving a stride of margin.
         /// This is what makes a run "timed" rather than a flag.

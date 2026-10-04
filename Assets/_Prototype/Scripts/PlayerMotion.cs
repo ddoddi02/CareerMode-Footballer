@@ -127,10 +127,5 @@ namespace Prototype
             return new Vector2(Mathf.Sin(r), Mathf.Cos(r));
         }
 
-        /// <summary>The circle he cannot turn inside of, at this speed. Handy for the debug view.</summary>
-        public static float TurnRadius(float speed, MotionModel m)
-        {
-            return speed * speed / Mathf.Max(m.turnAccel, 0.01f);
-        }
     }
 }

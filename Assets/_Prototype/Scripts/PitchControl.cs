@@ -78,9 +78,6 @@ namespace Prototype
             AttackerAI a = body.GetComponent<AttackerAI>();
             if (a != null) { r.top = a.sprintSpeed; Take(a.motion, ref r); return r; }
 
-            DefenderAI d = body.GetComponent<DefenderAI>();
-            if (d != null) { r.top = d.interceptSpeed; Take(d.motion, ref r); return r; }
-
             // The human has no MotionModel - his body is driven by hand, not by
             // PlayerMotion - so he races on the default one.
             FootballerController f = body.GetComponent<FootballerController>();
