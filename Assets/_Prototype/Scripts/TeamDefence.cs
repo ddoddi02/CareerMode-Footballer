@@ -67,7 +67,7 @@ namespace Prototype
         public float markGap = 1.7f;
         [Tooltip("A second man on the same opponent stands this much further goal-side than the first, so the two are not stacked on one spot.")]
         public float doubleMarkGap = 2.5f;
-        [Tooltip("How tight a marker gets once HIS man has the ball. At markGap the ball, which sits in front of the man, is 2.1-2.3 m away - outside tightRange, so the turn-in trigger could never fire and the tackle was decoration. Set it equal to markGap to switch this off.")]
+        [Tooltip("How tight a marker gets once HIS man has the ball. At markGap the ball, which sits in front of the man, is 2.1-2.3 m away - out of his reach, so the turn-in trigger could never fire and the tackle was decoration. Set it equal to markGap to switch this off.")]
         public float onBallGap = 1.0f;
 
         [Header("Hold the shape")]
@@ -717,7 +717,7 @@ namespace Prototype
         }
 
         /// <summary>
-        /// Who gets to put a foot in: whoever is ALREADY within lunging range of the ball,
+        /// Who gets to put a foot in: whoever is ALREADY within reach of the ball (Tackle.Reach),
         /// the man marking the carrier first if he is one of them.
         ///
         /// Nobody is sent anywhere to do this - only a man already there gets a go - so it
@@ -736,7 +736,7 @@ namespace Prototype
 
                 Vector3 p = d.transform.position; p.y = 0f;
                 float dist = (p - ballPos).magnitude;
-                if (dist > d.lungeRange) continue;
+                if (dist > Tackle.Reach) continue;
 
                 if (d == Presser) return d;          // his own marker, if he is close enough
                 if (dist < bd) { bd = dist; best = d; }

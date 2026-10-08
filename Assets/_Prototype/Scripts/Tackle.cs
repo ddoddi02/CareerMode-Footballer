@@ -15,7 +15,7 @@ namespace Prototype
     ///
     /// TWO CONDITIONS, BOTH REQUIRED:
     ///
-    ///   1. the DEFENDER is within reach of the BALL   (defender -> ball <= 1 m)
+    ///   1. the DEFENDER is within reach of the BALL   (defender -> ball <= Reach)
     ///   2. no attacker body sits between them
     ///
     /// Note what is NOT a condition: how far the ball is from the man dribbling it.
@@ -29,14 +29,37 @@ namespace Prototype
     ///    shielding attacker untouchable, so the optimal play becomes shielding
     ///    forever. Tackling vs Strength decides that case instead.
     ///
+    ///  - SO IS A CHALLENGE FROM THE FRONT (FrontWin). With no body in the way the bare
+    ///    rule hands him the ball every time, and a challenge from the front is exactly
+    ///    that case: the man on the ball is facing him with it in front of his feet.
+    ///    Once the lunge was cut to Reach, every front-on press won it - the same
+    ///    defender who used to lose every one. A man facing you can still take it past
+    ///    you, so it is a roll too.
+    ///
     ///  - A MISSED TACKLE CAN BE A FOUL. Without a cost, lunging is free and the
     ///    defender should simply spam it. Going through the back of a man is what
     ///    stops that, in football and here.
     /// </summary>
     public static class Tackle
     {
-        public const float Reach = 1.25f;         // condition 1: defender to ball
+        /// <summary>
+        /// Condition 1: defender to ball. Also how far off the ball he will commit from
+        /// (DefenderAI.WantsTackle) - those used to be two numbers, 1.25 and 2.4, and
+        /// every lunge in the gap between them was a guaranteed miss.
+        /// </summary>
+        public const float Reach = 1.25f;
         public const float ShieldRadius = 0.45f;  // roughly a torso
+
+        /// <summary>
+        /// Even-stat chance of winning it with no body in the way - a challenge from the
+        /// front, or the moment a man turns into his marker. A static rather than a const
+        /// only so it can be set while measuring.
+        ///
+        /// 0.35: at 0.50 and 0.65 the side won about two in three and the ball changed
+        /// hands five to six and a half times a minute; at 0.35 it was 1.6-3.7 a minute,
+        /// and press by line still won half its tackles (PROJECT.md 3.15).
+        /// </summary>
+        public static float FrontWin = 0.35f;
 
         /// <summary>Is p inside the corridor from a to b?</summary>
         public static bool IsBetween(Vector3 p, Vector3 a, Vector3 b, float radius)
@@ -94,32 +117,40 @@ namespace Prototype
             }
 
             // --- condition 2 ------------------------------------------------------
+            float p;
             if (!shielded)
             {
-                reason = string.Format("공까지 {0:0.00}m, 사이에 몸이 없었습니다", ballGap);
-                return TackleResult.Won;
+                // Nothing in the way - but he is facing you, and can still go past.
+                p = Mathf.Clamp(FrontWin + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
+                if (Random.value < p)
+                {
+                    reason = string.Format("공까지 {0:0.00}m, 정면에서 발이 먼저 닿았습니다", ballGap);
+                    return TackleResult.Won;
+                }
             }
-
-            // Both conditions would have won it, but a body is in the way. The
-            // specified rule says a passive attacker still loses it.
-            if (!i.attackerResisting)
+            else
             {
-                reason = "가만히 서서는 공을 못 지킵니다";
-                return TackleResult.Won;
+                // A body is in the way. The specified rule says a passive attacker
+                // still loses it.
+                if (!i.attackerResisting)
+                {
+                    reason = "가만히 서서는 공을 못 지킵니다";
+                    return TackleResult.Won;
+                }
+
+                // Contested: he is between the defender and the ball, and he is working.
+                // Even attributes used to be a coin toss. The defender who has got himself
+                // into range and committed now wins it more often than not - a shield buys
+                // time, it does not make a man untouchable.
+                p = Mathf.Clamp(0.6f + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
+                if (Random.value < p)
+                {
+                    reason = "몸싸움에서 밀렸습니다";
+                    return TackleResult.Won;
+                }
             }
 
-            // Contested: he is between the defender and the ball, and he is working.
-            // Even attributes used to be a coin toss. The defender who has got himself
-            // into range and committed now wins it more often than not - a shield buys
-            // time, it does not make a man untouchable.
-            float p = Mathf.Clamp(0.6f + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
-            if (Random.value < p)
-            {
-                reason = "몸싸움에서 밀렸습니다";
-                return TackleResult.Won;
-            }
-
-            // He held him off. Did the defender go through him?
+            // He held him off, or took it past him. Did the defender go through him?
             Vector3 toDef = i.defenderPos - i.attackerPos;
             toDef.y = 0f;
             Vector2 td = new Vector2(toDef.x, toDef.z).normalized;
@@ -134,7 +165,7 @@ namespace Prototype
                 return TackleResult.Foul;
             }
 
-            reason = "몸으로 버텨냈습니다";
+            reason = shielded ? "몸으로 버텨냈습니다" : "정면에서 공을 빼냈습니다";
             return TackleResult.Lost;
         }
     }

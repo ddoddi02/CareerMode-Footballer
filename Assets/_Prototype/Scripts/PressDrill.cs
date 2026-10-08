@@ -206,7 +206,7 @@ namespace Prototype
                 if (d == null || man == null) continue;
 
                 float gap = Flat(man.position - d.transform.position).magnitude;
-                Segment(d.transform.position, man.position, gap <= d.lungeRange ? tightCol : dutyCol);
+                Segment(d.transform.position, man.position, gap <= Tackle.Reach ? tightCol : dutyCol);
             }
         }
 
@@ -297,7 +297,7 @@ namespace Prototype
 
                 Transform man = ManOf(i);
                 float gap = man != null ? Flat(man.position - d.transform.position).magnitude : 0f;
-                bool tight = man != null && gap <= d.lungeRange;
+                bool tight = man != null && gap <= Tackle.Reach;
 
                 GUI.color = tight ? new Color(1f, 0.6f, 0.5f) : new Color(0.85f, 0.9f, 0.95f);
                 GUI.Label(new Rect(16f, y, w, 18f), string.Format(

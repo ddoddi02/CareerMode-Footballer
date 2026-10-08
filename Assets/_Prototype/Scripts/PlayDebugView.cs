@@ -44,10 +44,8 @@ namespace Prototype
         [Header("Which rings")]
         [Tooltip("The radius inside which a defender simply takes a loose ball off you.")]
         public bool showSteal = true;
-        [Tooltip("Defender-to-ball reach - condition 1 of a tackle.")]
+        [Tooltip("Defender-to-ball reach - condition 1 of a tackle, and how far off the ball he will commit from.")]
         public bool showReach = true;
-        [Tooltip("How far off the ball he will commit from.")]
-        public bool showLunge = true;
 
         [Header("Which lanes")]
         public bool showPassCorridor = true;
@@ -69,7 +67,6 @@ namespace Prototype
         [Header("Colours")]
         public Color stealCol = new Color(1f, 0.25f, 0.25f, 0.85f);
         public Color reachCol = new Color(1f, 0.55f, 0.25f, 0.55f);
-        public Color lungeCol = new Color(1f, 0.85f, 0.35f, 0.28f);
         public Color laneOpenCol = new Color(0.35f, 1f, 0.5f, 0.55f);
         public Color laneBlockedCol = new Color(1f, 0.3f, 0.3f, 0.6f);
         public Color shadowCol = new Color(0.6f, 0.6f, 0.7f, 0.28f);
@@ -143,8 +140,10 @@ namespace Prototype
         // ------------------------------------------------------------- rings ----
 
         /// <summary>
-        /// Three rings per defender, and they mean three different things. The innermost
-        /// is the one that hurts: inside it a loose ball is simply his.
+        /// Two rings per defender, and they mean two different things. The inner one is
+        /// the one that hurts: inside it a loose ball is simply his. The outer one is his
+        /// tackle - he commits from no further than he can reach. (There used to be a
+        /// third, the distance he lunged from, and it was wider than his reach.)
         /// </summary>
         void DrawDefenderRings()
         {
@@ -158,7 +157,6 @@ namespace Prototype
                 if (d == null || !d.active) continue;
 
                 Vector3 p = d.transform.position;
-                if (showLunge) Ring(p, d.lungeRange, lungeCol);
                 if (showReach) Ring(p, Tackle.Reach, reachCol);
                 if (showSteal) Ring(p, steal, stealCol);
             }

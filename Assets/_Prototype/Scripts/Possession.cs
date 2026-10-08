@@ -69,10 +69,15 @@ namespace Prototype
         /// </summary>
         void Update()
         {
-            if (ball == null || !ball.Carried) return;
-            Side? s = SideOf(ball.CarrierTransform);
+            if (ball == null || !ball.Carried) { lastCarrier = null; return; }
+            Transform c = ball.CarrierTransform;
+            Side? s = SideOf(c);
             if (s.HasValue && s.Value != InPossession) TurnOver(s.Value, null);
+            lastCarrier = c;
         }
+
+        /// <summary>Who had it at his feet last frame - null if it was loose.</summary>
+        Transform lastCarrier;
 
         /// <summary>
         /// The whole pitch changes hands. Different from Apply in one way that matters:
@@ -101,6 +106,16 @@ namespace Prototype
 
             if (lostAtk != null) lostAtk.ResetPossession();
             if (wonAtk != null) wonAtk.ResetPossession();
+
+            // The man it was taken off is a stride from the man who has it now, and is
+            // about to switch onto his defending brain. Whatever took it - a bot's tackle,
+            // the human's touch - he does not get to go straight back in. Only a man it was
+            // taken straight off: a loose ball won back is nobody's to answer for.
+            if (lastCarrier != null && SideOf(lastCarrier) != to)
+            {
+                DefenderAI loser = lastCarrier.GetComponent<DefenderAI>();
+                if (loser != null) loser.LostTheBall();
+            }
 
             CarryMomentum(to);
             Apply(to);

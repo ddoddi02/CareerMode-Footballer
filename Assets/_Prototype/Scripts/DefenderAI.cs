@@ -44,12 +44,8 @@ namespace Prototype
         public MotionModel motion = new MotionModel();
 
         [Header("Tackle")]
-        [Tooltip("He counts as tight inside this. Only from here does an attempted turn become a tackle.")]
-        public float tightRange = 1.9f;
         [Tooltip("Degrees off our goal within which the carrier counts as having turned in.")]
         public float turnedInAngle = 75f;
-        [Tooltip("He will commit from this far off the ball.")]
-        public float lungeRange = 2.4f;
         [Tooltip("Touch distance that reads as a heavy touch and invites the challenge.")]
         public float exposureTrigger = 0.7f;
         [Tooltip("Chance per second of going in on a tucked-in ball with no turn on. Deliberately near zero - he is not trying to win it.")]
@@ -57,6 +53,8 @@ namespace Prototype
         public float tackleCooldown = 1.1f;
         [Tooltip("How long he is out of it after missing.")]
         public float missRecovery = 1.0f;
+        [Tooltip("How long a man who has just had the ball taken off him - tackled, or touched off him by the human - waits before he may tackle back. He is standing right beside the man who took it, and without this he went straight back in. Covers the new carrier's turn to play it (TeamAttack.maxTurnWait, 0.9 s).")]
+        public float lostBallHold = 1.0f;
         [Range(0f, 1f)] public float tackling01 = 0.60f;
 
         public bool Recovering { get { return Time.time < recoverUntil; } }
@@ -156,18 +154,28 @@ namespace Prototype
                                target != null ? target.GetComponent<IBallCarrier>() : null);
         }
 
-        /// <summary>Does he go in this frame, against this particular carrier?</summary>
+        /// <summary>
+        /// Does he go in this frame, against this particular carrier?
+        ///
+        /// Never from further than he can reach (Tackle.Reach). He used to commit from
+        /// 2.4 m, and the turn-in trigger fired from 1.9 m, against a reach of 1.25 - so
+        /// every lunge in between was a guaranteed miss and a second on the floor. Behind
+        /// a man with his back to goal that rarely mattered: the ball is on the far side
+        /// of him until he turns. From the front it was every challenge, because a
+        /// centre-back bringing it out is facing our goal and counts as turned in from the
+        /// first frame - the presser lunged the moment he came within 1.9 m. Measured:
+        /// 21 of 21 missed lunges from 1.87-1.90 m.
+        /// </summary>
         public bool WantsTackle(Vector3 ballPos, float exposure, IBallCarrier carrier)
         {
             if (Time.time < nextTackle || Recovering) return false;
 
             Vector3 d = ballPos - transform.position;
             d.y = 0f;
-            float gap = d.magnitude;
-            if (gap > lungeRange) return false;
+            if (d.magnitude > Tackle.Reach) return false;
 
             // The one trigger that matters: tight, and he is coming round anyway.
-            if (gap <= tightRange && IsTurningIn(carrier)) return true;
+            if (IsTurningIn(carrier)) return true;
 
             // A touch that has run away from him is free money either way.
             if (exposure > exposureTrigger) return true;
@@ -178,6 +186,16 @@ namespace Prototype
 
         public void BeganTackle() { nextTackle = Time.time + tackleCooldown; }
         public void MissedTackle() { recoverUntil = Time.time + missRecovery; }
+
+        /// <summary>
+        /// The ball has just been taken off his feet - by a tackle, or by the human's
+        /// touch (Possession.TurnOver calls this). He is still within a stride of the man
+        /// who took it, and nothing else stopped him going straight back in: the cooldown
+        /// and the fall are the TACKLER's, and this man tackled nobody. Measured before
+        /// this: at FrontWin 0.50 and above, a third of all turnovers were undone inside
+        /// two seconds. Never shortens a wait he already has.
+        /// </summary>
+        public void LostTheBall() { nextTackle = Mathf.Max(nextTackle, Time.time + lostBallHold); }
 
         // ------------------------------------------------------------------ loop --
 
