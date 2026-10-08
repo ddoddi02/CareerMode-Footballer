@@ -38,6 +38,8 @@ namespace Prototype
         public bool showDuties = true;
         [Tooltip("Draw each man's zone (TeamDefence.holdShape) round his slot.")]
         public bool showZones = true;
+        [Tooltip("Draw the three lines the shape stands in (TeamDefence.holdLines) across the pitch, and the floor nobody goes behind.")]
+        public bool showLines = true;
 
         [Header("Look")]
         public float height = 0.05f;
@@ -49,6 +51,12 @@ namespace Prototype
         public Color zoneOnCol = new Color(0.45f, 0.85f, 1f, 0.7f);
         [Tooltip("A zone whose marker is waiting.")]
         public Color zoneIdleCol = new Color(0.45f, 0.85f, 1f, 0.18f);
+        [Tooltip("The back four, midfield and front lines.")]
+        public Color lineCol = new Color(1f, 1f, 1f, 0.3f);
+        [Tooltip("The line that sent the man on the ball.")]
+        public Color pressLineCol = new Color(1f, 0.85f, 0.35f, 0.7f);
+        [Tooltip("The floor: keeperClearance in front of the keeper.")]
+        public Color floorCol = new Color(1f, 0.3f, 0.3f, 0.6f);
 
         readonly List<LineRenderer> pool = new List<LineRenderer>();
         Material mat;
@@ -136,7 +144,28 @@ namespace Prototype
             used = 0;
             if (taken && showDuties) DrawDuties();
             if (taken && showZones) DrawZones();
+            if (taken && showLines) DrawLines();
             for (int i = used; i < pool.Count; i++) pool[i].enabled = false;
+        }
+
+        /// <summary>
+        /// The three lines across the pitch, the one that went to the ball picked out, and
+        /// the floor in red. Gaps between the lines are what the shape is; a body standing
+        /// on the wrong line is a bug you can see from here.
+        /// </summary>
+        void DrawLines()
+        {
+            if (defence == null) return;
+            float w = TacticalPitch.HalfW;
+            if (defence.HoldingShape)
+                for (int line = 0; line < 3; line++)
+                {
+                    float z = defence.LineZ(line);
+                    Segment(new Vector3(-w, 0f, z), new Vector3(w, 0f, z),
+                            line == defence.PressLine ? pressLineCol : lineCol);
+                }
+            float f = defence.FloorZ;
+            Segment(new Vector3(-w, 0f, f), new Vector3(w, 0f, f), floorCol);
         }
 
         /// <summary>
@@ -246,10 +275,13 @@ namespace Prototype
 
             string carrier = "-";
             if (attack != null && attack.BallCarrier != null) carrier = Short(attack.BallCarrier.name);
+            // Formation.LineOf counts from the back; the lines are named from the front -
+            // 1선 the front three, 3선 the back four.
+            string pressLine = defence != null && defence.PressLine >= 0 ? " (" + (3 - defence.PressLine) + "선)" : "";
             GUI.Label(new Rect(16f, y, w, 20f), string.Format(
-                "공: {0}    압박 강도: {1}    공 담당: {2}", carrier,
+                "공: {0}    압박 강도: {1}    공 담당: {2}{3}", carrier,
                 defence != null ? defence.Press.ToString() : "-",
-                defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-"), sRow);
+                defence != null && defence.Presser != null ? Short(defence.Presser.name) : "-", pressLine), sRow);
             y += 18f;
 
             GUI.Label(new Rect(16f, y, w, 20f), "수비수        담당            거리     뛴 거리/분  전력질주/분", sHead);
