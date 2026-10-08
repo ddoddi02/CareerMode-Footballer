@@ -108,6 +108,24 @@ namespace Prototype
         [Tooltip("How much more room a centre-back gets. Small - he is still the last line.")]
         public float centreBackSupport = 1.35f;
 
+        [Header("Depth - the shape spans our back line to their last line")]
+        [Tooltip("Stand the midfield and the front three at a fraction of the way from our back line to their offside line, instead of on their slot slid with the ball. Off: slot + shift, which left the mezzalas level with their midfield and twenty metres behind the wingers.")]
+        public bool stretchToLines = true;
+        [Tooltip("The front three's depth, as a fraction from our back line (0) to their last line (1).")]
+        [Range(0f, 1f)] public float frontDepth = 0.92f;
+        [Tooltip("The mezzalas. Far enough up to stand between their midfield and their back four.")]
+        [Range(0f, 1f)] public float midDepth = 0.65f;
+        [Tooltip("The pivot, when a bot plays there.")]
+        [Range(0f, 1f)] public float pivotDepth = 0.30f;
+        [Tooltip("A full-back on the ball's side goes up the outside this far. The far one stays in the back line.")]
+        [Range(0f, 1f)] public float fullBackDepth = 0.40f;
+        [Tooltip("The front line stops this far short of their last line - the runs in behind take it the rest of the way.")]
+        public float frontLineGap = 2f;
+        [Tooltip("Longest the side will stretch from back line to front line. Past this the front holds and the ball has to come to it.")]
+        public float maxTeamLength = 42f;
+        [Tooltip("Shortest. When their line is right on top of ours the front still stands this far ahead of it.")]
+        public float minTeamLength = 18f;
+
         [Header("Decoys")]
         [Tooltip("How far out of his zone a dummy run goes, as a multiple of his roam radius.")]
         public float decoyReach = 1.6f;
@@ -168,6 +186,13 @@ namespace Prototype
         Transform support;
         int showAhead = -1, showBehind = -1;
         Vector3 shift;
+
+        /// <summary>This picture's back line and front line, measured toward the goal we attack.</summary>
+        float backAlong, frontAlong;
+
+        /// <summary>Our back line and front line this picture, as z. For the debug view.</summary>
+        public float BackLineZ { get { return backAlong * (attacksPositiveZ ? 1f : -1f); } }
+        public float FrontLineZ { get { return frontAlong * (attacksPositiveZ ? 1f : -1f); } }
 
         readonly List<Vector3> claims = new List<Vector3>();
         readonly List<float> claimRadii = new List<float>();
@@ -477,6 +502,7 @@ namespace Prototype
             support = NearestMate(CarrierPos, carrier);
 
             shift = ShapeShift(ballPos);
+            MeasureLines();
             AssessNumbers();
             pictures++;
 
@@ -738,16 +764,68 @@ namespace Prototype
         Vector3 Anchor(AttackerAI m)
         {
             Vector3 anchor = m.homeSlot + shift;
+            float dir = attacksPositiveZ ? 1f : -1f;
+
+            float t = stretchToLines ? DepthOf(m.role, anchor.x) : -1f;
+            if (t >= 0f)
+            {
+                anchor.z = Mathf.Lerp(backAlong, frontAlong, t) * dir;
+                return anchor;
+            }
+
             if (!pushBackLine) return anchor;
             if (!Formation.IsCentreBack(m.role) && !Formation.IsFullBack(m.role)) return anchor;
 
-            float dir = attacksPositiveZ ? 1f : -1f;
-            float lineAlong = BackLineAlong();
-            float slotAlong = anchor.z * dir;
-
             // Only ever forward. He squeezes the pitch; he never drops off his own slot.
-            anchor.z = Mathf.Max(slotAlong, lineAlong) * dir;
+            anchor.z = Mathf.Max(anchor.z * dir, BackLineAlong()) * dir;
             return anchor;
+        }
+
+        /// <summary>
+        /// How far up the shape this role stands, 0 our back line to 1 our front line - or
+        /// -1 to leave him on his slot (the back four, a far-side full-back, the keeper).
+        /// </summary>
+        float DepthOf(Role r, float x)
+        {
+            if (Formation.IsFullBack(r))
+                return x * intel.Ball.x > 0f ? fullBackDepth : -1f;     // ball on his side
+            switch (Formation.LineOf(r))
+            {
+                case 2: return frontDepth;
+                case 1: return r == Role.DM ? pivotDepth : midDepth;
+                default: return -1f;
+            }
+        }
+
+        /// <summary>
+        /// Our back line and front line for this picture, both measured toward the goal we
+        /// attack.
+        ///
+        /// The slot plus a shift with the ball put the mezzalas at about z=14 with the ball
+        /// on halfway - level with their midfield and twenty metres short of the wingers on
+        /// their back four. Nobody stood in between, so the wingers were alone up there and
+        /// the human had to leave the pivot to fill the gap. Pinning the shape to the two
+        /// lines that actually matter - ours, and their last one - puts the midfield in
+        /// the space between their lines wherever the block happens to be.
+        /// </summary>
+        void MeasureLines()
+        {
+            float dir = attacksPositiveZ ? 1f : -1f;
+
+            // Where our centre-backs stand: their slot slid with the ball, pushed up.
+            Vector3 cb = Formation.WorldPos(SlotOf(Role.LCB), !attacksPositiveZ, TacticalPitch.HalfL) + shift;
+            backAlong = cb.z * dir;
+            if (pushBackLine) backAlong = Mathf.Max(backAlong, BackLineAlong());
+
+            float line = OffsideLine * dir - frontLineGap;
+            frontAlong = Mathf.Clamp(line, backAlong + minTeamLength, backAlong + maxTeamLength);
+        }
+
+        static FormationSlot SlotOf(Role r)
+        {
+            for (int i = 0; i < Formation.F4123.Length; i++)
+                if (Formation.F4123[i].role == r) return Formation.F4123[i];
+            return Formation.F4123[0];
         }
 
         /// <summary>
