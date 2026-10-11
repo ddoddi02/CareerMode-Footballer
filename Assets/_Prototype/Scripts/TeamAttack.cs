@@ -19,8 +19,9 @@ namespace Prototype
     ///   4  run in behind on a timer - without straying offside
     ///   5  if the carrier is outnumbered, one man ahead and one behind come and show
     ///
-    /// The candidate spread is a deterministic spiral, not Random.insideUnitCircle, so a
-    /// replayed drill produces the same movement (PROJECT.md §3.6).
+    /// The candidate spread is a golden-angle spiral, not Random.insideUnitCircle, because
+    /// it covers the zone evenly where random samples clump and leave holes (PROJECT.md
+    /// 3.16 - not for replays: a replay is a recorded highlight, not a re-simulation).
     /// </summary>
     public class TeamAttack : MonoBehaviour
     {
@@ -188,18 +189,22 @@ namespace Prototype
         [Header("Shooting - asked in the same look as the pass and the carry")]
         [Tooltip("Furthest from the goal centre a shot is even considered.")]
         public float shotRange = 25f;
-        [Tooltip("A chance this good is taken whatever else is on. Chance = the share of his spread that goes between the posts x how clear of bodies the line is.")]
-        [Range(0f, 1f)] public float shootGood = 0.6f;
-        [Tooltip("A chance this good is taken when the alternative is losing it: pressed, boxed in, or out of time on the ball.")]
-        [Range(0f, 1f)] public float shootMin = 0.3f;
-        [Tooltip("He aims as near the corner as he can while still putting this share of his spread between the posts. A wide spread pulls the aim back toward the middle.")]
-        [Range(0.5f, 1f)] public float aimConfidence = 0.85f;
-        [Tooltip("The corner he aims at is this far inside the post.")]
+        [Tooltip("A shot this likely to be a goal is taken whatever else is on. Goal = between the posts and past the keeper (GoalkeeperAI.GoalChance) x how clear of bodies the line is. 0.35: about one in three, roughly where football calls it a big chance.")]
+        [Range(0f, 1f)] public float shootGood = 0.35f;
+        [Tooltip("A shot this likely is taken when the alternative is losing it: pressed, boxed in, or out of time on the ball. 0.12: about an average shot in real football - better than giving it away for nothing.")]
+        [Range(0f, 1f)] public float shootMin = 0.12f;
+        [Tooltip("Aim points tried along the goal line, this far apart. He takes whichever is likeliest to be a goal.")]
+        public float aimStep = 0.5f;
+        [Tooltip("The furthest aim point is this far inside the post.")]
         public float postInset = 0.5f;
         [Tooltip("How near the shot a defender has to get to have it. Mirrors DrillDirector.interceptRadius, which decides it for real.")]
         public float blockRadius = 0.7f;
         [Tooltip("Seconds a defender must be late to the line, at its tightest point, for the line to count as fully clear.")]
         public float blockMargin = 0.25f;
+        [Tooltip("Write one line per bot shot - what he expected and what happened - to shotLogPath. For checking the goal chances against real outcomes.")]
+        public bool logShots = true;
+        [Tooltip("Relative to the project folder, OUTSIDE Assets/ - a file written under Assets/ is imported and can set off a recompile.")]
+        public string shotLogPath = "Logs/shots.csv";
 
         public float wCarryRoom = 1.0f;
         public float wCarryProgress = 0.6f;
@@ -230,6 +235,10 @@ namespace Prototype
         public int ShotSerial { get; private set; }
         public Shot LastShot { get; private set; }
 
+        /// <summary>Bumped when the last shot's outcome is known. ShotOutcome says what it was.</summary>
+        public int ShotsResolved { get; private set; }
+        public string ShotOutcome { get; private set; }
+
         /// <summary>A shot he could take from here, and what he makes of it.</summary>
         public struct Shot
         {
@@ -237,9 +246,13 @@ namespace Prototype
             public Vector3 from;
             public Vector3 aim;        // on the goal line
             public float distance;
+            public float angle;        // degrees between the posts, seen from `from`
             public float onTarget;     // share of his spread that goes between the posts
+            public float pastKeeper;   // share that goes between the posts AND past the keeper
             public float clear;        // 0 a defender gets to the line first .. 1 nobody near it
-            public float Chance { get { return onTarget * clear; } }
+            public Vector3 keeper;     // where their keeper stood when he looked
+            public float keeping;      // their keeper's attribute, -1 if there was none
+            public float Goal { get { return pastKeeper * clear; } }
         }
 
         /// <summary>The furthest line our attackers may stand on right now.</summary>
@@ -307,6 +320,7 @@ namespace Prototype
             // one-second-old version of where his team-mates are - the ball is the one
             // thing he is directly engaged with.
             TickPossession();
+            WatchShot();
 
             if (intel.Tick(Time.time, opponents, ball.position, BlockCentre()))
                 Recompute();
@@ -407,8 +421,8 @@ namespace Prototype
             // The shot comes first, in the same look. A good one is taken whatever else is
             // on; a fair one only when the alternative is losing the ball - otherwise he
             // keeps going, and the carry (which leans toward goal) makes it a better one.
-            if (chance.valid && (chance.Chance >= shootGood
-                                 || (chance.Chance >= shootMin && (pressed || !canRun || overdue))))
+            if (chance.valid && (chance.Goal >= shootGood
+                                 || (chance.Goal >= shootMin && (pressed || !canRun || overdue))))
             {
                 CommitShot(chance, who);
                 return;
@@ -482,20 +496,25 @@ namespace Prototype
             LastShot = shot;
             ShotSerial++;
             shotPending = false;
+            OpenShot(who);
         }
 
         /// <summary>
-        /// The shot on from here, if there is one: where he would aim, how much of his
-        /// spread goes between the posts, and whether a body gets to the line first.
+        /// The shot on from here, if there is one: where he would aim, and how likely it is
+        /// to be a goal.
         ///
-        /// THE AIM. As near the corner as he can while still putting aimConfidence of his
-        /// spread between the posts - the question AimReticle's goal-line bar puts to the
-        /// human. A tight spread goes for the corner; a wide one is pulled back toward the
-        /// middle, because a corner aimed at with a two-metre spread is half a miss. The
-        /// corner is the one away from the keeper, or the far post if he is central.
+        /// GOAL = between the posts AND past the keeper (GoalkeeperAI.GoalChance) x how
+        /// clear of bodies the line is (ShotClear). The first part is the keeper's own
+        /// judgement, asked in advance: GoalChance spreads the strike over the same
+        /// sideways miss the kick rolls (AimSpread x Bell(), turned into an angle the way
+        /// Resolve turns it) and asks GoalkeeperAI.Judge - the function that decides the
+        /// real save - about each slice. No copy of either is kept here (PROJECT.md 3.20).
         ///
-        /// THE SPREAD is BallModel.AimSpread, the number the strike will actually roll
-        /// against (Resolve), so the estimate and the kick cannot disagree.
+        /// THE AIM is whichever point along the goal line, aimStep apart and postInset
+        /// inside the posts, is likeliest to be a goal. Nothing picks a corner for him:
+        /// a tight spread finds the far side of the keeper because that is where the most
+        /// goals are, and a wide one is pulled toward the middle because a corner aimed at
+        /// with a two-metre spread is half a miss.
         /// </summary>
         Shot BestShot(AttackerAI who, Vector3 from)
         {
@@ -503,83 +522,64 @@ namespace Prototype
             Vector3 goal = TacticalPitch.GoalCentre(attacksPositiveZ);
             if (Flat(goal - from).magnitude > shotRange) return best;
 
-            float side = CornerSide(from, goal);
+            GoalkeeperAI gk = TheirKeeper();
             float stat = who.Shooting;
             float press = Pressure(from);
+            float speed = BallModel.Speed(BallModel.Base.Shot, stat);
+            float decel = ballBody != null ? ballBody.rollDecel : 5f;
+            float edge = TacticalPitch.GoalHalfW - postInset;
+            float bestGoal = -1f;
 
-            for (float x = TacticalPitch.GoalHalfW - postInset; ; x -= 0.25f)
+            for (float x = -edge; x <= edge + 1e-3f; x += Mathf.Max(aimStep, 0.05f))
             {
-                if (x < 0f) x = 0f;
-                Vector3 aim = new Vector3(goal.x + side * x, 0f, goal.z);
+                Vector3 aim = new Vector3(goal.x + x, 0f, goal.z);
                 Vector3 d = Flat(aim - from);
                 float off = Mathf.Min(Vector2.Angle(who.CarrierForward, new Vector2(d.x, d.z)), alignAngle);
                 float spread = BallModel.AimSpread(stat, d.magnitude, BallModel.Difficulty(press, off, false, false));
-                float on = OnTarget(from, aim, spread, goal);
 
-                if (on >= aimConfidence || x <= 0f)
-                {
-                    best.valid = true;
-                    best.aim = aim;
-                    best.distance = d.magnitude;
-                    best.onTarget = on;
-                    break;
-                }
+                float on;
+                float g = gk != null
+                    ? gk.GoalChance(from, aim, speed, decel, spread, out on)
+                    // No keeper: nobody can reach anything, so past him is just on target.
+                    : GoalkeeperAI.GoalChance(from, aim, speed, decel, spread, goal, attacksPositiveZ,
+                                              default(GoalkeeperAI.Model), 0f, out on);
+                if (g <= bestGoal) continue;
+
+                bestGoal = g;
+                best.valid = true;
+                best.aim = aim;
+                best.distance = d.magnitude;
+                best.onTarget = on;
+                best.pastKeeper = g;
             }
+            if (!best.valid) return best;
 
             best.from = from;
+            best.angle = Mathf.Abs(Mathf.DeltaAngle(
+                Heading(new Vector3(goal.x - TacticalPitch.GoalHalfW, 0f, goal.z) - from),
+                Heading(new Vector3(goal.x + TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
+            best.keeper = gk != null ? Flat(gk.transform.position) : goal;
+            best.keeping = gk != null ? gk.keeping01 : -1f;
             best.clear = ShotClear(from, best.aim, stat);
             return best;
         }
 
-        /// <summary>Which corner: away from their keeper, or the far post if he is central.</summary>
-        float CornerSide(Vector3 from, Vector3 goal)
+        GoalkeeperAI theirKeeper;
+
+        /// <summary>The keeper of the goal we attack: the one body among them with a GoalkeeperAI.</summary>
+        GoalkeeperAI TheirKeeper()
         {
+            if (theirKeeper != null) return theirKeeper;
             for (int k = 0; opponents != null && k < opponents.Length; k++)
             {
-                if (opponents[k] == null || !Formation.IsKeeper(Formation.RoleOf(opponents[k]))) continue;
-                float kx = opponents[k].position.x - goal.x;
-                if (Mathf.Abs(kx) > 0.3f) return -Mathf.Sign(kx);
-                break;
+                if (opponents[k] == null) continue;
+                GoalkeeperAI gk = opponents[k].GetComponent<GoalkeeperAI>();
+                if (gk != null) { theirKeeper = gk; break; }
             }
-            return from.x - goal.x > 0f ? -1f : 1f;
-        }
-
-        /// <summary>
-        /// The share of his strikes that cross between the posts. Resolve turns a sideways
-        /// miss of spread x Bell() metres at the aim into an angle, so this is just the
-        /// chance that Bell() lands between the two posts' angles - exact, not sampled.
-        /// Seen from a tight angle the posts are close together, and that falls out here.
-        /// </summary>
-        static float OnTarget(Vector3 from, Vector3 aim, float spread, Vector3 goal)
-        {
-            Vector3 d = Flat(aim - from);
-            float dist = Mathf.Max(d.magnitude, 0.5f);
-            float h = Heading(d);
-            float a = Mathf.DeltaAngle(h, Heading(Flat(new Vector3(goal.x - TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
-            float b = Mathf.DeltaAngle(h, Heading(Flat(new Vector3(goal.x + TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
-            float lo = Mathf.Clamp(Mathf.Min(a, b), -89f, 89f);
-            float hi = Mathf.Clamp(Mathf.Max(a, b), -89f, 89f);
-            if (spread < 1e-3f) return lo < 0f && hi > 0f ? 1f : 0f;
-
-            float bLo = Mathf.Tan(lo * Mathf.Deg2Rad) * dist / spread;
-            float bHi = Mathf.Tan(hi * Mathf.Deg2Rad) * dist / spread;
-            return Mathf.Clamp01(BellCdf(bHi) - BellCdf(bLo));
+            return theirKeeper;
         }
 
         static float Heading(Vector3 v) { return Mathf.Atan2(v.x, v.z) * Mathf.Rad2Deg; }
-
-        /// <summary>
-        /// P(BallModel.Bell() &lt;= b). Bell is three uniforms summed and rescaled to
-        /// [-1, 1], so this is the Irwin-Hall n=3 distribution function.
-        /// </summary>
-        static float BellCdf(float b)
-        {
-            float s = Mathf.Clamp(1.5f * b + 1.5f, 0f, 3f);
-            if (s <= 1f) return s * s * s / 6f;
-            if (s <= 2f) return (-2f * s * s * s + 9f * s * s - 9f * s + 3f) / 6f;
-            float r = 3f - s;
-            return 1f - r * r * r / 6f;
-        }
 
         /// <summary>
         /// How clear the line is: the same race the carry runs. At the tightest points of
@@ -588,8 +588,9 @@ namespace Prototype
         /// one of them is there first. The first passEscape metres are skipped - nobody
         /// takes it off his boot (DrillDirector.passEscape).
         ///
-        /// The keeper is left out on purpose: he has no brain yet and the ball passes
-        /// through him (PROJECT.md 3.17c). Counting him would be inventing a save.
+        /// The keeper is left out on purpose: the save is already the other half of the
+        /// chance (GoalkeeperAI.GoalChance), and counting him here as well would count
+        /// him twice.
         /// </summary>
         float ShotClear(Vector3 from, Vector3 aim, float stat)
         {
@@ -621,6 +622,82 @@ namespace Prototype
             }
             if (worst == float.MaxValue) return 1f;
             return Mathf.Clamp01(worst / Mathf.Max(blockMargin, 0.01f));
+        }
+
+        // ------------------------------------------------------------ shot log --
+        // One line per bot shot: what he expected, and what the ball then did. The
+        // outcome is read off the world rather than reported by anybody, the same way the
+        // goal itself is (PROJECT.md 3.19c): the keeper's report for a save, the ball over
+        // a line for a goal or a miss, and this side losing the ball for a block.
+
+        bool shotOpen;
+        float shotAt;
+        int keeperReportsAtShot;
+        string shotRole;
+        float shotStat;
+
+        void OpenShot(AttackerAI who)
+        {
+            if (shotOpen) CloseShot("기타");
+            shotOpen = true;
+            shotAt = Time.time;
+            shotRole = who.role.ToString();
+            shotStat = who.Shooting;
+            GoalkeeperAI gk = TheirKeeper();
+            keeperReportsAtShot = gk != null ? gk.Reports : 0;
+        }
+
+        /// <summary>Has the last shot finished doing whatever it did?</summary>
+        void WatchShot()
+        {
+            if (!shotOpen || ballBody == null) return;
+
+            GoalkeeperAI gk = TheirKeeper();
+            if (gk != null && gk.Reports != keeperReportsAtShot)
+            {
+                keeperReportsAtShot = gk.Reports;
+                if (gk.Last.saved) { CloseShot(gk.Last.held ? "잡기" : "쳐내기"); return; }
+            }
+
+            Vector3 b = ballBody.transform.position;
+            float over = attacksPositiveZ ? b.z - TacticalPitch.HalfL : -TacticalPitch.HalfL - b.z;
+            if (over > 0f) { CloseShot(Mathf.Abs(b.x) < TacticalPitch.GoalHalfW ? "골" : "아웃"); return; }
+            if (Mathf.Abs(b.x) > TacticalPitch.HalfW) { CloseShot("아웃"); return; }
+
+            if (ballBody.Carried && BallCarrier != null) { CloseShot("기타"); return; }
+            if (Time.time - shotAt > 6f) CloseShot("기타");
+        }
+
+        /// <summary>The ball has gone to them - off a body on the way, if it was not the keeper.</summary>
+        void OnDisable() { if (shotOpen) CloseShot("블록"); }
+
+        void CloseShot(string outcome)
+        {
+            shotOpen = false;
+            ShotOutcome = outcome;
+            ShotsResolved++;
+            if (!logShots) return;
+
+            try
+            {
+                Shot s = LastShot;
+                string path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Application.dataPath), shotLogPath);
+                string dir = System.IO.Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                if (!System.IO.File.Exists(path))
+                    System.IO.File.WriteAllText(path,
+                        "time,side,role,shooting,from_x,from_z,distance,angle_deg,aim_x,keeper_x,keeper_z,keeping," +
+                        "p_on_target,p_past_keeper,p_clear,p_goal,outcome\n");
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                string line = string.Format(inv,
+                    "{0:0.00},{1},{2},{3:0.00},{4:0.0},{5:0.0},{6:0.0},{7:0.0},{8:0.00},{9:0.00},{10:0.00},{11:0.00},{12:0.000},{13:0.000},{14:0.000},{15:0.000},{16}\n",
+                    shotAt, attacksPositiveZ ? "home" : "away", shotRole, shotStat,
+                    s.from.x, s.from.z, s.distance, s.angle, s.aim.x, s.keeper.x, s.keeper.z, s.keeping,
+                    s.onTarget, s.pastKeeper, s.clear, s.Goal, outcome);
+                System.IO.File.AppendAllText(path, line);
+            }
+            catch (System.Exception e) { Debug.LogWarning("Shot log: " + e.Message); }
         }
 
         /// <summary>How much nearer the goal a ball from `from` to `to` leaves it, in metres.</summary>
@@ -1278,7 +1355,7 @@ namespace Prototype
                     // with the man and with each picture, because a spiral that is
                     // identical every second offers the identical winning square every
                     // second - which is most of why the movement looked like a loop.
-                    // Derived, not random, so a replay still reproduces it (PROJECT.md 3.6).
+                    // Derived rather than random; that is enough to break the loop.
                     float a = (k - 2) * 2.39996323f + index * 1.7f + pictures * 0.61f;
                     float r = radius * Mathf.Sqrt((k - 1.5f) / samples);
                     cand = anchor + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
