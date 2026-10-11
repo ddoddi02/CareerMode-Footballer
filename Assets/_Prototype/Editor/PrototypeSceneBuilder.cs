@@ -230,16 +230,23 @@ public static class PrototypeSceneBuilder
                     continue;
                 }
 
-                // Keepers have no brain yet. Away outfielders defend; home outfielders
-                // move off the ball. The human and the drill's passer are hand-driven and
-                // must not get one.
+                // Keepers get GoalkeeperAI and nothing else. Outfielders get both brains.
+                // The human and the drill's passer are hand-driven and must not get one.
                 bool gk = slot.role == Role.GK;
                 int kind = gk ? 0 : (away ? 1 : 2);
 
                 var body = SpawnSquadMember(root, prefix + slot.label, pos, away,
                                             gk ? mKeeper : (away ? mDefender : mPasser), mNose,
                                             gk ? keeperTint : (away ? awayTint : homeTint), kind);
-                if (!gk)
+                if (gk)
+                {
+                    // His own brain, and only that one: he keeps goal for the side defending
+                    // this end, and never plays it out (DrillDirector.KeeperCaught restarts).
+                    var keeper = body.AddComponent<GoalkeeperAI>();
+                    keeper.defendsPositiveZ = away;      // away keeps the +Z goal
+                    keeper.homeSlot = pos;
+                }
+                else
                 {
                     var a = body.GetComponent<AttackerAI>();
                     a.role = slot.role;

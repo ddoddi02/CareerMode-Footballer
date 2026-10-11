@@ -52,6 +52,22 @@ namespace Prototype
         }
 
         /// <summary>
+        /// P(Bell() &lt;= b). Bell is three uniforms summed and rescaled to [-1, 1], so this
+        /// is the Irwin-Hall (n = 3) distribution function. Anything that asks what share of
+        /// strikes land where - between the posts, past the keeper - integrates over this, so
+        /// the estimate and the kick are rolled from the same distribution. (TeamAttack has
+        /// the same function as a private copy for its post-to-post share.)
+        /// </summary>
+        public static float BellCdf(float b)
+        {
+            float s = Mathf.Clamp(1.5f * b + 1.5f, 0f, 3f);
+            if (s <= 1f) return s * s * s / 6f;
+            if (s <= 2f) return (-2f * s * s * s + 9f * s * s - 9f * s + 3f) / 6f;
+            float r = 3f - s;
+            return 1f - r * r * r / 6f;
+        }
+
+        /// <summary>
         /// Everything that makes the strike harder. Distance is deliberately NOT in
         /// here - it belongs to weight error only.
         /// </summary>

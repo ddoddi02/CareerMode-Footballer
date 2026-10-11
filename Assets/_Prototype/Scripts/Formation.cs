@@ -205,10 +205,11 @@ namespace Prototype
         /// <summary>
         /// What role this body plays, read off whichever brain it carries.
         ///
-        /// The fallback is GK, and it is not arbitrary. Nothing in this scene is without
-        /// a brain except the goalkeeper - he has not got one yet - so an unknown body IS
-        /// one in practice. It also fails in the safe direction: no outfield slot is
-        /// told to mark a keeper (Formation.MarksRole), so he is never picked up.
+        /// The fallback is GK, and it is not arbitrary. The only body in this scene without
+        /// one of the brains above is the goalkeeper - his is GoalkeeperAI, which has no
+        /// role to read - so an unknown body IS one in practice. It also fails in the safe
+        /// direction: no outfield slot is told to mark a keeper (Formation.MarksRole), so
+        /// he is never picked up.
         ///
         /// It used to fall back to DM, and that quietly made every keeper a defensive
         /// midfielder. Nobody noticed while duties were range-gated, because he was

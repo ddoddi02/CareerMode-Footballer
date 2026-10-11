@@ -150,8 +150,8 @@ namespace Prototype
         }
 
         /// <summary>
-        /// Which side a body plays for, or null for a body on neither roster (a keeper,
-        /// who has no brain yet). Read off the rosters, so it is never out of step with
+        /// Which side a body plays for, or null for a body on neither roster (a keeper -
+        /// GoalkeeperAI keeps him out of both). Read off the rosters, so it is never out of step with
         /// who the coordinators think they are coaching.
         /// </summary>
         public Side? SideOf(Transform t)

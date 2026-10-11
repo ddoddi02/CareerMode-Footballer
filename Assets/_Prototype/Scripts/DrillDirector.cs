@@ -190,6 +190,9 @@ namespace Prototype
             // come back on still heading for wherever it last was.
             WarpAll(possession.homeAttack, possession.homeDefence);
             WarpAll(possession.awayAttack, possession.awayDefence);
+            if (keepers == null) keepers = FindObjectsByType<GoalkeeperAI>(FindObjectsSortMode.None);
+            for (int i = 0; i < keepers.Length; i++)
+                if (keepers[i] != null) keepers[i].Warp(keepers[i].homeSlot);
             possession.Restart(kickOff);
 
             // A centre-back starts with it at his feet, and his side's TeamAttack takes it
@@ -377,6 +380,33 @@ namespace Prototype
                 homeHeldSince = Time.time;
                 Flash("되찾았습니다 — 홈 공격");
             }
+        }
+
+        /// <summary>Is the ball live - not being set up for a restart, not showing a result.</summary>
+        public bool InPlay { get { return phase == Phase.Play; } }
+
+        GoalkeeperAI[] keepers;
+
+        /// <summary>
+        /// A keeper has it in his hands. He has no attacking brain to play it with, so this
+        /// is a restart like any other: the round ends and his side starts again from its
+        /// left centre-back - the rule a ball over the line already uses (PROJECT.md 3.26).
+        /// </summary>
+        public void KeeperCaught(GoalkeeperAI k)
+        {
+            if (phase != Phase.Play) return;
+            rounds++;
+            kickOff = k.MySide;
+            Settle(k.MySide == Side.Home);
+            EndRound();
+            Finish("선방", k.MySide == Side.Away ? "원정 골키퍼가 잡았습니다 — 원정 공" : "홈 골키퍼가 잡았습니다 — 홈 공",
+                   k.MySide == Side.Home ? new Color(0.45f, 0.9f, 0.5f) : new Color(0.95f, 0.6f, 0.25f));
+        }
+
+        /// <summary>A keeper has pushed it away. Play goes on; this only says so.</summary>
+        public void KeeperParried(GoalkeeperAI k, bool roundThePost)
+        {
+            Flash(roundThePost ? "선방 — 골대 밖으로 쳐냈습니다" : "선방 — 쳐냈습니다");
         }
 
         /// <summary>The left centre-back of a side - who a restart is given to.</summary>

@@ -624,8 +624,9 @@ namespace Prototype
 
         /// <summary>
         /// The deepest an outfielder may stand, in metres off our goal line: the keeper
-        /// plus keeperClearance. The keeper has no brain and stands on Formation.KeeperDepth;
-        /// if he ever moves, this should read where he actually is.
+        /// plus keeperClearance. The keeper moves now (GoalkeeperAI) but never further off
+        /// his line than Formation.KeeperDepth, so the floor is set off that and stays in
+        /// front of him wherever he is.
         /// </summary>
         float HardFloor { get { return Formation.KeeperDepth + keeperClearance; } }
 
