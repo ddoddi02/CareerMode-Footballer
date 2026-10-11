@@ -138,7 +138,7 @@ namespace Prototype
         public PassRules pass = new PassRules();
         [Tooltip("Keep the ball among the back four. Not a tactic - a rig: it holds the ball in the one place that makes the opposition's pressing sequence run, so the rotation can be watched instead of waited for. See PressDrill.")]
         public bool backFourOnly;
-        [Tooltip("How long a bot stands on the ball before releasing it. Not a delay for its own sake - it is the window the defence has to close the lane he was going to use.")]
+        [Tooltip("Only with playAtOnce off. How long a bot stands on the ball before releasing it. Not a delay for its own sake - it is the window the defence has to close the lane he was going to use.")]
         public float holdMin = 0.55f;
         public float holdMax = 1.40f;
         [Tooltip("He will not strike it more than this far off his own shoulder. Turning onto the ball first is why a pressed man is slower to release it.")]
@@ -156,6 +156,39 @@ namespace Prototype
         [Tooltip("Distance at which an opponent counts as full pressure on the passer.")]
         public float pressTight = 1.2f;
         public float pressLoose = 6f;
+
+        [Header("On the ball - play it or run with it, never stand on it")]
+        [Tooltip("Never stand on it. Pressed: play the open ball at once, first time if that is the ball. Free: no ball straight back or backwards - run with it until a ball forward opens or somebody closes him down. Off: the old way - stand on it for holdMin..holdMax, then pass, over the top if nothing on the floor is open.")]
+        public bool playAtOnce = true;
+        [Tooltip("A defender this close (read live) means he is pressed: he plays it now, back to the man who gave it him if that is the ball. Further off, he is free and goes forward.")]
+        public float pressRoom = 5f;
+        [Tooltip("A free man plays a ball that brings it this much nearer the goal rather than keep running. Anything less, and a free man with ground in front of him takes it forward himself.")]
+        public float progressiveGain = 8f;
+        [Tooltip("A ball that ends up this much further from the goal counts as going backwards. A free man does not play one while he can run.")]
+        public float backPass = 2f;
+        [Tooltip("How often the man on the ball asks again: is a pass on yet, and which way is free.")]
+        public float carryRethink = 0.2f;
+        [Tooltip("How far ahead each carry is aimed. Far enough that he never arrives and eases off; near enough that a defender closing in changes his mind.")]
+        public float carryLook = 6f;
+        [Range(6, 24)] public int carryDirections = 12;
+        [Tooltip("Carrying pace with a defender this close or closer. 3.5 m/s puts the ball 0.54 m out (Ball.TouchPoint) - inside the 0.7 m that invites a challenge on a heavy touch.")]
+        public float carrySpeedTight = 3.5f;
+        public float tightRoom = 2.5f;
+        [Tooltip("Carrying pace with nobody within openRoom. 7 m/s puts the ball 1.2 m out - fine while he is right about being free, a gift if he is wrong.")]
+        public float carrySpeedOpen = 7f;
+        public float openRoom = 10f;
+        [Tooltip("Defenders this close to him are read where they are NOW when he picks a way to run; the rest from the one-second picture. Pressure at his shoulder is felt, not remembered.")]
+        public float feelRadius = 10f;
+        [Tooltip("Seconds he has to be ahead of every defender, all along a route, for it to count as fully open.")]
+        public float carryMargin = 0.6f;
+        [Tooltip("Longest he runs with it with nothing on the floor before he hits it over the top anyway.")]
+        public float maxCarry = 4f;
+        [Tooltip("Carries stay this far inside the touchlines and goal lines. A carried ball is never checked for going out.")]
+        public float carryInset = 3f;
+        public float wCarryRoom = 1.0f;
+        public float wCarryProgress = 0.6f;
+        [Tooltip("Keeping on the way he is already going. Turning with the ball costs a stride, and without this the route flickers every rethink.")]
+        public float wCarryKeep = 0.3f;
 
         /// <summary>The bot with the ball at his feet, if one of ours has it.</summary>
         public AttackerAI BallCarrier { get; private set; }
@@ -209,6 +242,26 @@ namespace Prototype
         float holdUntil = -1f;
         float looseSince = -1f;
 
+        AttackerAI onBall;              // who the on-ball timers below belong to
+        float onBallSince;
+        float nextThink = -1f;
+        Vector3 carryHeading;
+        Transform lastPasser;           // who played our last pass
+        Transform cameFrom;             // who gave the man on the ball his ball
+        float nearNow;                  // nearest defender to him, as the last carry read them
+        readonly List<PitchControl.Runner> chasers = new List<PitchControl.Runner>();
+
+        /// <summary>One way to run with the ball, and how it scored.</summary>
+        struct Carry
+        {
+            public bool valid;
+            public Vector3 target;
+            public Vector3 dir;
+            public float pace;
+            public float margin;     // seconds ahead of the quickest defender, worst point of the route
+            public float progress;   // -1 straight back .. 1 straight at goal
+        }
+
         void Update()
         {
             if (ball == null || members == null || members.Length == 0) return;
@@ -241,6 +294,7 @@ namespace Prototype
             {
                 hasPending = false;
                 holdUntil = -1f;
+                onBall = null;
                 TickChase();
                 TryCollect();
                 return;
@@ -249,10 +303,272 @@ namespace Prototype
             looseSince = -1f;
             SendChaser(null);
 
+            if (playAtOnce) { TickOnBall(BallCarrier); return; }
+
             if (holdUntil < 0f) holdUntil = Time.time + Random.Range(holdMin, holdMax);
             if (Time.time < holdUntil) return;
 
             PlayPass(BallCarrier);
+        }
+
+        /// <summary>
+        /// A man on the ball never just stands on it. Every carryRethink he looks again, and
+        /// what he does depends first on whether anybody is on him (pressRoom, read live):
+        ///
+        ///   PRESSED   open ball on the floor          play it now - first time, back to
+        ///                                             the man who gave it him if that is it
+        ///             none, somewhere to run          run with it, away from them
+        ///             none, boxed in                  over the top
+        ///
+        ///   FREE      a ball that goes forward        play it (progressiveGain)
+        ///             ground in front of him          run with it, and keep running until
+        ///                                             one of the lines above changes
+        ///             no ground in front              a ball to somebody new - not straight
+        ///                                             back, not backwards - then anything
+        ///
+        /// Played literally, "never wait" was a one-touch ball straight back to whoever had
+        /// just passed it: he is already facing that man, so there is no turn to make, and
+        /// 60% of all passes went back where they came from (PROJECT.md 3.17b). A free man
+        /// has time; the first-time return is what a PRESSED man does with no time.
+        ///
+        /// "None on the floor" is asked of the gates, not of whether Choose returns
+        /// something: Choose falls back to a ball over the top whenever the floor is shut,
+        /// so it nearly always has an answer.
+        ///
+        /// The turn onto the pass stays (alignAngle / maxTurnWait). That is not waiting,
+        /// it is his body.
+        /// </summary>
+        void TickOnBall(AttackerAI who)
+        {
+            if (who != onBall)
+            {
+                onBall = who;
+                onBallSince = Time.time;
+                nextThink = -1f;
+                carryHeading = Flat(who.transform.forward);
+                cameFrom = lastPasser;
+                lastPasser = null;
+                who.ClearCarry();
+            }
+
+            if (hasPending) { PlayPass(who); return; }
+            if (Time.time < nextThink) return;
+            nextThink = Time.time + carryRethink;
+
+            Vector3 from = ballBody.transform.position;
+            PassPlan any = PassPlanner.Choose(who.transform, from, PassableMates(), opponents,
+                                              pass, attacksPositiveZ, ballBody, candidates, control);
+            Carry run = BestCarry(who);     // also reads nearNow
+
+            bool onFloor = any.valid && any.kind == PassKind.Ground;
+            bool overdue = Time.time - onBallSince > maxCarry;
+            bool canRun = run.valid && run.margin > 0f;
+
+            if (nearNow < pressRoom)
+            {
+                if (onFloor) { Commit(any, who); return; }
+                if (canRun && !overdue) { RunWith(who, run); return; }
+                if (any.valid) { Commit(any, who); return; }
+                who.ClearCarry();
+                return;
+            }
+
+            // Free. Forward by foot unless a ball forward is on.
+            PassPlan onward = BestOnward(from);
+            if (onward.valid && Gain(from, onward.target) >= progressiveGain) { Commit(onward, who); return; }
+            if (canRun && run.progress > 0f && !overdue) { RunWith(who, run); return; }
+            if (onward.valid) { Commit(onward, who); return; }
+            if (any.valid) { Commit(any, who); return; }
+            who.ClearCarry();
+        }
+
+        void RunWith(AttackerAI who, Carry run)
+        {
+            who.SetCarry(run.target, run.pace);
+            carryHeading = run.dir;
+        }
+
+        void Commit(PassPlan plan, AttackerAI who)
+        {
+            pending = plan;
+            hasPending = true;
+            pendingSince = Time.time;
+            PlayPass(who);
+        }
+
+        /// <summary>How much nearer the goal a ball from `from` to `to` leaves it, in metres.</summary>
+        float Gain(Vector3 from, Vector3 to)
+        {
+            Vector3 goal = TacticalPitch.GoalCentre(attacksPositiveZ);
+            return Flat(goal - from).magnitude - Flat(goal - to).magnitude;
+        }
+
+        /// <summary>
+        /// The best open ball on the floor that a free man would play: not straight back to
+        /// whoever gave it him, and not backwards. Read off the candidates Choose has just
+        /// scored, so the gates and the score are the ones every other pass uses.
+        /// </summary>
+        PassPlan BestOnward(Vector3 from)
+        {
+            PassPlan p = new PassPlan();
+            p.from = from;
+            int best = -1;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                PassCandidate c = candidates[i];
+                if (!c.open || c.receiver == cameFrom) continue;
+                if (Gain(from, c.target) < -backPass) continue;
+                if (best < 0 || c.total > candidates[best].total) best = i;
+            }
+            if (best < 0) return p;
+
+            PassCandidate w = candidates[best];
+            p.valid = true;
+            p.receiver = w.receiver;
+            p.target = w.target;
+            p.distance = w.distance;
+            p.clearance = w.clearance;
+            p.cellDefenders = w.cellDefenders;
+            p.kind = PassKind.Ground;
+            p.winner = w;
+            return p;
+        }
+
+        /// <summary>
+        /// Which way to run with it. Fan out carryDirections routes carryLook long and keep
+        /// the one he wins by most, toward goal, without turning more than he has to.
+        ///
+        /// "Wins" is the same race the control grid runs (PitchControl.TimeToReach):
+        /// along the route, does he get to each point before any of them can get a foot
+        /// to it? That is what makes a defender running at him different from one
+        /// standing in the same spot, which a distance cannot say.
+        ///
+        /// Pace is set by how close the nearest of them is. Ball.TouchPoint does the rest:
+        /// the faster he goes, the further the ball runs off his foot - so he slows down
+        /// as somebody closes, and a man who keeps sprinting into pressure is a man who
+        /// gets robbed (PROJECT.md 3.10).
+        /// </summary>
+        Carry BestCarry(AttackerAI who)
+        {
+            Carry best = new Carry();
+            Vector3 pos = Flat(who.transform.position);
+
+            BuildChasers(pos);
+            float near = NearestLive(pos);
+            nearNow = near;
+            float pace = Mathf.Lerp(carrySpeedTight, carrySpeedOpen,
+                                    Mathf.InverseLerp(tightRoom, openRoom, near));
+
+            PitchControl.Runner me = PitchControl.Of(who.transform, pos, who.Velocity, pace);
+            me.top = pace;      // he races at the pace he will actually carry it, not his sprint
+
+            Vector3 toGoal = Flat(TacticalPitch.GoalCentre(attacksPositiveZ) - pos).normalized;
+            float bestScore = float.NegativeInfinity;
+            int n = Mathf.Max(carryDirections, 4);
+
+            for (int k = 0; k < n; k++)
+            {
+                float a = k * (2f * Mathf.PI / n);
+                Vector3 d = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+
+                // A route into the touchline is a short route, and a short route is no
+                // escape - the ball is never checked for going out while it is carried.
+                Vector3 end = pos + d * carryLook;
+                end.x = Mathf.Clamp(end.x, -TacticalPitch.HalfW + carryInset, TacticalPitch.HalfW - carryInset);
+                end.z = Mathf.Clamp(end.z, -TacticalPitch.HalfL + carryInset, TacticalPitch.HalfL - carryInset);
+                Vector3 run = end - pos;
+                float len = run.magnitude;
+                if (len < carryLook * 0.5f) continue;
+
+                float margin = RouteMargin(ref me, pos, end);
+                float progress = Vector3.Dot(run / len, toGoal) * (len / carryLook);
+                float keep = Vector3.Dot(d, carryHeading);
+
+                float s = wCarryRoom * Mathf.Clamp(margin / Mathf.Max(carryMargin, 0.01f), -1f, 1f)
+                        + wCarryProgress * progress
+                        + wCarryKeep * keep;
+                if (s <= bestScore) continue;
+
+                bestScore = s;
+                best.valid = true;
+                best.target = end;
+                best.dir = d;
+                best.pace = pace;
+                best.margin = margin;
+                best.progress = progress;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// His worst lead along a route, in seconds: at each third of it, how much sooner
+        /// he is there than the quickest of them can get within reach of the ball.
+        /// Negative means somebody gets a foot in first.
+        /// </summary>
+        float RouteMargin(ref PitchControl.Runner me, Vector3 from, Vector3 to)
+        {
+            float worst = float.MaxValue;
+            for (int s = 1; s <= 3; s++)
+            {
+                Vector3 p = Vector3.Lerp(from, to, s / 3f);
+                float mine = PitchControl.TimeToReach(ref me, p.x, p.z);
+
+                float theirs = 99f;
+                for (int c = 0; c < chasers.Count; c++)
+                {
+                    PitchControl.Runner r = chasers[c];
+                    float t = PitchControl.TimeToReach(ref r, p.x, p.z) - Tackle.Reach / Mathf.Max(r.top, 0.1f);
+                    if (t < theirs) theirs = t;
+                }
+                worst = Mathf.Min(worst, theirs - mine);
+            }
+            return worst;
+        }
+
+        /// <summary>
+        /// The defenders a carry has to beat. Anyone within feelRadius is read live; the
+        /// rest come from the same one-second picture as everything else this side
+        /// believes (PROJECT.md 3.15, 3.24).
+        ///
+        /// Why the near ones are live: the man pressing him is a body at his shoulder,
+        /// felt rather than remembered, and avoiding him off a picture a second old means
+        /// running straight into where he now is. Why only the near ones: the delay on
+        /// the rest of the pitch is the difficulty knob this side still has, and a
+        /// dribbler gets no more of a look at the far side than anybody else.
+        /// </summary>
+        void BuildChasers(Vector3 pos)
+        {
+            chasers.Clear();
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+            {
+                if (opponents[k] == null) continue;
+
+                Vector3 p = Flat(opponents[k].position);
+                Vector3 v;
+                if (Flat(p - pos).magnitude <= feelRadius)
+                {
+                    DefenderAI d = opponents[k].GetComponent<DefenderAI>();
+                    v = d != null && d.enabled ? d.Velocity : Vector3.zero;
+                }
+                else
+                {
+                    p = Flat(intel.Projected(k, Time.time));
+                    v = k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero;
+                }
+                chasers.Add(PitchControl.Of(opponents[k], p, v, controlSpeed));
+            }
+        }
+
+        /// <summary>The nearest of them, as the carry reads them (live inside feelRadius).</summary>
+        float NearestLive(Vector3 pos)
+        {
+            float best = 99f;
+            for (int c = 0; c < chasers.Count; c++)
+            {
+                float d = Flat(chasers[c].pos - pos).magnitude;
+                if (d < best) best = d;
+            }
+            return best;
         }
 
         /// <summary>
@@ -424,6 +740,7 @@ namespace Prototype
             }
 
             who.ReleaseBall();
+            lastPasser = who.transform;
             IntendedReceiver = pending.receiver;
             PassSerial++;
             hasPending = false;
@@ -479,6 +796,8 @@ namespace Prototype
             hasPending = false;
             holdUntil = -1f;
             looseSince = -1f;
+            onBall = null;
+            lastPasser = null;
             lastPlan = new PassPlan();
             intel.Clear();
             control.Clear();
@@ -1030,6 +1349,13 @@ namespace Prototype
                              : new Color(0.4f, 0.7f, 1f);
                 Gizmos.DrawWireSphere(m.Station + Vector3.up * 0.1f, 0.8f);
                 Gizmos.DrawLine(m.transform.position, m.Station);
+
+                // The way he is running with it.
+                if (m.HasBall && m.Carrying)
+                {
+                    Gizmos.color = new Color(1f, 0.9f, 0.3f);
+                    Gizmos.DrawLine(m.transform.position + Vector3.up * 0.2f, m.CarryTarget + Vector3.up * 0.2f);
+                }
 
                 // The lane the ball would have to travel.
                 if (carrier != null && m.transform != carrier)

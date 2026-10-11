@@ -81,6 +81,10 @@ namespace Prototype
         /// <summary>He has been sent to go and get a loose ball. Beats his station.</summary>
         public bool Chasing { get; private set; }
 
+        /// <summary>He is running with the ball, toward CarryTarget.</summary>
+        public bool Carrying { get; private set; }
+        public Vector3 CarryTarget { get { return carryTarget; } }
+
         public Vector3 Velocity { get { return vel; } }
 
         /// <summary>
@@ -121,6 +125,8 @@ namespace Prototype
         Vector3 faceTarget;
         bool facing;
         Vector3 chasePoint;
+        Vector3 carryTarget;
+        float carryPace;
 
         void Awake()
         {
@@ -143,6 +149,7 @@ namespace Prototype
             HasBall = false;
             facing = false;
             Chasing = false;
+            Carrying = false;
             collectAt = -99f;
             runUntil = -99f;
             decoyUntil = -99f;
@@ -153,15 +160,29 @@ namespace Prototype
         // -------------------------------------------------------------- the ball --
 
         /// <summary>He has the ball at his feet.</summary>
-        public void TakeBall() { HasBall = true; facing = false; }
+        public void TakeBall() { HasBall = true; facing = false; Carrying = false; }
 
         /// <summary>He has played it. The cooldown stops him collecting his own pass.</summary>
         public void ReleaseBall()
         {
             HasBall = false;
             facing = false;
+            Carrying = false;
             collectAt = Time.time + passCooldown;
         }
+
+        /// <summary>
+        /// Run with it, toward `target`, at `pace`. TeamAttack picks both; how far in front
+        /// of him the ball sits at that pace is Ball.TouchPoint's business, not his.
+        /// </summary>
+        public void SetCarry(Vector3 target, float pace)
+        {
+            Carrying = true;
+            carryTarget = target;
+            carryPace = pace;
+        }
+
+        public void ClearCarry() { Carrying = false; }
 
         /// <summary>Turn to look at where the ball is about to go, so the pass is not struck out of his back.</summary>
         public void FaceTarget(Vector3 p) { faceTarget = p; facing = true; }
@@ -231,14 +252,19 @@ namespace Prototype
 
             if (HasBall)
             {
-                // On the ball he does not go looking for space - he stands it up and
-                // waits for TeamAttack to tell him where it goes.
-                vel = PlayerMotion.Step(vel, transform.position, transform.position,
-                                        speed, yaw, motion, dt);
+                // On the ball he does not go looking for space - TeamAttack tells him
+                // where it goes. Either he runs with it, or he stands it up.
+                Vector3 carryTo = Carrying ? carryTarget : transform.position;
+                vel = PlayerMotion.Step(vel, transform.position, carryTo,
+                                        Carrying ? carryPace : speed, yaw, motion, dt);
                 cc.Move((vel + Vector3.down * 3f) * dt);
 
+                // Running with it, he faces where he is going: the ball sits in front of
+                // his body (Ball.TouchPoint), so a man looking sideways would be pushing
+                // it sideways.
                 Vector3 f = facing ? faceTarget - transform.position
-                                   : (lookAt != null ? lookAt.position - transform.position : Vector3.zero);
+                          : Carrying ? carryTarget - transform.position
+                          : (lookAt != null ? lookAt.position - transform.position : Vector3.zero);
                 transform.rotation = Quaternion.Euler(0f, PlayerMotion.Turn(yaw, f, motion, dt), 0f);
                 return;
             }

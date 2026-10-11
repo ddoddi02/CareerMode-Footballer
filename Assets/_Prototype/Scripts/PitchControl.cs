@@ -190,8 +190,11 @@ namespace Prototype
         /// constant added to both sides of a subtraction, so it cancelled exactly and
         /// changed nothing. The cost of not already running at the square is real now,
         /// and it differs per man AND per square, which a constant never could.
+        ///
+        /// Public because a man running with the ball asks the same question about his
+        /// route, live, without waiting for the next grid (TeamAttack.BestCarry).
         /// </summary>
-        static float TimeToReach(ref Runner r, float px, float pz)
+        public static float TimeToReach(ref Runner r, float px, float pz)
         {
             float dx = px - r.pos.x;
             float dz = pz - r.pos.z;
