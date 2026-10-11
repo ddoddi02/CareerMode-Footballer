@@ -164,6 +164,29 @@ namespace Prototype
             }
         }
 
+        /// <summary>
+        /// How well this slot finishes, 0..1. Feeds the same aim spread as a pass
+        /// (BallModel.AimSpread), so it decides how wide a shot can go - not how hard.
+        ///
+        /// Ordered by who a side expects its goals from: the front three, then the eights,
+        /// and the back line least. Read straight off the role rather than stored on the
+        /// body, so it needs no scene rebuild; real per-player attributes replace it the
+        /// moment there is a squad to load, as with PassingFor.
+        /// </summary>
+        public static float ShootingFor(Role r)
+        {
+            switch (r)
+            {
+                case Role.GK: return 0.20f;
+                case Role.LCB: case Role.RCB: return 0.40f;
+                case Role.LB: case Role.RB: return 0.45f;
+                case Role.DM: return 0.50f;
+                case Role.LCM: case Role.RCM: return 0.62f;
+                case Role.LW: case Role.RW: return 0.70f;
+                default: return 0.78f;      // ST
+            }
+        }
+
         // ------------------------------------------------------- role groups ----
         // The defensive duties are written per role ("full-backs pick up wingers"),
         // so the roles have to be askable as GROUPS rather than one at a time. Kept

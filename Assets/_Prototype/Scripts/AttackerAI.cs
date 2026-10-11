@@ -51,6 +51,9 @@ namespace Prototype
         [Header("On the ball")]
         [Tooltip("How well he passes, 0..1. Drives his own error (PROJECT.md 3.8) and makes him worth passing TO - the selector prefers giving it to a better passer than the man on it.")]
         [Range(0f, 1f)] public float passing = 0.65f;
+        /// <summary>How well he finishes, 0..1. From his slot (Formation.ShootingFor).</summary>
+        public float Shooting { get { return Formation.ShootingFor(role); } }
+
         [Tooltip("How long after playing a pass he will not collect the ball again. Without it he takes his own pass back off the receiver.")]
         public float passCooldown = 0.8f;
 

@@ -185,6 +185,22 @@ namespace Prototype
         public float maxCarry = 4f;
         [Tooltip("Carries stay this far inside the touchlines and goal lines. A carried ball is never checked for going out.")]
         public float carryInset = 3f;
+        [Header("Shooting - asked in the same look as the pass and the carry")]
+        [Tooltip("Furthest from the goal centre a shot is even considered.")]
+        public float shotRange = 25f;
+        [Tooltip("A chance this good is taken whatever else is on. Chance = the share of his spread that goes between the posts x how clear of bodies the line is.")]
+        [Range(0f, 1f)] public float shootGood = 0.6f;
+        [Tooltip("A chance this good is taken when the alternative is losing it: pressed, boxed in, or out of time on the ball.")]
+        [Range(0f, 1f)] public float shootMin = 0.3f;
+        [Tooltip("He aims as near the corner as he can while still putting this share of his spread between the posts. A wide spread pulls the aim back toward the middle.")]
+        [Range(0.5f, 1f)] public float aimConfidence = 0.85f;
+        [Tooltip("The corner he aims at is this far inside the post.")]
+        public float postInset = 0.5f;
+        [Tooltip("How near the shot a defender has to get to have it. Mirrors DrillDirector.interceptRadius, which decides it for real.")]
+        public float blockRadius = 0.7f;
+        [Tooltip("Seconds a defender must be late to the line, at its tightest point, for the line to count as fully clear.")]
+        public float blockMargin = 0.25f;
+
         public float wCarryRoom = 1.0f;
         public float wCarryProgress = 0.6f;
         [Tooltip("Keeping on the way he is already going. Turning with the ball costs a stride, and without this the route flickers every rethink.")]
@@ -209,6 +225,22 @@ namespace Prototype
 
         /// <summary>Bumped every time a pass leaves a foot, so a listener can spot a new one.</summary>
         public int PassSerial { get; private set; }
+
+        /// <summary>Bumped every time a bot shoots. LastShot is what he thought of it.</summary>
+        public int ShotSerial { get; private set; }
+        public Shot LastShot { get; private set; }
+
+        /// <summary>A shot he could take from here, and what he makes of it.</summary>
+        public struct Shot
+        {
+            public bool valid;
+            public Vector3 from;
+            public Vector3 aim;        // on the goal line
+            public float distance;
+            public float onTarget;     // share of his spread that goes between the posts
+            public float clear;        // 0 a defender gets to the line first .. 1 nobody near it
+            public float Chance { get { return onTarget * clear; } }
+        }
 
         /// <summary>The furthest line our attackers may stand on right now.</summary>
         public float OffsideLine { get; private set; }
@@ -249,7 +281,11 @@ namespace Prototype
         Transform lastPasser;           // who played our last pass
         Transform cameFrom;             // who gave the man on the ball his ball
         float nearNow;                  // nearest defender to him, as the last carry read them
+        bool shotPending;
+        Shot shot;
+        float shotSince;
         readonly List<PitchControl.Runner> chasers = new List<PitchControl.Runner>();
+        readonly List<int> chaserIndex = new List<int>();     // which of `opponents` each chaser is
 
         /// <summary>One way to run with the ball, and how it scored.</summary>
         struct Carry
@@ -293,6 +329,7 @@ namespace Prototype
             if (BallCarrier == null)
             {
                 hasPending = false;
+                shotPending = false;
                 holdUntil = -1f;
                 onBall = null;
                 TickChase();
@@ -352,19 +389,32 @@ namespace Prototype
             }
 
             if (hasPending) { PlayPass(who); return; }
+            if (shotPending) { TakeShot(who); return; }
             if (Time.time < nextThink) return;
             nextThink = Time.time + carryRethink;
 
             Vector3 from = ballBody.transform.position;
             PassPlan any = PassPlanner.Choose(who.transform, from, PassableMates(), opponents,
                                               pass, attacksPositiveZ, ballBody, candidates, control);
-            Carry run = BestCarry(who);     // also reads nearNow
+            Carry run = BestCarry(who);     // also reads nearNow, and builds the chasers
+            Shot chance = BestShot(who, from);
 
             bool onFloor = any.valid && any.kind == PassKind.Ground;
             bool overdue = Time.time - onBallSince > maxCarry;
             bool canRun = run.valid && run.margin > 0f;
+            bool pressed = nearNow < pressRoom;
 
-            if (nearNow < pressRoom)
+            // The shot comes first, in the same look. A good one is taken whatever else is
+            // on; a fair one only when the alternative is losing the ball - otherwise he
+            // keeps going, and the carry (which leans toward goal) makes it a better one.
+            if (chance.valid && (chance.Chance >= shootGood
+                                 || (chance.Chance >= shootMin && (pressed || !canRun || overdue))))
+            {
+                CommitShot(chance, who);
+                return;
+            }
+
+            if (pressed)
             {
                 if (onFloor) { Commit(any, who); return; }
                 if (canRun && !overdue) { RunWith(who, run); return; }
@@ -394,6 +444,183 @@ namespace Prototype
             hasPending = true;
             pendingSince = Time.time;
             PlayPass(who);
+        }
+
+        void CommitShot(Shot s, AttackerAI who)
+        {
+            shot = s;
+            shotPending = true;
+            shotSince = Time.time;
+            TakeShot(who);
+        }
+
+        /// <summary>
+        /// Turn onto it, then hit it - the same turn a pass gets (alignAngle / maxTurnWait),
+        /// and the same kick as the human's shot (DrillDirector.Shoot): BallModel.Resolve
+        /// with Base.Shot. No verdict here either. The ball flies, and whether it crosses
+        /// between the posts or into a body is decided by what it actually does
+        /// (PROJECT.md 3.19c).
+        /// </summary>
+        void TakeShot(AttackerAI who)
+        {
+            Vector3 from = ballBody.transform.position;
+            who.FaceTarget(shot.aim);
+
+            Vector3 aim = Flat(shot.aim - from);
+            float off = Vector2.Angle(who.CarrierForward, new Vector2(aim.x, aim.z));
+            bool rushed = Time.time - shotSince > maxTurnWait;
+            if (off > alignAngle && !rushed) return;
+
+            float diff = BallModel.Difficulty(Pressure(from), off, rushed, false);
+            BallModel.Strike st = BallModel.Resolve(from, shot.aim, BallModel.Base.Shot, 0f, who.Shooting, diff);
+            ballBody.Launch(from, st.direction, st.speed);
+
+            who.ReleaseBall();
+            lastPasser = null;
+            IntendedReceiver = null;
+            shot.from = from;
+            LastShot = shot;
+            ShotSerial++;
+            shotPending = false;
+        }
+
+        /// <summary>
+        /// The shot on from here, if there is one: where he would aim, how much of his
+        /// spread goes between the posts, and whether a body gets to the line first.
+        ///
+        /// THE AIM. As near the corner as he can while still putting aimConfidence of his
+        /// spread between the posts - the question AimReticle's goal-line bar puts to the
+        /// human. A tight spread goes for the corner; a wide one is pulled back toward the
+        /// middle, because a corner aimed at with a two-metre spread is half a miss. The
+        /// corner is the one away from the keeper, or the far post if he is central.
+        ///
+        /// THE SPREAD is BallModel.AimSpread, the number the strike will actually roll
+        /// against (Resolve), so the estimate and the kick cannot disagree.
+        /// </summary>
+        Shot BestShot(AttackerAI who, Vector3 from)
+        {
+            Shot best = new Shot();
+            Vector3 goal = TacticalPitch.GoalCentre(attacksPositiveZ);
+            if (Flat(goal - from).magnitude > shotRange) return best;
+
+            float side = CornerSide(from, goal);
+            float stat = who.Shooting;
+            float press = Pressure(from);
+
+            for (float x = TacticalPitch.GoalHalfW - postInset; ; x -= 0.25f)
+            {
+                if (x < 0f) x = 0f;
+                Vector3 aim = new Vector3(goal.x + side * x, 0f, goal.z);
+                Vector3 d = Flat(aim - from);
+                float off = Mathf.Min(Vector2.Angle(who.CarrierForward, new Vector2(d.x, d.z)), alignAngle);
+                float spread = BallModel.AimSpread(stat, d.magnitude, BallModel.Difficulty(press, off, false, false));
+                float on = OnTarget(from, aim, spread, goal);
+
+                if (on >= aimConfidence || x <= 0f)
+                {
+                    best.valid = true;
+                    best.aim = aim;
+                    best.distance = d.magnitude;
+                    best.onTarget = on;
+                    break;
+                }
+            }
+
+            best.from = from;
+            best.clear = ShotClear(from, best.aim, stat);
+            return best;
+        }
+
+        /// <summary>Which corner: away from their keeper, or the far post if he is central.</summary>
+        float CornerSide(Vector3 from, Vector3 goal)
+        {
+            for (int k = 0; opponents != null && k < opponents.Length; k++)
+            {
+                if (opponents[k] == null || !Formation.IsKeeper(Formation.RoleOf(opponents[k]))) continue;
+                float kx = opponents[k].position.x - goal.x;
+                if (Mathf.Abs(kx) > 0.3f) return -Mathf.Sign(kx);
+                break;
+            }
+            return from.x - goal.x > 0f ? -1f : 1f;
+        }
+
+        /// <summary>
+        /// The share of his strikes that cross between the posts. Resolve turns a sideways
+        /// miss of spread x Bell() metres at the aim into an angle, so this is just the
+        /// chance that Bell() lands between the two posts' angles - exact, not sampled.
+        /// Seen from a tight angle the posts are close together, and that falls out here.
+        /// </summary>
+        static float OnTarget(Vector3 from, Vector3 aim, float spread, Vector3 goal)
+        {
+            Vector3 d = Flat(aim - from);
+            float dist = Mathf.Max(d.magnitude, 0.5f);
+            float h = Heading(d);
+            float a = Mathf.DeltaAngle(h, Heading(Flat(new Vector3(goal.x - TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
+            float b = Mathf.DeltaAngle(h, Heading(Flat(new Vector3(goal.x + TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
+            float lo = Mathf.Clamp(Mathf.Min(a, b), -89f, 89f);
+            float hi = Mathf.Clamp(Mathf.Max(a, b), -89f, 89f);
+            if (spread < 1e-3f) return lo < 0f && hi > 0f ? 1f : 0f;
+
+            float bLo = Mathf.Tan(lo * Mathf.Deg2Rad) * dist / spread;
+            float bHi = Mathf.Tan(hi * Mathf.Deg2Rad) * dist / spread;
+            return Mathf.Clamp01(BellCdf(bHi) - BellCdf(bLo));
+        }
+
+        static float Heading(Vector3 v) { return Mathf.Atan2(v.x, v.z) * Mathf.Rad2Deg; }
+
+        /// <summary>
+        /// P(BallModel.Bell() &lt;= b). Bell is three uniforms summed and rescaled to
+        /// [-1, 1], so this is the Irwin-Hall n=3 distribution function.
+        /// </summary>
+        static float BellCdf(float b)
+        {
+            float s = Mathf.Clamp(1.5f * b + 1.5f, 0f, 3f);
+            if (s <= 1f) return s * s * s / 6f;
+            if (s <= 2f) return (-2f * s * s * s + 9f * s * s - 9f * s + 3f) / 6f;
+            float r = 3f - s;
+            return 1f - r * r * r / 6f;
+        }
+
+        /// <summary>
+        /// How clear the line is: the same race the carry runs. At the tightest points of
+        /// the line, does the ball get there before any defender can get within
+        /// blockRadius of it? 1 if every one of them is blockMargin late or worse, 0 if
+        /// one of them is there first. The first passEscape metres are skipped - nobody
+        /// takes it off his boot (DrillDirector.passEscape).
+        ///
+        /// The keeper is left out on purpose: he has no brain yet and the ball passes
+        /// through him (PROJECT.md 3.17c). Counting him would be inventing a save.
+        /// </summary>
+        float ShotClear(Vector3 from, Vector3 aim, float stat)
+        {
+            Vector3 a = Flat(from);
+            Vector3 b = Flat(aim);
+            Vector3 ab = b - a;
+            float len = ab.magnitude;
+            if (len < 1e-3f) return 1f;
+            Vector3 u = ab / len;
+            float v0 = BallModel.Speed(BallModel.Base.Shot, stat);
+            float decel = ballBody != null ? ballBody.rollDecel : 5f;
+
+            float worst = float.MaxValue;
+            for (int c = 0; c < chasers.Count; c++)
+            {
+                Transform body = opponents[chaserIndex[c]];
+                if (body != null && Formation.IsKeeper(Formation.RoleOf(body))) continue;
+
+                PitchControl.Runner r = chasers[c];
+                float along = Mathf.Clamp(Vector3.Dot(Flat(r.pos) - a, u), passEscape, len);
+                for (int k = 0; k < 3; k++)
+                {
+                    float s = k == 0 ? along : Mathf.Lerp(passEscape, len, k / 2f);
+                    Vector3 p = a + u * s;
+                    float tBall = Ball.TravelTime(s, v0, decel);
+                    float tDef = PitchControl.TimeToReach(ref r, p.x, p.z) - blockRadius / Mathf.Max(r.top, 0.1f);
+                    worst = Mathf.Min(worst, tDef - tBall);
+                }
+            }
+            if (worst == float.MaxValue) return 1f;
+            return Mathf.Clamp01(worst / Mathf.Max(blockMargin, 0.01f));
         }
 
         /// <summary>How much nearer the goal a ball from `from` to `to` leaves it, in metres.</summary>
@@ -539,6 +766,7 @@ namespace Prototype
         void BuildChasers(Vector3 pos)
         {
             chasers.Clear();
+            chaserIndex.Clear();
             for (int k = 0; opponents != null && k < opponents.Length; k++)
             {
                 if (opponents[k] == null) continue;
@@ -556,6 +784,7 @@ namespace Prototype
                     v = k < intel.OpponentVel.Length ? intel.OpponentVel[k] : Vector3.zero;
                 }
                 chasers.Add(PitchControl.Of(opponents[k], p, v, controlSpeed));
+                chaserIndex.Add(k);
             }
         }
 
@@ -794,6 +1023,7 @@ namespace Prototype
             IntendedReceiver = null;
             Chaser = null;
             hasPending = false;
+            shotPending = false;
             holdUntil = -1f;
             looseSince = -1f;
             onBall = null;
