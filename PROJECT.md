@@ -1965,7 +1965,7 @@ DarkColor (0,0,0) · PeripheralDim 0.58 · EdgeDim 0.93 · BlindDim 0.972 · Foc
 | `Scripts/StatScale.cs` | **능력치 눈금 1~100**과 경기 쪽 0~1 변환 `(v − 1) / 99` |
 | `Scripts/BodyModel.cs` | **몸 → 경기 보정값과 특성.** 순수 정적 함수. `Evaluate`, `NextTraits` |
 | `Scripts/ShotPower.cs` | **슛 파워 능력치 = 기본값 + 몸 보너스(100 상한) + 특성 점수.** `MuscleBonus`, `FlexibilityBonus`, `TraitPoints`, `Explain`, `Attribute` (10.4) |
-| `Scripts/Drill/ShotDrill.cs` | **슛 훈련 드릴.** 수동(마우스 조준·클릭)과 자동(파워 × 마무리 표). 경기의 `Ball`·`BallModel.Resolve`·`GoalkeeperAI.Judge`를 그대로 쓴다 (10.5) |
+| `Scripts/Drill/ShotDrill.cs` | **슛 훈련 드릴.** 수동(마우스 조준·클릭)과 자동(파워 × 마무리 표). 경기의 `Ball`·`BallModel.Resolve`·`GoalkeeperAI`(`alwaysLive`)를 그대로 쓴다 (10.5) |
 | `Editor/ShotDrillBuilder.cs` | **드릴 씬을 코드로 생성** → `Scenes/ShotDrill.unity`. `Tools > Career > Build Shot Drill Scene` |
 
 ### 10.1 첫 네 항목
@@ -2158,14 +2158,23 @@ DarkColor (0,0,0) · PeripheralDim 0.58 · EdgeDim 0.93 · BlindDim 0.972 · Foc
 
 - **구성:** +Z 골대 쪽 마지막 50m, 골대, 공, 키퍼, 슈터. 카메라는 뒤쪽 위에 고정돼 40m 지점까지 보인다.
   머티리얼은 경기 빌더가 만든 `_Prototype/Materials`를 읽기만 한다.
+- **골문 화면(`GoalCam`, 왼쪽 아래):** 큰 화면에서는 50m 밖의 1.8m 키퍼가 20픽셀쯤이라 다이빙이 녹색 점으로만
+  보인다. 페널티 박스 끝(골라인에서 15m, 높이 4.5m)에서 골문을 보는 두 번째 카메라를 화면 왼쪽 아래 35%×40%에
+  띄운다. 여기서는 눕는 게 분명히 보인다.
 - **경기 코드를 고치지 않는다.**
   - 킥: `BallModel.Resolve(from, aim, 0, 속도, 정확도, 난이도 1)`. baseSpeed 0이면 넘긴 속도를 그대로
     쓰는 길이 이미 있다. 무게 오차(속도 ±)는 경기와 같이 걸린다.
   - 공: 경기의 `Ball`(구름 마찰).
-  - 키퍼: `GoalkeeperAI`. 서는 자리는 그의 것이다. 닿는지·막는지는 `GoalkeeperAI.Judge`, 차기 전 예상 골
-    확률은 `GoalkeeperAI.GoalChance`다. 경기 키퍼와 같은 식이다.
-  - **다이빙만 드릴이 직접 재생한다.** `GoalkeeperAI`는 `DrillDirector`가 "공이 살아 있다"고 할 때만 공을
-    쫓기 때문이다. 잡기·쳐내기·포스트 밖으로 쳐내기 규칙은 `GoalkeeperAI.Dive`와 같게 옮겼다.
+  - 키퍼: **경기의 `GoalkeeperAI` 그대로, `alwaysLive`를 켠다.** `DrillDirector` 없이도 자기 골로 오는 공을
+    판정하고, 다이빙하고(발을 축으로 최대 80°까지 눕는다), `getUp` 동안 누워 있다가 일어난다(§3.27). 드릴은
+    그가 한 일을 `keeper.Reports`(증가)와 `keeper.Last`(saved, held)로 읽기만 한다.
+  - 화면의 "막을 확률"과 차기 전 예상 골은 `GoalkeeperAI.Judge`·`GoalChance`다. 그가 판정에 쓰는 식과 같다.
+    주사위는 그가 따로 굴린다.
+  - 2026-10-15까지는 드릴이 다이빙을 직접 재생했다(직선으로 미끄러지기만 해서 눕지 않았다). 사용자가 "골키퍼가
+    눕는 것처럼 보이지 않는다"고 해서 이 복사본을 지웠다.
+  - **같은 자리에서 두 번 차면 키퍼가 두 번째 공을 무시한다.** 그는 새 슛을 `Ball.LaunchOrigin`(찬 위치)이
+    바뀌었는지로 알아본다. 드릴은 공을 늘 같은 점에 놓으므로 찰 때마다 1mm 안쪽으로 흔들어 준다. 경기에서는
+    같은 점에서 두 번 차는 일이 드물지만, `Ball`에 슛 번호(차는 횟수)가 있으면 이 우회가 필요 없다.
 - **인스펙터:** `ShotDrill.profile`에서 체지방·근육·유연성·마무리·슛 파워 기본값을 플레이 중에 바꾼다.
   `finishingMap`은 정확도 변환(직선 / 60 → 0.70)이다. m/s 변환 임시값도 여기 있다.
 - **수동:** 마우스로 조준(골라인까지 선이 그려진다), 클릭으로 슛. 1~6 자리(11m 정면, 18m 정면, 17m 좌·우,
@@ -2176,9 +2185,10 @@ DarkColor (0,0,0) · PeripheralDim 0.58 · EdgeDim 0.93 · BlindDim 0.972 · Foc
 - **자동(A):** 슛 파워 {40, 60, 80, 100} × 마무리 {40, 60, 85}, 조합마다 12개. 자리를 차례로 돌고, 무작위
   한쪽 포스트 0.6m 안쪽을 노린다. 몸 대신 이 두 값을 덮어쓴다. 결과는 화면 오른쪽과 콘솔에 표로 남는다.
 
-#### 측정 — 자동 모드 144개 (2026-10-14)
+#### 측정 — 자동 모드 144개 (2026-10-14, 옛 키퍼)
 
-키퍼 `keeping01` 0.65(기본), 압박 없음, 마무리는 직선 변환. 조합마다 12개라 골 수는 흔들린다. **예상 골**
+키퍼 `keeping01` 0.65(기본), 압박 없음, 마무리는 직선 변환. 키퍼 수치는 수비 세션이 10-15에 바꾸기 전이다
+(아래 10-15 재측정 참고). 조합마다 12개라 골 수는 흔들린다. **예상 골**
 (차기 전 `GoalChance`의 평균)이 더 안정된 숫자다.
 
 | 슛 파워 | m/s | 40m | 마무리 40 (0.39): 골/잡기/쳐내기/빗나감 · 예상 | 마무리 60 (0.60) | 마무리 85 (0.85) |
@@ -2195,6 +2205,10 @@ DarkColor (0,0,0) · PeripheralDim 0.58 · EdgeDim 0.93 · BlindDim 0.972 · Foc
   빗나갔다.
 - 구석을 노리는 슛이라 골이 많다. §3.17c의 "빈 슛 길에서 골이 너무 쉽다"와 같은 이야기이고, 키퍼 수치는
   수비 세션 몫이다.
+- **2026-10-15, 키퍼를 `GoalkeeperAI`(새 다이빙: 닿는 거리 3.3m, 반응 0.2초, 다이빙 5 m/s)로 바꾼 뒤 짧게 다시
+  쟀다.** 마무리 60, 조합마다 24개: 파워 60 → 골 9 / 잡기 0 / 쳐내기 10 / 빗나감 5, **예상 골 41%**(수비 세션
+  측정 42%와 같다). 파워 100 → 17 / 0 / 3 / 4, **예상 골 69%**. 위 표(옛 키퍼)보다 골이 줄었다(54 → 41%,
+  75 → 69%). 세기가 키퍼를 이기는 경향은 같다.
 - 측정 방법: 에디터가 백그라운드면 `runInBackground`를 켜도 프레임이 안 넘어갔다. 일시정지 상태에서
   `EditorApplication.Step()`을 반복해 돌렸다(카메라 끔, timeScale 3, 스텝당 0.06초). 끝난 뒤 timeScale·
   `captureDeltaTime`·`runInBackground`를 원복했다.

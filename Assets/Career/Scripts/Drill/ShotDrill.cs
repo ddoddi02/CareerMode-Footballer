@@ -13,10 +13,10 @@ namespace Career
     ///
     /// Nothing in _Prototype is changed. The kick is the match's own (BallModel.Resolve with
     /// the speed passed in - its "required speed" path), the ball is the match's Ball, and
-    /// the keeper is a GoalkeeperAI: he stands where the match keeper stands, and whether he
-    /// gets to a ball and keeps it out is GoalkeeperAI.Judge, the same closed form the match
-    /// keeper decides with. Only his dive is played out here, because GoalkeeperAI only goes
-    /// for a ball while a DrillDirector says the ball is live.
+    /// the keeper is the match's GoalkeeperAI with alwaysLive on: he stands, judges, dives,
+    /// lies down and gets up exactly as he does in a match. The drill only reads what he did
+    /// (keeper.Reports / keeper.Last); the save probability on the HUD is GoalkeeperAI.Judge,
+    /// the same closed form he decides with.
     ///
     /// The goal is at +Z. Manual: aim with the mouse, click to shoot. Auto: shot power x
     /// finishing grid, every spot in turn, aimed just inside a post, results to the HUD and
@@ -71,8 +71,8 @@ namespace Career
         public float autoTimeScale = 6f;
         [Tooltip("Auto aims this far inside a post, the side picked at random.")]
         public float cornerInset = 0.6f;
-        [Tooltip("Seconds (game time) to look at the result before the next ball.")]
-        public float pauseAfter = 0.8f;
+        [Tooltip("Seconds (game time) to look at the result before the next ball. A diving keeper stays down for his getUp.")]
+        public float pauseAfter = 1.2f;
 
         // ------------------------------------------------------------- state --
         enum Phase { Ready, Flying, Done }
@@ -82,10 +82,8 @@ namespace Career
 
         // the shot in the air
         Vector3 shotFrom, shotDir;
-        float shotSpeed;
         GoalkeeperAI.Verdict verdict;
-        bool keeperGoing, willSave, willHold, roundPost;
-        float struckAt;
+        int keeperReports;
 
         struct ShotLog
         {
@@ -241,15 +239,18 @@ namespace Career
                                                      out log.onTargetShare);
 
             BallModel.Strike st = BallModel.Resolve(from, aim, 0f, v0, acc, diff);
-            ball.Launch(from, st.direction, st.speed);
+            // The keeper tells one strike from the next by where it was struck from
+            // (Ball.LaunchOrigin), so a second ball from the same spot would look like the first
+            // and he would not move. A millimetre either way keeps every strike new.
+            Vector3 launch = from + new Vector3(Random.Range(-1e-3f, 1e-3f), 0f, Random.Range(-1e-3f, 1e-3f));
+            ball.Launch(launch, st.direction, st.speed);
             shotFrom = from;
             shotDir = Flat(st.direction).normalized;
-            shotSpeed = st.speed;
             log.speed = st.speed;
             float toLine = shotDir.z > 1e-3f ? (GoalZ - from.z) / shotDir.z : Mathf.Infinity;
             log.timeToLine = Ball.TravelTime(toLine, st.speed, ball.rollDecel);
 
-            // The keeper's verdict, exactly as GoalkeeperAI.WatchTheBall makes it.
+            // For the HUD only: the same verdict he is about to reach himself. He rolls his own dice.
             GoalkeeperAI.Line line;
             line.from = from;
             line.dir = shotDir;
@@ -257,15 +258,8 @@ namespace Career
             line.decel = ball.rollDecel;
             verdict = GoalkeeperAI.Judge(line, k, true, m, 0f);
             log.onTarget = verdict.onTarget;
-            keeperGoing = verdict.his;
-            willSave = verdict.his && verdict.reachable && Random.value < verdict.save;
-            willHold = willSave && verdict.stretch <= keeper.holdWithin
-                       && Random.value < Mathf.Lerp(keeper.hold.x, keeper.hold.y, keeper.keeping01);
-            roundPost = willSave && !willHold && verdict.onTarget
-                        && Mathf.Abs(verdict.lineX) >= keeper.roundThePostFrom;
 
-            keeper.enabled = false;              // from here his dive is played out below
-            struckAt = Time.time;
+            keeperReports = keeper.Reports;
             last = log;
             hasLast = false;
             phase = Phase.Flying;
@@ -274,20 +268,12 @@ namespace Career
 
         void Fly()
         {
-            float dt = Time.deltaTime;
-            if (keeperGoing)
+            // He went for it and it is settled: saved (held or pushed away), or past him.
+            if (keeper.Reports != keeperReports)
             {
-                Vector3 to = Flat(verdict.point - keeper.transform.position);
-                if (Time.time >= struckAt + keeper.reaction && to.magnitude > keeper.bodyReach * 0.5f)
-                    keeper.transform.position += to.normalized
-                        * Mathf.Min(keeper.diveSpeed * dt, to.magnitude - keeper.bodyReach * 0.5f);
-
-                float came = Vector3.Dot(Flat(ball.transform.position) - shotFrom, shotDir);
-                if (came + ball.SpeedNow * dt * 1.5f >= verdict.along)
-                {
-                    keeperGoing = false;
-                    if (willSave) { Save(); return; }
-                }
+                keeperReports = keeper.Reports;
+                GoalkeeperAI.Report r = keeper.Last;
+                if (r.saved) { Finish(r.held ? Outcome.Held : Outcome.Parried); return; }
             }
 
             if (ball.transform.position.z >= GoalZ)
@@ -298,28 +284,6 @@ namespace Career
             }
             if (!ball.InFlight) Finish(Outcome.Short);
         }
-
-        void Save()
-        {
-            if (willHold)
-            {
-                ball.Hold(verdict.point);
-                ball.Stop();
-                Finish(Outcome.Held);
-                return;
-            }
-            // Pushed away to the side he went, as GoalkeeperAI.Dive does it.
-            float side = Mathf.Sign(verdict.point.x - shotKeeperX);
-            if (Mathf.Abs(verdict.point.x - shotKeeperX) < 0.05f) side = Random.value < 0.5f ? -1f : 1f;
-            Vector3 dir = roundPost
-                ? new Vector3(side, 0f, 0.5f)
-                : Quaternion.Euler(0f, Random.Range(-20f, 20f), 0f) * new Vector3(side * 0.9f, 0f, -1f);
-            float arrive = Mathf.Max(shotSpeed - ball.rollDecel * verdict.time, 0f);
-            ball.Launch(verdict.point, dir, Mathf.Max(arrive, 6f) * keeper.parryKeep);
-            Finish(Outcome.Parried);
-        }
-
-        float shotKeeperX;
 
         void Finish(Outcome o)
         {
@@ -349,10 +313,7 @@ namespace Career
                 shooter.position = p - toGoal * 0.55f;
                 shooter.rotation = Quaternion.LookRotation(toGoal, Vector3.up);
             }
-            keeper.enabled = true;
             keeper.Warp(keeper.SetPoint());
-            shotKeeperX = keeper.transform.position.x;
-            keeperGoing = false;
             phase = Phase.Ready;
         }
 

@@ -101,6 +101,7 @@ namespace Career.EditorTools
             keeper.defendsPositiveZ = true;
             keeper.homeSlot = keeperGo.transform.position;
             keeper.ball = ball;
+            keeper.alwaysLive = true;            // no DrillDirector here - he goes for every ball at his goal
 
             // ---- shooter ----------------------------------------------------------
             var shooter = Body("Shooter", new Vector3(0f, 0f, GoalZ - 18.55f), mPlayer, mNose);
@@ -127,6 +128,21 @@ namespace Career.EditorTools
             camGo.transform.position = new Vector3(0f, 30f, GoalZ - 52f);
             camGo.transform.LookAt(new Vector3(0f, 0f, GoalZ - 14f));
             camGo.AddComponent<AudioListener>();
+
+            // ---- goal cam: the keeper close up, bottom left ----------------------
+            // From the main camera a 1.8 m keeper 50 m away is twenty pixels tall - a dive
+            // reads as a smudge. This one sits on the edge of the box, so the lean is plain.
+            var goalCamGo = new GameObject("GoalCam");
+            var goalCam = goalCamGo.AddComponent<Camera>();
+            goalCam.rect = new Rect(0.015f, 0.02f, 0.345f, 0.40f);   // under the left HUD box, clear of the results
+            goalCam.depth = cam.depth + 1;
+            goalCam.fieldOfView = 40f;
+            goalCam.nearClipPlane = 0.3f;
+            goalCam.farClipPlane = 120f;
+            goalCam.clearFlags = CameraClearFlags.SolidColor;
+            goalCam.backgroundColor = cam.backgroundColor;
+            goalCamGo.transform.position = new Vector3(0f, 4.5f, GoalZ - 15f);
+            goalCamGo.transform.LookAt(new Vector3(0f, 0.8f, GoalZ - 1f));
 
             // ---- drill ------------------------------------------------------------
             var drill = new GameObject("ShotDrill").AddComponent<ShotDrill>();
