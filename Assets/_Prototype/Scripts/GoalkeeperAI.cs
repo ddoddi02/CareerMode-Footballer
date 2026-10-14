@@ -21,8 +21,14 @@ namespace Prototype
     /// there. Two points are tried: the closest the ball comes to him, and where it
     /// crosses his goal line. For each:
     ///
-    ///   reach(t)  = bodyReach + diveSpeed x (t - reaction), at most maxReach
+    ///   reach(t)  = bodyReach + diveSpeed x (t - ReactionDelay), at most MaxReach
     ///   miss      = how far that point is from where he stands
+    ///
+    /// MaxReach comes from his height - a 190 cm keeper on his line in the middle of the
+    /// goal dives to within 1.5 balls of the bottom corner - and the dive gets there in
+    /// 0.55 s (the user's yardstick, PROJECT.md 3.27). He always knows where the shot is
+    /// going; what holds him back is ReactionDelay, a forced wait that shrinks with his
+    /// reflexes and grows the closer the striker is.
     ///
     /// The one with more to spare is where he goes. Out of reach is a goal (if it was on
     /// target). In reach, his odds fall with how far he has to stretch - and the keeper's
@@ -36,7 +42,11 @@ namespace Prototype
     /// loose, and whoever is first to it has it.
     ///
     /// He acts only while his side is defending, for both a bot's shot and the human's -
-    /// he watches the ball, not who struck it.
+    /// he watches the ball, not who struck it. With alwaysLive he acts on every ball at his
+    /// goal, with no director or possession around him - the shot drill.
+    ///
+    /// The dive is drawn - he goes over and lies there until he gets up - but the drawing
+    /// never decides anything.
     /// </summary>
     public class GoalkeeperAI : MonoBehaviour
     {
@@ -62,17 +72,37 @@ namespace Prototype
         public float speed = 4.5f;
         public MotionModel motion = new MotionModel();
 
+        [Header("Reaction - a delay the system forces on him (ReactionDelay)")]
+        [Tooltip("Reflexes, 1..100 (the attribute scale). Higher is a shorter forced delay.")]
+        [Range(1f, 100f)] public float reflexes = 60f;
+        [Tooltip("The delay at reflexes 1 and at 100, seconds, with the striker delayRefDistance away.")]
+        public Vector2 delayAt1And100 = new Vector2(0.32f, 0.12f);
+        [Tooltip("Striker-to-keeper distance at which the delay is just the value above. Closer is longer and further is shorter, in proportion: x refDistance / distance. 15 m is an 18 m shot against a keeper on his set point, so reflexes 60 there is 0.2 s.")]
+        public float delayRefDistance = 15f;
+        [Tooltip("Bounds on that proportion: no shorter than x0.4 (37.5 m and beyond), no longer than x2 (7.5 m and closer).")]
+        public Vector2 delayFactorRange = new Vector2(0.4f, 2f);
+
         [Header("Reach")]
-        [Tooltip("Seconds after the strike before he moves at all.")]
-        public float reaction = 0.25f;
-        [Tooltip("Off his body he can get a hand or a leg to without diving.")]
+        [Tooltip("Off his body he can get a hand or a leg to without diving, measured to the ball's centre.")]
         public float bodyReach = 0.7f;
-        [Tooltip("How fast the dive carries his hands sideways, m/s.")]
-        public float diveSpeed = 4.5f;
-        [Tooltip("Furthest his fingertips get from where he was standing - a full-length dive.")]
-        public float maxReach = 2.8f;
+        [Tooltip("How fast the dive carries his hands sideways, m/s. 5: from bodyReach out to a full-length dive (3.44 m) in 0.55 s.")]
+        public float diveSpeed = 5f;
+        [Tooltip("His height, cm. Sets how far a full-length dive gets him (diveLengthPerHeight).")]
+        public float heightCm = 190f;
+        [Tooltip("Fingertips from the middle of his body on a full-length dive to the bottom corner, as a multiple of his height. 1.75 x 1.90 m = 3.33 m: standing on his line in the middle of the goal, that leaves 1.5 balls (0.33 m) to the post.")]
+        public float diveLengthPerHeight = 1.75f;
         [Tooltip("Highest he can get a hand to.")]
         public float reachHeight = 2.5f;
+
+        [Header("Without a match around him")]
+        [Tooltip("Go for every ball coming at his goal whether or not a DrillDirector says the ball is live, and whoever had it. For rigs with no match around them - the shot drill.")]
+        public bool alwaysLive;
+
+        [Header("How the dive looks - never what it decides")]
+        [Tooltip("How far over he goes on a full-length dive, degrees off upright.")]
+        public float lieAngle = 80f;
+        [Tooltip("Length of the body that is drawn, m - how far his hands are from his feet once he is down.")]
+        public float drawnLength = 1.8f;
 
         [Header("Odds - keeping01 picks between the two ends")]
         [Tooltip("Chance of keeping out a ball straight at him, at keeping 0 and 1.")]
@@ -121,8 +151,12 @@ namespace Prototype
         bool going;
         bool willSave, willHold, roundPost;
         Vector3 planFrom, planDir, planPoint, planKeeper;
-        float planAlong, planStruck, planSpeed;
+        float planAlong, planStruck, planSpeed, planArrive, planWait;
         Report planReport;
+
+        // the dive as it is drawn
+        bool lying;
+        float diveYaw;
 
         void Awake()
         {
@@ -139,6 +173,7 @@ namespace Prototype
             transform.rotation = Formation.Facing(defendsPositiveZ);
             vel = Vector3.zero;
             going = false;
+            lying = false;
             downUntil = -99f;
             if (ball != null) seenOrigin = ball.LaunchOrigin;
         }
@@ -147,19 +182,20 @@ namespace Prototype
         {
             if (ball == null) return;
             float dt = Time.deltaTime;
-            bool live = director != null && director.isActiveAndEnabled && director.InPlay;
+            bool live = alwaysLive || (director != null && director.isActiveAndEnabled && director.InPlay);
 
             if (live && Defending) WatchTheBall();
             else going = false;
 
             if (going) { Dive(dt); return; }
             if (Time.time < downUntil) return;
+            if (lying) GetUp();
 
             if (live && Defending && Claim()) return;
             Position(dt);
         }
 
-        bool Defending { get { return possession == null || possession.InPossession != MySide; } }
+        bool Defending { get { return alwaysLive || possession == null || possession.InPossession != MySide; } }
 
         // ---------------------------------------------------------- where to be --
 
@@ -238,8 +274,11 @@ namespace Prototype
             planPoint = v.point;
             planKeeper = Flat(transform.position);
             planStruck = Time.time;
+            planWait = v.wait;
+            planArrive = Time.time + v.time;
             planSpeed = Mathf.Max(line.speed - line.decel * v.time, 0f);
             planReport = r;
+            diveYaw = transform.eulerAngles.y;
             going = true;
         }
 
@@ -249,12 +288,60 @@ namespace Prototype
         // it in advance - the attack, deciding whether to shoot - gets the answer the
         // keeper will actually use (PROJECT.md 3.19b, 3.20).
 
-        /// <summary>His reach and his odds.</summary>
+        /// <summary>His reaction, his reach and his odds.</summary>
         public struct Model
         {
-            public float reaction, bodyReach, diveSpeed, maxReach;
+            public float reflexes01, delayRefDistance;
+            public Vector2 delayAt1And100, delayFactorRange;
+            public float bodyReach, diveSpeed, maxReach;
             public Vector2 saveStraight, saveFullStretch;
             public float keeping01;
+        }
+
+        /// <summary>
+        /// Reflexes on 0..1. The same mapping as Career.StatScale.To01 - (v - 1) / 99 - kept
+        /// here as a COPY so that _Prototype does not reference the Career namespace. If that
+        /// one ever changes, change this with it.
+        /// </summary>
+        public float Reflexes01 { get { return Mathf.Clamp01((reflexes - 1f) / 99f); } }
+
+        /// <summary>
+        /// The forced delay before he leaves his feet - the reaction he is SEEN to have.
+        ///
+        /// He knows where every shot is going the moment it is struck (user, 2026-10-15) -
+        /// the closed-form save is decided right then - and this is what keeps that from
+        /// making him unbeatable. It falls with his reflexes and rises as the striker gets
+        /// closer:
+        ///
+        ///   delay = lerp(delayAt1And100, reflexes01) x clamp(refDistance / distance, range)
+        ///
+        /// Inversely with distance because that is how fast the ball crosses his field of
+        /// view: the same shot from half as far sweeps across his eyes twice as fast. Where
+        /// he is going (set or still moving) does not come into it - the user's rule.
+        /// `distance` is from where the ball is struck to him.
+        /// </summary>
+        public static float ReactionDelay(Model m, float distance)
+        {
+            float plain = Mathf.Lerp(m.delayAt1And100.x, m.delayAt1And100.y, m.reflexes01);
+            float f = Mathf.Clamp(m.delayRefDistance / Mathf.Max(distance, 0.1f),
+                                  m.delayFactorRange.x, m.delayFactorRange.y);
+            return plain * f;
+        }
+
+        /// <summary>
+        /// Furthest he gets to a ball's centre on a full-length dive to the bottom corner:
+        /// his fingertips (height x diveLengthPerHeight) plus the ball's radius, because a
+        /// fingertip on the edge of the ball is a touch. For the 190 cm keeper, 3.33 + 0.11
+        /// = 3.44 m - so from the middle of the goal on his line, a ball whose centre is
+        /// more than 3.44 m across, in the last 0.11 m before it touches the post, goes in
+        /// untouched: the 1.5 balls of room (0.33 m) between his fingertips and the post.
+        ///
+        /// This is the LOW corner, the one that matters while every shot is on the ground.
+        /// Higher up he gets less far across; how much less is left open.
+        /// </summary>
+        public float MaxReach
+        {
+            get { return heightCm * 0.01f * diveLengthPerHeight + (ball != null ? ball.radius : 0.11f); }
         }
 
         /// <summary>This keeper's numbers.</summary>
@@ -263,7 +350,9 @@ namespace Prototype
             get
             {
                 Model m;
-                m.reaction = reaction; m.bodyReach = bodyReach; m.diveSpeed = diveSpeed; m.maxReach = maxReach;
+                m.reflexes01 = Reflexes01; m.delayAt1And100 = delayAt1And100;
+                m.delayRefDistance = delayRefDistance; m.delayFactorRange = delayFactorRange;
+                m.bodyReach = bodyReach; m.diveSpeed = diveSpeed; m.maxReach = MaxReach;
                 m.saveStraight = saveStraight; m.saveFullStretch = saveFullStretch; m.keeping01 = keeping01;
                 return m;
             }
@@ -284,6 +373,7 @@ namespace Prototype
             public float save;        // P(he keeps it out), 0 if out of reach
             public float stretch;     // 0 straight at him .. 1 the very end of his reach
             public float along, time; // where on the line he meets it, and when
+            public float wait;        // seconds after the strike before he leaves his feet: ReactionDelay + delay
             public Vector3 point;
             public float lineX;       // where it would cross his goal line
         }
@@ -315,13 +405,14 @@ namespace Prototype
 
             Vector3 k = Flat(keeper);
             float end = Mathf.Min(toLine, stops);
+            v.wait = ReactionDelay(m, (k - b).magnitude) + delay;
 
             // Candidate 1: the closest the ball comes to him. Candidate 2: the line.
             float near = Mathf.Clamp(Vector3.Dot(k - b, u), 0f, end);
             float spareNear, spareLine = float.NegativeInfinity;
-            float tNear = Spare(b, u, v0, decel, near, k, m, delay, out spareNear);
+            float tNear = Spare(b, u, v0, decel, near, k, m, v.wait, out spareNear);
             float tLine = Mathf.Infinity;
-            if (reachesLine) tLine = Spare(b, u, v0, decel, toLine, k, m, delay, out spareLine);
+            if (reachesLine) tLine = Spare(b, u, v0, decel, toLine, k, m, v.wait, out spareLine);
 
             bool lineBetter = v.onTarget && spareLine > spareNear;
             v.along = lineBetter ? toLine : near;
@@ -396,10 +487,10 @@ namespace Prototype
         /// How long the ball takes to get `along` metres down its path, and - out through
         /// `spare` - how much reach he would have left over there. Negative is out of reach.
         /// </summary>
-        static float Spare(Vector3 b, Vector3 u, float v0, float decel, float along, Vector3 k, Model m, float delay, out float spare)
+        static float Spare(Vector3 b, Vector3 u, float v0, float decel, float along, Vector3 k, Model m, float wait, out float spare)
         {
             float t = Ball.TravelTime(along, v0, decel);
-            float reach = Mathf.Min(m.bodyReach + m.diveSpeed * Mathf.Max(0f, t - m.reaction - delay), m.maxReach);
+            float reach = Mathf.Min(m.bodyReach + m.diveSpeed * Mathf.Max(0f, t - wait), m.maxReach);
             spare = reach - Flat(b + u * along - k).magnitude;
             return t;
         }
@@ -412,9 +503,9 @@ namespace Prototype
         {
             if (ball.Carried || !ball.InFlight || ball.LaunchOrigin != seenOrigin) { going = false; return; }
 
-            Vector3 to = Flat(planPoint - transform.position);
-            if (Time.time >= planStruck + reaction && to.magnitude > bodyReach * 0.5f)
-                transform.position += to.normalized * Mathf.Min(diveSpeed * dt, to.magnitude - bodyReach * 0.5f);
+            float start = planStruck + planWait;
+            bool moving = Time.time >= start;
+            if (moving) Pose(Mathf.Clamp01((Time.time - start) / Mathf.Max(planArrive - start, 0.05f)));
 
             // The ball is there when it has come far enough down its path - or will have by
             // the end of this frame. Waiting until it is past would let it cross the point
@@ -423,6 +514,7 @@ namespace Prototype
             float came = Vector3.Dot(Flat(ball.transform.position) - planFrom, planDir);
             if (came + ball.SpeedNow * dt * 1.5f < planAlong) return;
 
+            if (moving) Pose(1f);
             going = false;
             Reports++;
             Last = planReport;
@@ -448,6 +540,42 @@ namespace Prototype
             ball.Launch(planPoint, dir, Mathf.Max(planSpeed, 6f) * parryKeep);
             seenOrigin = ball.LaunchOrigin;                             // his own touch is not a shot
             if (director != null) director.KeeperParried(this, roundPost);
+        }
+
+        /// <summary>
+        /// Draw the dive at progress p - 0 when his reaction is over, 1 when the ball gets
+        /// there. The body pivots over at his feet toward the point, as far as it takes for
+        /// his hands to reach it (up to lieAngle), and the feet slide across only for what
+        /// the lying body still leaves short. He stays down like that until getUp is over.
+        ///
+        /// Nothing here feeds back into the save. That was settled at the strike, in closed
+        /// form (Judge); this only shows it.
+        /// </summary>
+        void Pose(float p)
+        {
+            Vector3 to = Flat(planPoint - planKeeper);
+            float need = Mathf.Min(to.magnitude, MaxReach);
+            if (need < 1e-3f) return;
+            Vector3 dir = to / to.magnitude;
+
+            if (need <= bodyReach)
+            {
+                transform.position = planKeeper + dir * (need * 0.5f * p);     // a step, not a dive
+                return;
+            }
+
+            float lean = Mathf.Min(Mathf.Asin(Mathf.Clamp01(need / drawnLength)) * Mathf.Rad2Deg, lieAngle);
+            float slide = Mathf.Max(0f, need - drawnLength * Mathf.Sin(lean * Mathf.Deg2Rad));
+            transform.position = planKeeper + dir * (slide * p);
+            transform.rotation = Quaternion.AngleAxis(lean * p, Vector3.Cross(Vector3.up, dir))
+                               * Quaternion.Euler(0f, diveYaw, 0f);
+            lying = true;
+        }
+
+        void GetUp()
+        {
+            transform.rotation = Quaternion.Euler(0f, diveYaw, 0f);
+            lying = false;
         }
 
         /// <summary>A loose ball in his box, close enough to fall on.</summary>
