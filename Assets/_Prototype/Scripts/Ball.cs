@@ -71,6 +71,14 @@ namespace Prototype
         public Vector3 LaunchOrigin { get; private set; }
 
         /// <summary>
+        /// Bumped on every strike (Launch, Loft - and Release, which launches). Tells one kick
+        /// from the next even when both are struck from the same spot, which LaunchOrigin
+        /// cannot: the keeper used to compare origins and ignored a second shot from the
+        /// same point.
+        /// </summary>
+        public int LaunchSerial { get; private set; }
+
+        /// <summary>
         /// How far it has run since it was struck. Used to keep whoever was standing on
         /// the passer's toes from simply owning every ball he plays: for the first metre
         /// the ball is still leaving his foot, and a body next to it has not intercepted
@@ -182,6 +190,7 @@ namespace Prototype
             vel = d.normalized * Mathf.Max(speed, 0.01f);
             vy = 0f;
             LaunchOrigin = transform.position;
+            LaunchSerial++;
             Airborne = false;
             InFlight = true;
         }
@@ -214,6 +223,7 @@ namespace Prototype
             vel = dir * (dist / Mathf.Max(hang, 0.05f));
             vy = Mathf.Sqrt(2f * gravity * apex);
             LaunchOrigin = transform.position;
+            LaunchSerial++;
             Airborne = true;
             InFlight = true;
         }

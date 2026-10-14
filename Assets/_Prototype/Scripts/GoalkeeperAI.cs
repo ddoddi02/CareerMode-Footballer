@@ -55,8 +55,15 @@ namespace Prototype
         public bool defendsPositiveZ = true;
         [Tooltip("His slot - where he stands at kickoff.")]
         public Vector3 homeSlot;
-        [Tooltip("Goalkeeping, 0..1. Decides his odds once he gets to a ball, not how far he can get.")]
-        [Range(0f, 1f)] public float keeping01 = 0.65f;
+        [Tooltip("Goalkeeping, 1..100 (the attribute scale). Decides his odds once he gets to a ball, not how far he can get. 65 is the ordinary keeper - 0.65 on the old 0..1 scale.")]
+        [Range(1f, 100f)] public float keeping = 65f;
+
+        /// <summary>
+        /// Goalkeeping on 0..1, worked out from `keeping` - read-only now; TeamAttack logs it
+        /// with every shot. (v - 1) / 99 is a COPY of Career.StatScale.To01, kept here so
+        /// _Prototype does not reference Career; change both together.
+        /// </summary>
+        public float keeping01 { get { return Mathf.Clamp01((keeping - 1f) / 99f); } }
 
         [Header("Refs - found automatically if left empty")]
         public Ball ball;
@@ -75,18 +82,18 @@ namespace Prototype
         [Header("Reaction - a delay the system forces on him (ReactionDelay)")]
         [Tooltip("Reflexes, 1..100 (the attribute scale). Higher is a shorter forced delay.")]
         [Range(1f, 100f)] public float reflexes = 60f;
-        [Tooltip("The delay at reflexes 1 and at 100, seconds, with the striker delayRefDistance away.")]
-        public Vector2 delayAt1And100 = new Vector2(0.32f, 0.12f);
-        [Tooltip("Striker-to-keeper distance at which the delay is just the value above. Closer is longer and further is shorter, in proportion: x refDistance / distance. 15 m is an 18 m shot against a keeper on his set point, so reflexes 60 there is 0.2 s.")]
+        [Tooltip("The delay at reflexes 1 and at 100, seconds, with the striker delayRefDistance away. Reflexes 60: 0.09 s.")]
+        public Vector2 delayAt1And100 = new Vector2(0.16f, 0.04f);
+        [Tooltip("Striker-to-keeper distance at which the delay is just the value above. Closer is longer and further is shorter, in proportion: x refDistance / distance. 15 m is an 18 m shot against a keeper on his set point.")]
         public float delayRefDistance = 15f;
-        [Tooltip("Bounds on that proportion: no shorter than x0.4 (37.5 m and beyond), no longer than x2 (7.5 m and closer).")]
-        public Vector2 delayFactorRange = new Vector2(0.4f, 2f);
+        [Tooltip("Bounds on that proportion: no shorter than x0.5 (30 m and beyond), no longer than x1.4 (10.7 m and closer - every shot from the penalty spot in).")]
+        public Vector2 delayFactorRange = new Vector2(0.5f, 1.4f);
 
         [Header("Reach")]
         [Tooltip("Off his body he can get a hand or a leg to without diving, measured to the ball's centre.")]
         public float bodyReach = 0.7f;
-        [Tooltip("How fast the dive carries his hands sideways, m/s. 5: from bodyReach out to a full-length dive (3.44 m) in 0.55 s.")]
-        public float diveSpeed = 5f;
+        [Tooltip("How fast the dive carries his hands sideways, m/s. 6: from bodyReach out to a full-length dive (3.44 m) in 0.46 s.")]
+        public float diveSpeed = 6f;
         [Tooltip("His height, cm. Sets how far a full-length dive gets him (diveLengthPerHeight).")]
         public float heightCm = 190f;
         [Tooltip("Fingertips from the middle of his body on a full-length dive to the bottom corner, as a multiple of his height. 1.75 x 1.90 m = 3.33 m: standing on his line in the middle of the goal, that leaves 1.5 balls (0.33 m) to the post.")]
@@ -103,8 +110,10 @@ namespace Prototype
         public float lieAngle = 80f;
         [Tooltip("Length of the body that is drawn, m - how far his hands are from his feet once he is down.")]
         public float drawnLength = 1.8f;
+        [Tooltip("A ball he gets to but does not keep out: his hands are drawn this far short of it, so it is seen to go past them rather than through them.")]
+        public float drawnShortBy = 0.4f;
 
-        [Header("Odds - keeping01 picks between the two ends")]
+        [Header("Odds - keeping picks between the two ends")]
         [Tooltip("Chance of keeping out a ball straight at him, at keeping 0 and 1.")]
         public Vector2 saveStraight = new Vector2(0.85f, 0.99f);
         [Tooltip("Chance of keeping out a ball at the very end of his reach, at keeping 0 and 1.")]
@@ -144,7 +153,7 @@ namespace Prototype
         public Side MySide { get { return defendsPositiveZ ? Side.Away : Side.Home; } }
 
         Vector3 vel;
-        Vector3 seenOrigin = new Vector3(float.NaN, 0f, 0f);
+        int seenSerial = -1;
         float downUntil = -99f;
 
         // the ball he is going for
@@ -175,7 +184,7 @@ namespace Prototype
             going = false;
             lying = false;
             downUntil = -99f;
-            if (ball != null) seenOrigin = ball.LaunchOrigin;
+            if (ball != null) seenSerial = ball.LaunchSerial;
         }
 
         void Update()
@@ -239,8 +248,8 @@ namespace Prototype
             if (ball.Carried || !ball.InFlight) { going = false; return; }
 
             // Somebody touched it after he made up his mind - think again.
-            if (ball.LaunchOrigin == seenOrigin) return;
-            seenOrigin = ball.LaunchOrigin;
+            if (ball.LaunchSerial == seenSerial) return;
+            seenSerial = ball.LaunchSerial;
             going = false;
 
             Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
@@ -501,7 +510,7 @@ namespace Prototype
         /// </summary>
         void Dive(float dt)
         {
-            if (ball.Carried || !ball.InFlight || ball.LaunchOrigin != seenOrigin) { going = false; return; }
+            if (ball.Carried || !ball.InFlight || ball.LaunchSerial != seenSerial) { going = false; return; }
 
             float start = planStruck + planWait;
             bool moving = Time.time >= start;
@@ -538,7 +547,7 @@ namespace Prototype
                 ? new Vector3(side, 0f, -up * 0.5f)                     // round the post, over the line
                 : Quaternion.Euler(0f, Random.Range(-20f, 20f), 0f) * new Vector3(side * 0.9f, 0f, up);
             ball.Launch(planPoint, dir, Mathf.Max(planSpeed, 6f) * parryKeep);
-            seenOrigin = ball.LaunchOrigin;                             // his own touch is not a shot
+            seenSerial = ball.LaunchSerial;                             // his own touch is not a shot
             if (director != null) director.KeeperParried(this, roundPost);
         }
 
@@ -555,6 +564,14 @@ namespace Prototype
         {
             Vector3 to = Flat(planPoint - planKeeper);
             float need = Mathf.Min(to.magnitude, MaxReach);
+            // A ball that beats him is seen to. His hands get only as far as the dive carries
+            // them by the time the ball is there - the reach Judge used - and at least
+            // drawnShortBy short of it, so a ball in reach but not kept out goes past them.
+            if (!willSave)
+            {
+                float reachThen = Mathf.Min(bodyReach + diveSpeed * Mathf.Max(0f, planArrive - planStruck - planWait), MaxReach);
+                need = Mathf.Min(reachThen, Mathf.Max(0f, to.magnitude - drawnShortBy));
+            }
             if (need < 1e-3f) return;
             Vector3 dir = to / to.magnitude;
 
