@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.Rendering.Universal.ShaderGUI;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -652,12 +653,34 @@ public static class PrototypeSceneBuilder
         {
             existing.shader = m.shader;
             existing.CopyPropertiesFromMaterial(m);
+            Validate(existing);
             EditorUtility.SetDirty(existing);
             Object.DestroyImmediate(m);
             return existing;
         }
+        Validate(m);
         AssetDatabase.CreateAsset(m, path);
         return m;
+    }
+
+    /// <summary>
+    /// Put the material through what URP's material inspector does to it
+    /// (ShaderGUI.ValidateMaterial): the RenderType tag, the passes a surface type does
+    /// not use, the alpha blend factors, and the legacy _Color kept equal to _BaseColor.
+    ///
+    /// ProtoMat builds its materials in code, so they never go through the inspector,
+    /// and copying one onto a saved asset used to wipe all of that every rebuild - the
+    /// transparent Grid lost its RenderType and got its ShadowCaster and DepthOnly passes
+    /// back. These are the calls the Lit and Unlit inspectors make; LitDetailGUI's is left
+    /// out because it is internal and only switches detail-map keywords, which nothing
+    /// here uses.
+    /// </summary>
+    static void Validate(Material m)
+    {
+        if (m.shader != null && m.shader.name == "Universal Render Pipeline/Lit")
+            BaseShaderGUI.SetMaterialKeywords(m, LitGUI.SetMaterialKeywords);
+        else
+            BaseShaderGUI.SetMaterialKeywords(m);
     }
 
     static Material Mat(string name, Color c) { return Save(ProtoMat.Lit(c), name); }

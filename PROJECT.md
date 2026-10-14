@@ -525,10 +525,13 @@ FrontWin     짝 표                          줄별 압박
 멈춘다(세 줄 켬/끔 모두).
 **필드 이름을 재사용하면 씬의 옛 값이 되살아난다** — 다음에 같은 이름을 쓸 때는 이걸 먼저 볼 것.
 
-**주의 — 빌더는 색 머티리얼(`Materials/*.mat`, VisionOverlay 제외)을 다시 쓴다.** 새로 만든
-런타임 머티리얼에서 속성을 복사하므로 URP가 붙여 둔 `RenderType` 태그와 꺼 둔 패스(투명 Grid의
-`ShadowCaster`·`DepthOnly`)가 지워진다. 이번 재생성에서는 .mat 변경을 git으로 되돌렸다. 빌더를
-돌린 뒤에는 `git status`에서 .mat을 확인할 것.
+**빌더는 색 머티리얼(`Materials/*.mat`, VisionOverlay 제외)을 다시 쓰고, URP 검증도 거친다.**
+`ProtoMat`은 머티리얼을 코드로 만들어서 URP 머티리얼 인스펙터를 거치지 않는다. 그걸 저장된 애셋에
+복사만 하면 URP가 붙여 둔 `RenderType` 태그, 꺼 둔 패스(투명 Grid의 `ShadowCaster`·`DepthOnly`),
+`_DstBlendAlpha`, `_BaseColor`와 맞춰 둔 `_Color`가 매번 지워졌다(2026-10-08·10-11 재생성 때마다
+git으로 되돌렸다). 2026-10-14부터 `PrototypeSceneBuilder.Validate`가 저장 직전에 인스펙터와 같은
+호출(`BaseShaderGUI.SetMaterialKeywords`, Lit는 `LitGUI.SetMaterialKeywords` 포함)을 한다.
+빌더의 머티리얼 경로를 다시 돌리면 .mat 10개가 바이트 단위로 커밋된 것과 같다.
 
 #### 왜 존 수비를 버렸나 — 되돌리기 전에 읽을 것
 
