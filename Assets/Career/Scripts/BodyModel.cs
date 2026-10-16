@@ -107,7 +107,9 @@ namespace Career
             float aerial, agility;
             HeightEffects(p.heightCm, p.talent, out aerial, out agility);
             m.aerial = aerial;
-            m.agility *= agility;     // on top of what fat (and too much muscle) do to it
+            m.agility *= agility * FlexAgility(p.flexibility);     // on top of what fat (and too much muscle) do to it
+            m.lowerBodyInjury *= FlexInjury(p.flexibility);
+            m.muscleInjury *= FlexInjury(p.flexibility);
             float stamina, injury;
             PerkCatalog.Multipliers(p.perks, out stamina, out injury);
             m.stamina *= stamina;
@@ -148,17 +150,32 @@ namespace Career
         }
 
         /// <summary>
-        /// What the height now does, for this talent. The easy talents keep only the winning side
-        /// (TalentDef.heightDownsides): neither multiplier goes under 1.
+        /// What the height now does, for this talent. On the easy talents growing tall costs
+        /// nothing (TalentDef.heightDownsides): agility does not fall under 1. Being short still
+        /// costs in the air on every talent (user, 2026-10-18).
         /// </summary>
         public static void HeightEffects(float heightCm, TalentTier talent, out float aerial, out float agility)
         {
             aerial = Aerial(heightCm);
             agility = HeightAgility(heightCm);
-            if (TalentCatalog.Get(talent).heightDownsides) return;
-            aerial = Mathf.Max(1f, aerial);
-            agility = Mathf.Max(1f, agility);
+            if (!TalentCatalog.Get(talent).heightDownsides) agility = Mathf.Max(1f, agility);
         }
+
+        // ---- flexibility: agility and injuries (user, 2026-10-18; shot power is ShotPower's) --
+        /// <summary>Fixed, not the talent's start: the same flexibility does the same on every talent. The shot power bonus's zero, the same number.</summary>
+        public const float FlexibilityReference = ShotPower.FlexibilityReference;
+        /// <summary>Agility at flexibility 100 (and the mirror at 1): +-8%. A help, not the main thing - fat and height are.</summary>
+        public const float FlexAgilitySwing = 0.08f;
+        /// <summary>Injuries at flexibility 100: x0.85; at 1: x1.15. Suppleness is what keeps muscles from tearing.</summary>
+        public const float FlexInjurySwing = 0.15f;
+
+        static float FlexT(float flexibility)
+        {
+            return Mathf.Clamp((flexibility - FlexibilityReference) / (StatScale.Max - FlexibilityReference), -1f, 1f);
+        }
+
+        public static float FlexAgility(float flexibility) { return 1f + FlexAgilitySwing * FlexT(flexibility); }
+        public static float FlexInjury(float flexibility) { return 1f - FlexInjurySwing * FlexT(flexibility); }
 
         /// <summary>Agility from height alone: 1 at 170 cm, 1.11 at 155, 0.925 at 180.</summary>
         public static float HeightAgility(float heightCm)

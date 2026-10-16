@@ -5,53 +5,25 @@ using UnityEngine;
 namespace Career
 {
     /// <summary>
-    /// The point rules of character creation (user, 2026-10-16: Project Zomboid style - points
-    /// buy good perks, bad perks pay points back, and that is how the character is balanced).
-    /// Everything here is a PROVISIONAL first guess (PROJECT.md 10.6).
+    /// The rules of character creation. Perks are Project Zomboid's (user, 2026-10-16/18): 10
+    /// points for everyone, good perks spend them, bad perks add to them. Stats are not bought
+    /// with points (user, 2026-10-18: "set the 1..100 stats directly; their mean is the
+    /// overall"): the talent gives a stat budget - its start overall times the number of
+    /// stats - and the player shares it out, so raising one stat means lowering another and the
+    /// mean stays the talent's start overall. Everything here is PROVISIONAL (PROJECT.md 10.6).
     /// </summary>
     public static class CreationRules
     {
-        /// <summary>
-        /// Points come from the talent (TalentDef.perkPoints: 24 / 20 / 16 / 12 - all above the old
-        /// 10, and more the easier). False gives every talent FlatPoints instead.
-        /// </summary>
-        public static bool PointsByTalent = true;
-        public const int FlatPoints = 20;
+        /// <summary>Perk points, the same for every talent (user).</summary>
+        public const int PerkPoints = 10;
 
-        public static int StartingPoints(TalentTier t)
-        {
-            return PointsByTalent ? TalentCatalog.Get(t).perkPoints : FlatPoints;
-        }
-
-        /// <summary>
-        /// One pool for stats, build and perks (true), or a separate stat budget (false). One
-        /// pool is the closer reading of "balance it with points": a point can go into finishing
-        /// or into a perk, and the player weighs the two.
-        /// </summary>
-        public static bool SharedPool = true;
-        /// <summary>The stat budget when the pool is not shared. Perks and build use StartingPoints.</summary>
-        public const int StatBudget = 8;
-
-        /// <summary>Stats move in steps of this many.</summary>
+        /// <summary>Stats move in steps of this many (less at the ends of the scale or of the budget).</summary>
         public const int StatStep = 5;
-        /// <summary>The first this-many points above ordinary cost 1 per step; past it, 2.</summary>
-        public const int CheapAbove = 20;
-        /// <summary>Lowering a stat pays 1 per step back, down to this far under ordinary; lower still pays nothing.</summary>
-        public const int RefundBelow = 20;
 
-        /// <summary>
-        /// Points a stat at `value` costs against `ordinary` - the talent's start overall, where
-        /// every stat begins. Negative pays back.
-        /// </summary>
-        public static int StatCost(int value, int ordinary)
+        /// <summary>The stat points a talent shares out: start overall x the number of stats.</summary>
+        public static int StatBudget(TalentTier t)
         {
-            int d = value - ordinary;
-            if (d >= 0)
-            {
-                int cheap = Mathf.Min(d, CheapAbove), dear = Mathf.Max(0, d - CheapAbove);
-                return cheap / StatStep + 2 * (dear / StatStep);
-            }
-            return -(Mathf.Min(-d, RefundBelow) / StatStep);
+            return TalentCatalog.Get(t).startOverall * Stats.Length;
         }
 
         // ---- stats on the screen -------------------------------------------------------
@@ -76,14 +48,15 @@ namespace Career
                           perkDelta = p => p.finishing, apply = (pr, v) => pr.finishing = v, read = pr => pr.finishing },
             new StatDef { id = "shotPowerBase", name = "슛 파워 기본값", effect = "슛 세기 (몸 보너스 전)", link = PerkLink.Live,
                           perkDelta = p => 0, apply = (pr, v) => pr.shotPowerBase = v, read = pr => pr.shotPowerBase },
-            new StatDef { id = "flexibility", name = "유연성", effect = "슛 파워 보너스", link = PerkLink.Live,
+            new StatDef { id = "flexibility", name = "유연성", effect = "슛 파워·민첩·부상", link = PerkLink.Live,
                           perkDelta = p => p.flexibility, apply = (pr, v) => pr.flexibility = v, read = pr => pr.flexibility },
             new StatDef { id = "mentalStrength", name = "정신력", effect = "역할 미정", link = PerkLink.Placeholder,
                           perkDelta = p => p.mentalStrength, apply = (pr, v) => pr.mentalStrength = v, read = pr => pr.mentalStrength },
         };
 
         /// <summary>
-        /// Overall: the plain mean of the 1..100 stats in <see cref="Stats"/>, perks included.
+        /// Overall: the plain mean of the 1..100 stats in <see cref="Stats"/>, perks included
+        /// (user: "the mean of the stats is the overall").
         /// Not the body (its multipliers are a different kind of number, and the build has its
         /// own cost), and not worked-out shot power (it goes past 100 with perks and would count
         /// muscle twice). Every stat weighs the same until the user says otherwise.
@@ -192,7 +165,20 @@ namespace Career
             for (int i = 0; i < stats.Length; i++) stats[i] = Mathf.Clamp(stats[i] + shift, StatScale.Min, StatScale.Max);
         }
 
-        public int StartingPoints { get { return CreationRules.StartingPoints(talent); } }
+        public int StartingPoints { get { return CreationRules.PerkPoints; } }
+
+        public int StatBudget { get { return CreationRules.StatBudget(talent); } }
+
+        /// <summary>Stat points not yet given to a stat. Zero when the stats are all shared out.</summary>
+        public int StatLeft
+        {
+            get
+            {
+                int s = 0;
+                for (int i = 0; i < stats.Length; i++) s += stats[i];
+                return StatBudget - s;
+            }
+        }
 
         public float Overall
         {
@@ -232,16 +218,6 @@ namespace Career
             weightKg = Mathf.Clamp(weightKg, MinWeight, CreationRules.WeightMax);
         }
 
-        public int StatSpend
-        {
-            get
-            {
-                int s = 0;
-                for (int i = 0; i < stats.Length; i++) s += CreationRules.StatCost(stats[i], Ordinary);
-                return s;
-            }
-        }
-
         public int PerkSpend
         {
             get
@@ -252,18 +228,16 @@ namespace Career
             }
         }
 
-        /// <summary>Points left in the main pool (stats too, when the pool is shared).</summary>
+        /// <summary>Perk points left. Below zero, the character cannot be confirmed.</summary>
         public int Remaining
         {
-            get { return StartingPoints - PerkSpend - (CreationRules.SharedPool ? StatSpend : 0); }
+            get { return StartingPoints - PerkSpend; }
         }
 
-        /// <summary>Stat points left when the pool is not shared.</summary>
-        public int StatRemaining { get { return CreationRules.StatBudget - StatSpend; } }
-
+        /// <summary>Perk points not below zero, and every stat point given out.</summary>
         public bool CanConfirm
         {
-            get { return Remaining >= 0 && (CreationRules.SharedPool || StatRemaining >= 0); }
+            get { return Remaining >= 0 && StatLeft == 0; }
         }
 
         /// <summary>What perks add to stat `i`.</summary>
@@ -279,9 +253,18 @@ namespace Career
             return Mathf.Clamp(stats[i] + PerkDelta(i), StatScale.Min, StatScale.Max);
         }
 
-        public void StepStat(int i, int dir)
+        /// <summary>
+        /// Move a stat a step. Up takes from the unspent budget (so another stat has to come down
+        /// first); down gives back to it. Never past 1..100.
+        /// </summary>
+        public bool StepStat(int i, int dir)
         {
-            stats[i] = Mathf.Clamp(stats[i] + dir * CreationRules.StatStep, StatScale.Min, StatScale.Max);
+            int by = dir > 0
+                ? Mathf.Min(CreationRules.StatStep, StatLeft, StatScale.Max - stats[i])
+                : Mathf.Min(CreationRules.StatStep, stats[i] - StatScale.Min);
+            if (by <= 0) return false;
+            stats[i] += dir > 0 ? by : -by;
+            return true;
         }
 
         /// <summary>Pick or drop a perk. A perk ruled out by one already picked is not taken.</summary>

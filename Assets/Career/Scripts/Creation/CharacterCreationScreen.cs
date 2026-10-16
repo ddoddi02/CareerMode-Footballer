@@ -36,10 +36,11 @@ namespace Career
         readonly Dictionary<TalentTier, Button> talentCards = new Dictionary<TalentTier, Button>();
 
         // what Refresh rewrites
-        Text pointsText, statusText, derivedText, confirmLabel, poolLabel, heightLabel, peakLabel, weightLabel, muscleLabel, talentLabel;
+        Text pointsText, statusText, derivedText, confirmLabel, heightLabel, peakLabel, weightLabel, muscleLabel, talentLabel;
         Slider weightSlider, muscleSlider, peakSlider;
         Button confirmButton;
-        readonly List<Text> statNames = new List<Text>(), statValues = new List<Text>(), statCosts = new List<Text>();
+        readonly List<Text> statNames = new List<Text>(), statValues = new List<Text>(), statDiffs = new List<Text>();
+        readonly List<Button> statUps = new List<Button>();
         readonly Dictionary<string, Button> perkButtons = new Dictionary<string, Button>();
         readonly List<Button> buildButtons = new List<Button>(), styleButtons = new List<Button>();
         readonly List<Image> skinFrames = new List<Image>(), hairFrames = new List<Image>(), kitFrames = new List<Image>();
@@ -99,10 +100,8 @@ namespace Career
             Button back = Btn(top, "", 16, () => ShowTalentStep(true), new Vector2(0.13f, 0.18f), new Vector2(0.29f, 0.82f));
             back.name = "TalentBack";
             talentLabel = back.GetComponentInChildren<Text>();
-            pointsText = Label(top, "", 30, Color.white, TextAnchor.MiddleCenter, new Vector2(0.29f, 0f), new Vector2(0.62f, 1f), Vector2.zero, Vector2.zero);
-            Button pool = Btn(top, "", 18, TogglePool, new Vector2(0.62f, 0.18f), new Vector2(0.75f, 0.82f));
-            poolLabel = pool.GetComponentInChildren<Text>();
-            Btn(top, "처음부터", 20, ResetDraft, new Vector2(0.76f, 0.18f), new Vector2(0.85f, 0.82f));
+            pointsText = Label(top, "", 26, Color.white, TextAnchor.MiddleCenter, new Vector2(0.29f, 0f), new Vector2(0.75f, 1f), Vector2.zero, Vector2.zero);
+            Btn(top, "처음부터", 20, ResetDraft, new Vector2(0.76f, 0.18f), new Vector2(0.85f, 0.82f));   // pool toggle gone: stats no longer cost points
             confirmButton = Btn(top, "확정", 24, Confirm, new Vector2(0.86f, 0.12f), new Vector2(0.995f, 0.88f));
             confirmLabel = confirmButton.GetComponentInChildren<Text>();
 
@@ -130,8 +129,8 @@ namespace Career
         {
             RectTransform head = Box(page, "TalentHead", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -190f), new Vector2(-20f, -16f), Panel);
             Label(head, "재능 선택 — 난이도", 34, Color.white, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(28f, 0f), new Vector2(-28f, -18f));
-            Label(head, "재능은 시작 오버롤과 특전 포인트를 정하고, 경력 내내 얼마나 빨리 늘고 얼마나 버티는지를 정한다.\n"
-                      + "<color=#e8c070>시작 오버롤·포인트는 바로 적용된다. 성장·노화·특성 획득은 그 시스템이 생기면 적용된다.</color>",
+            Label(head, "재능은 시작 오버롤(나눠 줄 스탯 합)과 키의 장단점, 그리고 경력 내내 얼마나 빨리 늘고 버티는지를 정한다. 특전 포인트는 모두 10이다.\n"
+                      + "<color=#e8c070>시작 오버롤·키 규칙은 바로 적용된다. 성장·노화·특성 획득은 그 시스템이 생기면 적용된다.</color>",
                   19, new Color(0.85f, 0.87f, 0.90f), TextAnchor.LowerLeft, Vector2.zero, Vector2.one, new Vector2(28f, 18f), new Vector2(-28f, 0f));
 
             TalentDef[] all = TalentCatalog.All;
@@ -163,7 +162,7 @@ namespace Career
             TalentDef normal = TalentCatalog.Get(TalentTier.TopFlight);
             var sb = new System.Text.StringBuilder();
             sb.AppendFormat("<size=34><b>{0}</b></size>\n<size=22><color=#e8c070>{1}</color></size>\n\n", t.name, t.difficulty);
-            sb.AppendFormat("<size=24><b>시작 오버롤 {0}</b> · 특전 포인트 {1}</size>\n", t.startOverall, CreationRules.StartingPoints(t.tier));
+            sb.AppendFormat("<size=24><b>시작 오버롤 {0}</b></size> <size=16><color=#9aa3ad>(스탯 합 {1}을 나눠 준다)</color></size>\n", t.startOverall, CreationRules.StatBudget(t.tier));
             sb.AppendFormat("<size=17><color=#{0}>{1}</color></size>\n", Hex(t.heightDownsides ? Dim : Good), TalentCatalog.HeightLine(t));
             sb.Append("\n");
             sb.Append(t.blurb).Append("\n\n");
@@ -196,8 +195,8 @@ namespace Career
 
         void BuildStats(RectTransform col)
         {
-            Header(col, "스탯 — 1~100, 5씩");
-            Note(col, "모든 스탯은 재능의 시작 오버롤에서 출발한다. 거기서 올리면 포인트를 쓰고, 내리면 돌려받는다. 오른쪽 숫자가 그 비용");
+            Header(col, "스탯 — 1~100, 5씩. 재능이 준 합계를 나눠 준다");
+            Note(col, "모든 스탯은 재능의 시작 오버롤에서 출발한다. 하나를 올리려면 다른 것을 내려야 한다. 평균이 오버롤이다. 오른쪽 숫자는 출발점과의 차이");
             for (int i = 0; i < CreationRules.Stats.Length; i++)
             {
                 int k = i;
@@ -212,8 +211,10 @@ namespace Career
                 nameLe.minWidth = 140f; nameLe.preferredWidth = 215f; nameLe.flexibleWidth = 1f;   // gives way first on a narrow screen
                 Fixed(Btn(row, "−", 26, () => { draft.StepStat(k, -1); Refresh(); }), 46f).name = "Stat_" + s.id + "_Down";
                 statValues.Add(Fixed(Label(row, "", 22, Color.white, TextAnchor.MiddleCenter), 96f));
-                Fixed(Btn(row, "+", 26, () => { draft.StepStat(k, +1); Refresh(); }), 46f).name = "Stat_" + s.id + "_Up";
-                statCosts.Add(Fixed(Label(row, "", 18, Dim, TextAnchor.MiddleRight), 60f));
+                Button up = Fixed(Btn(row, "+", 26, () => { if (!draft.StepStat(k, +1)) Flash("올릴 스탯 포인트가 없다 — 다른 스탯을 먼저 내려라"); Refresh(); }), 46f);
+                up.name = "Stat_" + s.id + "_Up";
+                statUps.Add(up);
+                statDiffs.Add(Fixed(Label(row, "", 18, Dim, TextAnchor.MiddleRight), 60f));
             }
             Header(col, "몸과 특전에서 나오는 값 (고르는 즉시 바뀜)");
             derivedText = Label(col, "", 18, new Color(0.88f, 0.90f, 0.92f), TextAnchor.UpperLeft);
@@ -334,12 +335,6 @@ namespace Career
 
         // ---------------------------------------------------------- actions --
 
-        void TogglePool()
-        {
-            CreationRules.SharedPool = !CreationRules.SharedPool;
-            Refresh();
-        }
-
         void ResetDraft()
         {
             draft.ResetStats();
@@ -372,18 +367,14 @@ namespace Career
             TalentDef talent = TalentCatalog.Get(draft.talent);
             talentLabel.text = string.Format("재능: {0} ({1})\n<size=13>눌러서 바꾸기</size>", talent.name, talent.difficulty);
 
-            int left = draft.Remaining;
-            if (CreationRules.SharedPool)
-                pointsText.text = string.Format("남은 포인트  <color=#{0}><b>{1}</b></color>  <size=18><color=#9aa3ad>/ 시작 {2}</color></size>   오버롤 <b>{3:0}</b>",
-                                                Hex(left >= 0 ? Good : Bad), left, draft.StartingPoints, draft.Overall);
-            else
-                pointsText.text = string.Format("특전 포인트 <color=#{0}><b>{1}</b></color>   스탯 포인트 <color=#{2}><b>{3}</b></color>   오버롤 <b>{4:0}</b>",
-                                                Hex(left >= 0 ? Good : Bad), left, Hex(draft.StatRemaining >= 0 ? Good : Bad), draft.StatRemaining, draft.Overall);
-            poolLabel.text = CreationRules.SharedPool ? "포인트: 하나로 공유" : "포인트: 스탯 따로";
+            int left = draft.Remaining, statLeft = draft.StatLeft;
+            pointsText.text = string.Format("특전 포인트 <color=#{0}><b>{1}</b></color><size=16><color=#9aa3ad>/{2}</color></size>   스탯 남음 <color=#{3}><b>{4}</b></color>   오버롤 <b>{5:0.#}</b>",
+                                            Hex(left >= 0 ? Good : Bad), left, draft.StartingPoints,
+                                            Hex(statLeft == 0 ? Good : Bad), statLeft, draft.Overall);
 
             bool ok = draft.CanConfirm;
             confirmButton.interactable = ok;
-            confirmLabel.text = ok ? "확정" : "포인트 부족";
+            confirmLabel.text = ok ? "확정" : (left < 0 ? "포인트 부족" : "스탯 " + statLeft + " 남음");
 
             for (int i = 0; i < CreationRules.Stats.Length; i++)
             {
@@ -392,9 +383,10 @@ namespace Career
                 int d = draft.PerkDelta(i);
                 statValues[i].text = d == 0 ? draft.FinalStat(i).ToString()
                     : string.Format("{0} <size=15><color=#{1}>({2:+0;−0})</color></size>", draft.FinalStat(i), Hex(d > 0 ? Good : Bad), d);
-                int c = CreationRules.StatCost(draft.stats[i], draft.Ordinary);
-                statCosts[i].text = c == 0 ? "0" : (c > 0 ? "−" + c : "+" + (-c));
-                statCosts[i].color = c > 0 ? Bad : (c < 0 ? Good : Dim);
+                int c = draft.stats[i] - draft.Ordinary;
+                statDiffs[i].text = c == 0 ? "0" : (c > 0 ? "+" + c : "−" + (-c));
+                statDiffs[i].color = c > 0 ? Good : (c < 0 ? Bad : Dim);
+                statUps[i].interactable = statLeft > 0 && draft.stats[i] < StatScale.Max;
             }
 
             foreach (var kv in perkButtons)
