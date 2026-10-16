@@ -169,6 +169,9 @@ namespace Career
             sb.Append("<size=20>");
             sb.AppendFormat("성장 경험치 {0}\n", Mul(t.growthXp));
             sb.AppendFormat("근육 성장 {0}\n", Mul(t.muscleGrowth));
+            sb.AppendFormat("15세 가속 손해 <color=#{0}>{1:0%}</color> · 키 성장 하한 <color=#{2}>{3:0%}</color>\n",
+                Hex(t.youthAccelPenalty < 0.7f ? Good : (t.youthAccelPenalty > 0.7f ? Bad : Color.white)), t.youthAccelPenalty,
+                Hex(t.minHeightGrowth > 0.5f ? Good : Color.white), t.minHeightGrowth);
             sb.AppendFormat("좋은 특성 획득 확률 {0}\n", Mul(t.goodTraitChance));
             sb.AppendFormat("나이에 따른 하락 {0}\n", Mul(t.ageDecline, false));
             sb.AppendFormat("훈련 안 한 날의 하락 {0}\n", t.idleDecline <= 0f ? "<color=#" + Hex(Good) + ">없음</color>" : Mul(t.idleDecline, false));

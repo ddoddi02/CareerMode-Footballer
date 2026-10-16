@@ -104,6 +104,11 @@ namespace Career
         public static BodyModifiers Evaluate(PlayerProfile p)
         {
             BodyModifiers m = Evaluate(p.BodyFatPercent, p.MusclePercent, p.traits);
+            // A young body short of an adult's muscle: the talent decides how much of that
+            // shows in acceleration (TalentDef.youthAccelPenalty). Physicality takes it all.
+            // Everyone is 15 for now; when ageing exists this may want to fade with age.
+            if (m.acceleration < 1f)
+                m.acceleration = 1f - (1f - m.acceleration) * TalentCatalog.Get(p.talent).youthAccelPenalty;
             float aerial, agility;
             HeightEffects(p.heightCm, p.talent, out aerial, out agility);
             m.aerial = aerial;
