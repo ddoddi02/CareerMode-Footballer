@@ -25,7 +25,7 @@ namespace Career
     [Serializable]
     public class PlayerProfile
     {
-        public const float HeightMin = 165f, HeightMax = 200f;
+        public const float HeightMin = 150f, HeightMax = 205f;
         // PROVISIONAL ranges.
         public const float FatKgMin = 2f, FatKgMax = 30f;
         public const float MuscleKgMin = 20f, MuscleKgMax = 65f;
@@ -35,8 +35,14 @@ namespace Career
         [Tooltip("Name, shown on screens only.")]
         public string displayName = "신인";
 
-        [Tooltip("Height, cm. Shown on the avatar and scales the body masses at creation. No other effect yet - PROVISIONAL.")]
+        [Tooltip("Age, years. Every player starts at 15 (user, 2026-10-17). Nothing reads it yet.")]
+        public int age = 15;
+
+        [Tooltip("Height now, cm. Up: better in the air; down: more agile - the losing side only on harder talents (BodyModel.HeightEffects).")]
         [Range(HeightMin, HeightMax)] public float heightCm = 180f;
+
+        [Tooltip("Potential height, cm - the most he can grow to, never under the height now. How much of it he reaches depends on how he lives (daily system, not built yet - PROJECT.md 10.6).")]
+        [Range(HeightMin, HeightMax)] public float peakHeightCm = 180f;
 
         [Tooltip("Talent - the difficulty, picked first at creation. Read by growth, ageing and trait systems once they exist (TalentCatalog).")]
         public TalentTier talent = TalentTier.TopFlight;

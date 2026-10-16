@@ -73,10 +73,15 @@ namespace Career
         public const float PeakBelowLine = 2f;
         public const float MusclePeak = ExcessMuscleLine - PeakBelowLine;
 
-        // ---- height: balls in the air ---------------------------------------------------
-        public const float HeightReference = 180f;
-        /// <summary>+0.75% a centimetre: the top of the height range (200 cm) is the full +15% band.</summary>
+        // ---- height: up for balls in the air, down for agility (user, 2026-10-17) --------
+        // Against the average 15-year-old boy (user: "the 15-year-old average"), about 170 cm -
+        // a round figure, to be checked against the KDCA 2017 growth chart's table. The other
+        // body multipliers stay against an adult pro (muscle 48% = 1).
+        public const float HeightReference = 170f;
+        /// <summary>+0.75% a centimetre above 170, -0.75% below.</summary>
         public const float AerialPerCm = 0.0075f;
+        /// <summary>The same slope the other way: -0.75% a centimetre above 170, +0.75% below.</summary>
+        public const float AgilityPerCm = 0.0075f;
 
         // No multiplier moves more than this, either way - the same band PROJECT.md 3.8
         // keeps for speed, so the body never becomes the whole stat check.
@@ -99,7 +104,10 @@ namespace Career
         public static BodyModifiers Evaluate(PlayerProfile p)
         {
             BodyModifiers m = Evaluate(p.BodyFatPercent, p.MusclePercent, p.traits);
-            m.aerial = Aerial(p.heightCm);
+            float aerial, agility;
+            HeightEffects(p.heightCm, p.talent, out aerial, out agility);
+            m.aerial = aerial;
+            m.agility *= agility;     // on top of what fat (and too much muscle) do to it
             float stamina, injury;
             PerkCatalog.Multipliers(p.perks, out stamina, out injury);
             m.stamina *= stamina;
@@ -133,10 +141,29 @@ namespace Career
             return m;
         }
 
-        /// <summary>Aerial multiplier for a height: 1 at 180 cm, 0.89 at 165, 1.15 at 200.</summary>
+        /// <summary>Aerial multiplier for a height: 1 at 170 cm, 0.89 at 155, 1.075 at 180.</summary>
         public static float Aerial(float heightCm)
         {
             return 1f + Mathf.Clamp(AerialPerCm * (heightCm - HeightReference), -MaxSwing, MaxSwing);
+        }
+
+        /// <summary>
+        /// What the height now does, for this talent. The easy talents keep only the winning side
+        /// (TalentDef.heightDownsides): neither multiplier goes under 1.
+        /// </summary>
+        public static void HeightEffects(float heightCm, TalentTier talent, out float aerial, out float agility)
+        {
+            aerial = Aerial(heightCm);
+            agility = HeightAgility(heightCm);
+            if (TalentCatalog.Get(talent).heightDownsides) return;
+            aerial = Mathf.Max(1f, aerial);
+            agility = Mathf.Max(1f, agility);
+        }
+
+        /// <summary>Agility from height alone: 1 at 170 cm, 1.11 at 155, 0.925 at 180.</summary>
+        public static float HeightAgility(float heightCm)
+        {
+            return 1f + Mathf.Clamp(-AgilityPerCm * (heightCm - HeightReference), -MaxSwing, MaxSwing);
         }
 
         /// <summary>Speed / agility / stamina from fat: falls above the reference, rises half as fast below it.</summary>

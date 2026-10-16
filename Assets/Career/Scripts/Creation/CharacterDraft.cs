@@ -95,28 +95,61 @@ namespace Career
             return s / Stats.Length;
         }
 
-        // ---- builds: look and ability at once ----------------------------------------
+        // ---- the body: a 15-year-old, free height and weight, capped muscle ------------
+        //
+        // User, 2026-10-17: height and weight are free (no points), muscle has a ceiling - the
+        // player starts at 15, and a 15-year-old cannot be very muscular. The ceiling is the same
+        // ordinary-15-year-old one for every talent; talents differ in how fast muscle grows
+        // afterwards (TalentDef.muscleGrowth). The body traits (55%) and the muscle bonus peak
+        // (53%) are out of reach at creation on purpose.
+        //
+        // How the three masses are found (fat + muscle + frame = weight, PlayerProfile):
+        //   frame  = FrameKgPerM2 x height^2       bone, organs - set by height alone
+        //   muscle = weight x muscle %             chosen, up to MuscleCap
+        //   fat    = weight - frame - muscle       whatever is left
+        // so a heavier body at the same muscle % is a fatter one, and pays for it in speed,
+        // agility and stamina (BodyModel). Weight cannot go so low that fat falls under FatFloor.
 
-        public class Build
+        public const int StartAge = 15;
+        /// <summary>Height now: 155-180 around the 15-year-old average of 170 (user).</summary>
+        public const float HeightMin = 155f, HeightMax = 180f, DefaultHeight = 170f;
+        /// <summary>
+        /// Potential height - the most he can grow to, not a promise (user: how much he reaches
+        /// depends on his habits in the daily system). From the height now to this much above it (user: 20). Default 180.
+        /// </summary>
+        public const float PeakAbove = 20f, DefaultPeakHeight = 180f;
+        public const float WeightMin = 45f, WeightMax = 100f, DefaultWeight = 60f;
+        public const float MuscleMin = 35f, MuscleCap = 46f, DefaultMuscle = 43f;
+        /// <summary>Body fat never goes under this at creation, %.</summary>
+        public const float FatFloor = 5f;
+        /// <summary>Frame per square metre of height: 31.5 kg at 180 cm, the adult default body's.</summary>
+        public const float FrameKgPerM2 = 9.72f;
+
+        public static float FrameKg(float heightCm)
         {
-            public string name;
-            public float weightAt180, fatPercent, musclePercent;
-            public int cost;
-            public float width;     // avatar only
+            float m = heightCm / 100f;
+            return FrameKgPerM2 * m * m;
         }
 
-        /// <summary>
-        /// Body builds. They are appearance and ability both - the body model reads the masses -
-        /// but they are free (user, 2026-10-17: "pick the build as you like"). The cost field is
-        /// kept at 0 so a price could come back in one place. Weights are for 180 cm and scale
-        /// with height squared.
-        /// </summary>
-        public static readonly Build[] Builds =
+        /// <summary>The lightest this height and muscle can be with fat at the floor.</summary>
+        public static float MinWeight(float heightCm, float musclePercent)
         {
-            new Build { name = "마른 체형", weightAt180 = 70f, fatPercent = 7f, musclePercent = 45f, cost = 0, width = 0.88f },
-            new Build { name = "보통", weightAt180 = 75f, fatPercent = 10f, musclePercent = 48f, cost = 0, width = 1.00f },
-            new Build { name = "근육형", weightAt180 = 80f, fatPercent = 8f, musclePercent = 52f, cost = 0, width = 1.10f },
-            new Build { name = "육중한 체형", weightAt180 = 85f, fatPercent = 17f, musclePercent = 46f, cost = 0, width = 1.18f },
+            return FrameKg(heightCm) / (1f - (musclePercent + FatFloor) / 100f);
+        }
+
+        /// <summary>A quick start for the sliders: a body-mass index and a muscle share. Free.</summary>
+        public class BodyPreset
+        {
+            public string name;
+            public float bmi, musclePercent;
+        }
+
+        public static readonly BodyPreset[] Presets =
+        {
+            new BodyPreset { name = "마른", bmi = 18.5f, musclePercent = 41f },
+            new BodyPreset { name = "보통", bmi = 20.8f, musclePercent = 43f },
+            new BodyPreset { name = "탄탄한", bmi = 21.0f, musclePercent = 46f },
+            new BodyPreset { name = "통통한", bmi = 24.0f, musclePercent = 41f },
         };
     }
 
@@ -126,7 +159,10 @@ namespace Career
         public string displayName = "신인";
         /// <summary>Chosen first, on its own step. Sets the start overall and the points (PROJECT.md 10.7); change it with SetTalent.</summary>
         public TalentTier talent = TalentTier.TopFlight;
-        public float heightCm = 180f;
+        public float heightCm = CreationRules.DefaultHeight;
+        public float peakHeightCm = CreationRules.DefaultPeakHeight;
+        public float weightKg = CreationRules.DefaultWeight;
+        public float musclePercent = CreationRules.DefaultMuscle;
         public Appearance appearance = Appearance.Default;
         public readonly int[] stats;
         public readonly List<string> perks = new List<string>();
@@ -168,9 +204,32 @@ namespace Career
             }
         }
 
-        public CreationRules.Build Build
+        // ---- the body (CreationRules: free height and weight, capped muscle) --------------
+
+        public float MinWeight { get { return Mathf.Max(CreationRules.WeightMin, CreationRules.MinWeight(heightCm, musclePercent)); } }
+
+        public void SetHeight(float h) { heightCm = h; Normalize(); }
+        public void SetPeakHeight(float h) { peakHeightCm = h; Normalize(); }
+        public void SetWeight(float w) { weightKg = w; appearance.build = -1; Normalize(); }
+        public void SetMuscle(float m) { musclePercent = m; appearance.build = -1; Normalize(); }
+
+        public void ApplyPreset(int i)
         {
-            get { return CreationRules.Builds[Mathf.Clamp(appearance.build, 0, CreationRules.Builds.Length - 1)]; }
+            CreationRules.BodyPreset b = CreationRules.Presets[Mathf.Clamp(i, 0, CreationRules.Presets.Length - 1)];
+            float h = heightCm / 100f;
+            musclePercent = b.musclePercent;
+            weightKg = b.bmi * h * h;
+            appearance.build = i;
+            Normalize();
+        }
+
+        /// <summary>Keep the body possible: height and muscle in range, and weight heavy enough to leave fat at the floor.</summary>
+        void Normalize()
+        {
+            heightCm = Mathf.Clamp(heightCm, CreationRules.HeightMin, CreationRules.HeightMax);
+            peakHeightCm = Mathf.Clamp(peakHeightCm, heightCm, heightCm + CreationRules.PeakAbove);     // now .. now + 20
+            musclePercent = Mathf.Clamp(musclePercent, CreationRules.MuscleMin, CreationRules.MuscleCap);
+            weightKg = Mathf.Clamp(weightKg, MinWeight, CreationRules.WeightMax);
         }
 
         public int StatSpend
@@ -196,7 +255,7 @@ namespace Career
         /// <summary>Points left in the main pool (stats too, when the pool is shared).</summary>
         public int Remaining
         {
-            get { return StartingPoints - PerkSpend - Build.cost - (CreationRules.SharedPool ? StatSpend : 0); }
+            get { return StartingPoints - PerkSpend - (CreationRules.SharedPool ? StatSpend : 0); }
         }
 
         /// <summary>Stat points left when the pool is not shared.</summary>
@@ -239,15 +298,14 @@ namespace Career
             var p = new PlayerProfile();
             p.displayName = string.IsNullOrEmpty(displayName) ? "신인" : displayName;
             p.talent = talent;
-            p.heightCm = Mathf.Clamp(heightCm, PlayerProfile.HeightMin, PlayerProfile.HeightMax);
+            p.age = CreationRules.StartAge;
+            p.heightCm = heightCm;
+            p.peakHeightCm = peakHeightCm;
             p.appearance = appearance;
 
-            CreationRules.Build b = Build;
-            float h = p.heightCm / 180f;
-            float w = b.weightAt180 * h * h;
-            p.fatKg = w * b.fatPercent / 100f;
-            p.muscleKg = w * b.musclePercent / 100f;
-            p.frameKg = w - p.fatKg - p.muscleKg;
+            p.frameKg = CreationRules.FrameKg(heightCm);
+            p.muscleKg = weightKg * musclePercent / 100f;
+            p.fatKg = weightKg - p.frameKg - p.muscleKg;
 
             for (int i = 0; i < stats.Length; i++) CreationRules.Stats[i].apply(p, FinalStat(i));
             p.perks = new List<string>(perks);

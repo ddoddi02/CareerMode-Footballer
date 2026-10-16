@@ -77,7 +77,9 @@ namespace Career
         {
             Appearance a = d.appearance;
             float h = d.heightCm / 100f / BaseHeight;
-            float w = d.Build.width;
+            // Wider with body-mass index, 1 at the default 15-year-old (60 kg at 170 cm, 20.8).
+            float hm = d.heightCm / 100f;
+            float w = Mathf.Clamp(Mathf.Sqrt(d.weightKg / (hm * hm) / 20.8f), 0.85f, 1.3f);
             figure.localScale = new Vector3(w, h, w);
             // the head does not get wider with the build
             head.localScale = new Vector3(0.24f / w, 0.27f, 0.25f / w);

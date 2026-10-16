@@ -5,13 +5,13 @@ namespace Career
 {
     /// <summary>
     /// What the player looks like. Placeholder art (DECISIONS.md 2026-10-14): colours and a few
-    /// shapes picked from short lists. Height and build are not here - they change the body
-    /// model as well (PlayerProfile.heightCm, CreationRules.Builds).
+    /// shapes picked from short lists. Height and weight are not here - they change the body
+    /// model as well (PlayerProfile, CreationRules).
     /// </summary>
     [Serializable]
     public struct Appearance
     {
-        public int build;       // CreationRules.Builds index - kept so the avatar keeps its shape
+        public int build;       // CreationRules.Presets index last picked, -1 once the sliders moved
         public int skin;
         public int hairColor;
         public int hairStyle;

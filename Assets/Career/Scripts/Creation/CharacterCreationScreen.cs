@@ -36,7 +36,8 @@ namespace Career
         readonly Dictionary<TalentTier, Button> talentCards = new Dictionary<TalentTier, Button>();
 
         // what Refresh rewrites
-        Text pointsText, statusText, derivedText, confirmLabel, poolLabel, heightLabel, talentLabel;
+        Text pointsText, statusText, derivedText, confirmLabel, poolLabel, heightLabel, peakLabel, weightLabel, muscleLabel, talentLabel;
+        Slider weightSlider, muscleSlider, peakSlider;
         Button confirmButton;
         readonly List<Text> statNames = new List<Text>(), statValues = new List<Text>(), statCosts = new List<Text>();
         readonly Dictionary<string, Button> perkButtons = new Dictionary<string, Button>();
@@ -163,14 +164,12 @@ namespace Career
             var sb = new System.Text.StringBuilder();
             sb.AppendFormat("<size=34><b>{0}</b></size>\n<size=22><color=#e8c070>{1}</color></size>\n\n", t.name, t.difficulty);
             sb.AppendFormat("<size=24><b>시작 오버롤 {0}</b> · 특전 포인트 {1}</size>\n", t.startOverall, CreationRules.StartingPoints(t.tier));
-            foreach (TalentDef o in TalentCatalog.All)
-                if (o.tier != t.tier && o.startOverall == t.startOverall)
-                    sb.AppendFormat("<size=16><color=#9aa3ad>시작은 {0}와 같다. 차이는 특전 포인트({1} 대 {2})와 경력 내내의 성장이다.</color></size>\n",
-                                    o.name, CreationRules.StartingPoints(t.tier), CreationRules.StartingPoints(o.tier));
+            sb.AppendFormat("<size=17><color=#{0}>{1}</color></size>\n", Hex(t.heightDownsides ? Dim : Good), TalentCatalog.HeightLine(t));
             sb.Append("\n");
             sb.Append(t.blurb).Append("\n\n");
             sb.Append("<size=20>");
             sb.AppendFormat("성장 경험치 {0}\n", Mul(t.growthXp));
+            sb.AppendFormat("근육 성장 {0}\n", Mul(t.muscleGrowth));
             sb.AppendFormat("좋은 특성 획득 확률 {0}\n", Mul(t.goodTraitChance));
             sb.AppendFormat("나이에 따른 하락 {0}\n", Mul(t.ageDecline, false));
             sb.AppendFormat("훈련 안 한 날의 하락 {0}\n", t.idleDecline <= 0f ? "<color=#" + Hex(Good) + ">없음</color>" : Mul(t.idleDecline, false));
@@ -250,36 +249,52 @@ namespace Career
 
         void BuildLooks(RectTransform col)
         {
-            Header(col, "외형 — 포인트 없이 자유롭게. 키와 체형은 능력에도 들어간다");
+            Header(col, "몸과 외형 — 15세. 포인트 없이 자유롭게, 근육만 상한이 있다");
 
             var img = new GameObject("AvatarView", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
             img.transform.SetParent(col, false);
             if (avatar != null) img.texture = avatar.Texture;     // same shape as this box (AvatarPreview)
-            Fixed(img, 0f, 400f);
+            Fixed(img, 0f, 260f);
 
             // name
             RectTransform nameRow = Line(col, "이름");
             InputField name = Field(nameRow, draft.displayName);
             name.onValueChanged.AddListener(v => { draft.displayName = v; });
 
-            // height
-            RectTransform hRow = Line(col, "키");
-            Slider hs = MakeSlider(hRow, PlayerProfile.HeightMin, PlayerProfile.HeightMax, draft.heightCm);
+            // height, weight, muscle - free, but muscle stops at the 15-year-old cap
+            RectTransform hRow = Line(col, "지금 키");
+            Slider hs = MakeSlider(hRow, CreationRules.HeightMin, CreationRules.HeightMax, draft.heightCm);
+            hs.name = "HeightSlider";
             hs.wholeNumbers = true;
-            hs.onValueChanged.AddListener(v => { draft.heightCm = v; Refresh(); });
-            heightLabel = Fixed(Label(hRow, "", 18, Color.white, TextAnchor.MiddleRight), 150f);
+            hs.onValueChanged.AddListener(v => { draft.SetHeight(v); Refresh(); });
+            heightLabel = Fixed(Label(hRow, "", 17, Color.white, TextAnchor.MiddleRight), 190f);
 
-            // build
-            RectTransform bRow = Line(col, "체형");
-            for (int i = 0; i < CreationRules.Builds.Length; i++)
+            RectTransform pRow = Line(col, "잠재 최고 키");
+            peakSlider = MakeSlider(pRow, draft.heightCm, draft.heightCm + CreationRules.PeakAbove, draft.peakHeightCm);
+            peakSlider.name = "PeakHeightSlider";
+            peakSlider.wholeNumbers = true;
+            peakSlider.onValueChanged.AddListener(v => { draft.SetPeakHeight(v); Refresh(); });
+            peakLabel = Fixed(Label(pRow, "", 17, Color.white, TextAnchor.MiddleRight), 190f);
+
+            RectTransform wRow = Line(col, "몸무게");
+            weightSlider = MakeSlider(wRow, CreationRules.WeightMin, CreationRules.WeightMax, draft.weightKg);
+            weightSlider.name = "WeightSlider";
+            weightSlider.onValueChanged.AddListener(v => { draft.SetWeight(v); Refresh(); });
+            weightLabel = Fixed(Label(wRow, "", 17, Color.white, TextAnchor.MiddleRight), 190f);
+
+            RectTransform mRow = Line(col, "근육");
+            muscleSlider = MakeSlider(mRow, CreationRules.MuscleMin, CreationRules.MuscleCap, draft.musclePercent);
+            muscleSlider.name = "MuscleSlider";
+            muscleSlider.onValueChanged.AddListener(v => { draft.SetMuscle(v); Refresh(); });
+            muscleLabel = Fixed(Label(mRow, "", 17, Color.white, TextAnchor.MiddleRight), 190f);
+
+            RectTransform bRow = Line(col, "빠른 선택");
+            for (int i = 0; i < CreationRules.Presets.Length; i++)
             {
                 int k = i;
-                CreationRules.Build b = CreationRules.Builds[i];
-                string label = b.cost == 0 ? b.name
-                    : string.Format("{0}\n<size=13>{1}</size>", b.name, b.cost > 0 ? "−" + b.cost : "+" + (-b.cost));
-                Button btn = Btn(bRow, label, 16, () => { draft.appearance.build = k; Refresh(); });
+                Button btn = Btn(bRow, CreationRules.Presets[i].name, 16, () => { draft.ApplyPreset(k); Refresh(); });
                 btn.name = "Build_" + i;
-                Fixed(btn, 0f, 50f).GetComponent<LayoutElement>().flexibleWidth = 1f;
+                Fixed(btn, 0f, 40f).GetComponent<LayoutElement>().flexibleWidth = 1f;
                 buildButtons.Add(btn);
             }
 
@@ -329,7 +344,9 @@ namespace Career
         {
             draft.ResetStats();
             draft.perks.Clear();
-            draft.appearance.build = Appearance.Default.build;
+            draft.SetHeight(CreationRules.DefaultHeight);
+            draft.SetPeakHeight(CreationRules.DefaultPeakHeight);
+            draft.ApplyPreset(Appearance.Default.build);
             Refresh();
         }
 
@@ -397,7 +414,20 @@ namespace Career
             Frames(skinFrames, draft.appearance.skin);
             Frames(hairFrames, draft.appearance.hairColor);
             Frames(kitFrames, draft.appearance.kitColor);
-            heightLabel.text = string.Format("{0:0} cm · {1:0.0} kg", draft.heightCm, draft.ToProfile().WeightKg);
+            PlayerProfile body = draft.ToProfile();
+            BodyModifiers bm = BodyModel.Evaluate(body);
+            float hAerial, hAgility;
+            BodyModel.HeightEffects(draft.heightCm, draft.talent, out hAerial, out hAgility);
+            heightLabel.text = string.Format("{0:0} cm <size=14>공중 {1} 민첩 {2}</size>", draft.heightCm, Mul(hAerial), Mul(hAgility));
+            peakLabel.text = string.Format("{0:0} cm <size=14>최대 +{1:0} · 생활 습관대로</size>", draft.peakHeightCm, draft.peakHeightCm - draft.heightCm);
+            peakSlider.minValue = draft.heightCm;                                  // now .. now + 20
+            peakSlider.maxValue = draft.heightCm + CreationRules.PeakAbove;
+            peakSlider.SetValueWithoutNotify(draft.peakHeightCm);
+            weightLabel.text = string.Format("{0:0.0} kg <size=14>체지방 {1:0.0}%</size>", draft.weightKg, body.BodyFatPercent);
+            muscleLabel.text = string.Format("{0:0.0}% <size=14>{1:0.0} kg · 상한 {2:0}%</size>", draft.musclePercent, body.muscleKg, CreationRules.MuscleCap);
+            weightSlider.minValue = CreationRules.WeightMin;
+            weightSlider.SetValueWithoutNotify(draft.weightKg);
+            muscleSlider.SetValueWithoutNotify(draft.musclePercent);
 
             derivedText.text = Derived(draft.ToProfile());
             if (avatar != null) avatar.Show(draft);
@@ -415,11 +445,14 @@ namespace Career
                 sp.traits != 0f ? string.Format(" + 특전 {0:+0;−0} (100 상한 밖)", sp.traits) : "");
             sb.AppendFormat("   {0:0.0} m/s ({1:0} km/h) · 40m 도달 {2:0.00}초\n", v, v * 3.6f, Ball.TravelTime(40f, v, 5f));
             sb.AppendFormat("<b>마무리 {0}</b> → 정확도 {1:0.000} · 18m 오차 반경 {2:0.00} m\n\n", p.finishing, acc, BallModel.AimSpread(acc, 18f, 1f));
-            sb.AppendFormat("몸무게 {0:0.0} kg · 체지방 {1:0.0}% · 근육 {2:0.0} kg ({3:0.0}%)\n",
-                p.WeightKg, p.BodyFatPercent, p.muscleKg, p.MusclePercent);
+            sb.AppendFormat("{0}세 · 몸무게 {1:0.0} kg · 체지방 {2:0.0}% · 근육 {3:0.0} kg ({4:0.0}%)\n",
+                p.age, p.WeightKg, p.BodyFatPercent, p.muscleKg, p.MusclePercent);
             sb.AppendFormat("속도 {0} · 민첩 {1} · 체력 {2}\n가속 {3} · 몸싸움 {4}\n",
                 Mul(m.speed), Mul(m.agility), Mul(m.stamina), Mul(m.acceleration), Mul(m.physicality));
-            sb.AppendFormat("공중볼 {0} (키 {1:0} cm)\n", Mul(m.aerial), p.heightCm);
+            float hAerial, hAgility;
+            BodyModel.HeightEffects(p.heightCm, p.talent, out hAerial, out hAgility);
+            sb.AppendFormat("키 {0:0} cm (잠재 {1:0}) → 공중볼 {2} · 민첩(키 몫) {3}{4}\n", p.heightCm, p.peakHeightCm, Mul(m.aerial), Mul(hAgility),
+                TalentCatalog.Get(p.talent).heightDownsides ? "" : " <size=14><color=#9aa3ad>(재능: 키 단점 없음)</color></size>");
             sb.AppendFormat("부상 빈도: 하체 {0} · 근육 {1}\n", Mul(m.lowerBodyInjury, false), Mul(m.muscleInjury, false));
             sb.AppendFormat("몸 특성(자동): {0}", Traits(p.traits));
             sb.Append("\n<size=14><color=#8a939d>배율은 경기에 아직 안 이어졌다. 슛 파워·마무리는 슛 드릴에서 바로 쓰인다.</color></size>");
