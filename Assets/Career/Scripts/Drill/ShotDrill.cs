@@ -36,6 +36,8 @@ namespace Career
 
         [Header("The shooter - edit freely while it runs")]
         public PlayerProfile profile = new PlayerProfile();
+        [Tooltip("Start with the character saved by the creation screen, if there is one (CharacterStore).")]
+        public bool useSavedCharacter = true;
         [Tooltip("How finishing 1..100 becomes the match's 0..1 accuracy stat.")]
         public FinishingMap finishingMap = FinishingMap.Linear;
 
@@ -107,9 +109,13 @@ namespace Career
 
         static float GoalZ { get { return TacticalPitch.HalfL; } }
 
+        bool fromSave;
+
         void Start()
         {
             if (cam == null) cam = Camera.main;
+            PlayerProfile saved;
+            if (useSavedCharacter && CharacterStore.TryLoad(out saved)) { profile = saved; fromSave = true; }
             ResetTo(0);
         }
 
@@ -126,11 +132,7 @@ namespace Career
         /// <summary>Shot power -> ball speed. Two straight lines meeting at the ordinary player.</summary>
         public float SpeedFor(float power)
         {
-            if (power <= averagePower)
-                return Mathf.Lerp(speedAtOne, speedAtAverage, Mathf.InverseLerp(StatScale.Min, averagePower, power));
-            float perPoint = (speedAtHundred - speedAtAverage) / (StatScale.Max - averagePower);
-            if (!extendPastHundred) power = Mathf.Min(power, StatScale.Max);
-            return speedAtAverage + perPoint * (power - averagePower);
+            return ShotPower.ProvisionalSpeed(power, speedAtOne, speedAtAverage, averagePower, speedAtHundred, extendPastHundred);
         }
 
         public float Accuracy01(float finishing)
@@ -409,8 +411,15 @@ namespace Career
             Vector2 s = spots[spot];
             float dist = new Vector2(s.x, s.y).magnitude;
 
-            GUILayout.BeginArea(new Rect(14, 14, 380, 330), GUI.skin.box);
-            GUILayout.Label("<b>슛 훈련</b>", sMid);
+            GUILayout.BeginArea(new Rect(14, 14, 380, 360), GUI.skin.box);
+            GUILayout.Label(string.Format("<b>슛 훈련</b> — {0}{1} · 재능 {2} · 오버롤 {3:0}", profile.displayName, fromSave ? " (생성한 선수)" : "",
+                TalentCatalog.Get(profile.talent).name, CreationRules.Overall(profile)), sMid);
+            if (profile.perks != null && profile.perks.Count > 0)
+            {
+                var names = new List<string>();
+                foreach (string id in profile.perks) { Perk pk = PerkCatalog.Get(id); if (pk != null) names.Add(pk.name); }
+                GUILayout.Label("특전: " + string.Join(", ", names.ToArray()), sSmall);
+            }
             GUILayout.Label(string.Format("몸무게 {0:0.0} kg · 체지방 {1:0.0}% · 근육 {2:0.0} kg ({3:0.0}%)",
                 profile.WeightKg, profile.BodyFatPercent, profile.muscleKg, profile.MusclePercent), sSmall);
             GUILayout.Label(string.Format("유연성 {0} · 마무리 {1} · 특성 {2}", profile.flexibility, profile.finishing,
@@ -418,7 +427,7 @@ namespace Career
             GUILayout.Space(4);
             GUILayout.Label(string.Format("슛 파워 = 기본 {0:0} + 근육 {1:+0.0;-0.0;0} + 유연성 {2:+0.0;-0.0;0} → {3:0.0}{4}",
                 sp.baseValue, sp.muscle, sp.flexibility, sp.capped,
-                sp.traits != 0f ? string.Format(" + 특성 {0:+0;-0} = {1:0.0}", sp.traits, sp.total) : ""), sSmall);
+                sp.traits != 0f ? string.Format(" + 특전 {0:+0;-0} = {1:0.0}", sp.traits, sp.total) : ""), sSmall);
             if (auto) GUILayout.Label(string.Format("<color=#ffd24a>자동: 슛 파워 {0:0}, 마무리 {1:0}으로 덮어씀</color>", autoPower, autoFinish), sSmall);
             GUILayout.Label(string.Format("<b>{0:0.0} m/s</b> ({1:0} km/h) · 40m 도달 {2:0.00}s", v0, v0 * 3.6f,
                 Ball.TravelTime(40f, v0, ball.rollDecel)), sMid);

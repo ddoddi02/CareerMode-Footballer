@@ -26,6 +26,8 @@ namespace Career
         public float agility;        // turning, braking
         public float stamina;        // below 1 = runs out sooner
         public float physicality;    // duels, shielding
+        /// <summary>Balls in the air - headers, aerial duels. From height only (user: tall is better in the air). No aerial play exists yet.</summary>
+        public float aerial;
 
         // No injury system yet - these only say how much more often.
         public float lowerBodyInjury;
@@ -37,7 +39,7 @@ namespace Career
             {
                 return new BodyModifiers
                 {
-                    speed = 1f, acceleration = 1f, agility = 1f, stamina = 1f, physicality = 1f,
+                    speed = 1f, acceleration = 1f, agility = 1f, stamina = 1f, physicality = 1f, aerial = 1f,
                     lowerBodyInjury = 1f, muscleInjury = 1f,
                 };
             }
@@ -71,6 +73,11 @@ namespace Career
         public const float PeakBelowLine = 2f;
         public const float MusclePeak = ExcessMuscleLine - PeakBelowLine;
 
+        // ---- height: balls in the air ---------------------------------------------------
+        public const float HeightReference = 180f;
+        /// <summary>+0.75% a centimetre: the top of the height range (200 cm) is the full +15% band.</summary>
+        public const float AerialPerCm = 0.0075f;
+
         // No multiplier moves more than this, either way - the same band PROJECT.md 3.8
         // keeps for speed, so the body never becomes the whole stat check.
         public const float MaxSwing = 0.15f;
@@ -88,9 +95,17 @@ namespace Career
             return next;
         }
 
+        /// <summary>This body, its height, and the multipliers its perks add (PerkCatalog).</summary>
         public static BodyModifiers Evaluate(PlayerProfile p)
         {
-            return Evaluate(p.BodyFatPercent, p.MusclePercent, p.traits);
+            BodyModifiers m = Evaluate(p.BodyFatPercent, p.MusclePercent, p.traits);
+            m.aerial = Aerial(p.heightCm);
+            float stamina, injury;
+            PerkCatalog.Multipliers(p.perks, out stamina, out injury);
+            m.stamina *= stamina;
+            m.lowerBodyInjury *= injury;
+            m.muscleInjury *= injury;
+            return m;
         }
 
         public static BodyModifiers Evaluate(float bodyFatPercent, float musclePercent, BodyTrait traits)
@@ -116,6 +131,12 @@ namespace Career
                 m.muscleInjury *= InjuryRate;
             }
             return m;
+        }
+
+        /// <summary>Aerial multiplier for a height: 1 at 180 cm, 0.89 at 165, 1.15 at 200.</summary>
+        public static float Aerial(float heightCm)
+        {
+            return 1f + Mathf.Clamp(AerialPerCm * (heightCm - HeightReference), -MaxSwing, MaxSwing);
         }
 
         /// <summary>Speed / agility / stamina from fat: falls above the reference, rises half as fast below it.</summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Career
@@ -17,15 +18,33 @@ namespace Career
     /// mass does that job. Attributes are 1..100 (<see cref="StatScale"/>). Flexibility is so
     /// far only an input to shot power; mental strength and fatigue have no role yet, so they
     /// are data only. Every range and default below is PROVISIONAL (PROJECT.md 10).
+    ///
+    /// Made on the character creation screen (PROJECT.md 10.6) and saved as JSON by
+    /// <see cref="CharacterStore"/>; perk stat changes are already added into the fields.
     /// </summary>
     [Serializable]
     public class PlayerProfile
     {
+        public const float HeightMin = 165f, HeightMax = 200f;
         // PROVISIONAL ranges.
         public const float FatKgMin = 2f, FatKgMax = 30f;
         public const float MuscleKgMin = 20f, MuscleKgMax = 65f;
         public const float FrameKgMin = 25f, FrameKgMax = 40f;
         public const float FatigueMin = 0f, FatigueMax = 100f;  // gauge, 0 = fully rested
+
+        [Tooltip("Name, shown on screens only.")]
+        public string displayName = "신인";
+
+        [Tooltip("Height, cm. Shown on the avatar and scales the body masses at creation. No other effect yet - PROVISIONAL.")]
+        [Range(HeightMin, HeightMax)] public float heightCm = 180f;
+
+        [Tooltip("Talent - the difficulty, picked first at creation. Read by growth, ageing and trait systems once they exist (TalentCatalog).")]
+        public TalentTier talent = TalentTier.TopFlight;
+
+        public Appearance appearance = Appearance.Default;
+
+        [Tooltip("Perks picked at creation (PerkCatalog ids). Their shot power points and multipliers are read live; their stat changes are already in the fields below.")]
+        public List<string> perks = new List<string>();
 
         // Defaults make a 75 kg player at 10% fat and 48% muscle.
         [Tooltip("Fat, kg. Shown as % of weight. Speed, agility and stamina fall as the share rises; physicality gains a little. 20% or more brings out ExcessFat.")]

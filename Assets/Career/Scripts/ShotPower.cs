@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace Career
 {
     /// <summary>
@@ -32,7 +34,9 @@ namespace Career
         /// <summary>The parts, for showing where the number comes from.</summary>
         public struct Parts
         {
-            public float baseValue, muscle, flexibility, capped, traits, total;
+            public float baseValue, muscle, flexibility, capped, total;
+            /// <summary>Body traits and perks together - the only part past the cap.</summary>
+            public float traits;
         }
 
         public static float MuscleBonus(float musclePercent)
@@ -47,9 +51,9 @@ namespace Career
         }
 
         /// <summary>
-        /// Points a trait adds to (or takes from) shot power, on top of the cap. Empty until
-        /// the user adds the traits meant for it ("power shot", "exceptional ankle strength");
-        /// the body traits there are today give nothing.
+        /// Points the body traits add to (or take from) shot power, on top of the cap. The
+        /// body traits there are today give nothing; the points come from perks picked at
+        /// creation ("power shot", "exceptional ankle strength" - PerkCatalog), added in Explain.
         /// </summary>
         public static float TraitPoints(BodyTrait traits)
         {
@@ -64,8 +68,8 @@ namespace Career
             r.flexibility = FlexibilityBonus(p.flexibility);
             float sum = r.baseValue + r.muscle + r.flexibility;
             r.capped = sum < StatScale.Min ? StatScale.Min : (sum > StatScale.Max ? StatScale.Max : sum);
-            r.traits = TraitPoints(p.traits);
-            r.total = r.capped + r.traits;
+            r.traits = TraitPoints(p.traits) + PerkCatalog.ShotPowerPoints(p.perks);
+            r.total = Mathf.Max(StatScale.Min, r.capped + r.traits);
             return r;
         }
 
@@ -73,6 +77,22 @@ namespace Career
         public static float Attribute(PlayerProfile p)
         {
             return Explain(p).total;
+        }
+
+        /// <summary>
+        /// Shot power -> ball speed, the PROVISIONAL two straight lines meeting at the ordinary
+        /// player (PROJECT.md 10.4). The match side's to own; here so the drill and the creation
+        /// screen show the same number. Defaults: 1 -> 22.1, 60 -> 26, 100 -> 42.5 m/s, and on
+        /// past 100 at the same slope.
+        /// </summary>
+        public static float ProvisionalSpeed(float power, float atOne = 22.1f, float atAverage = 26f,
+                                             float averagePower = 60f, float atHundred = 42.5f, bool extendPastHundred = true)
+        {
+            if (power <= averagePower)
+                return Mathf.Lerp(atOne, atAverage, Mathf.InverseLerp(StatScale.Min, averagePower, power));
+            float perPoint = (atHundred - atAverage) / (StatScale.Max - averagePower);
+            if (!extendPastHundred) power = Mathf.Min(power, StatScale.Max);
+            return atAverage + perPoint * (power - averagePower);
         }
 
         static float Bonus(float t, float max)
