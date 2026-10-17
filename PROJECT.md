@@ -60,6 +60,21 @@ Unity 6에서 이름이 바뀐 API를 쓴다: `linearVelocity`, `linearDamping`,
 
 말초시에서는 **움직이는 대상만** 보인다. 등 뒤에 가만히 붙은 수비수는 안 잡히고 움직이는 순간 걸린다.
 
+#### 표시는 한 단계 (2026-10-18, 사용자)
+
+"시야 표시에서 주변시 삭제. 시야 범위는 모두 같은 색. 시야에서 벗어난 대상 표시용 글씨 삭제."
+
+- **화면:** 시선에서 55°(`peripheralAngle`) 안, 30m 안은 전부 같은 밝기이고 그 밖은 어둡다. 경계는 3°·1.5m만
+  부드럽다(`_ViewSoft`, `_RangeSoft`). 초점 밴드(26°), 가장자리 밴드(80°), 거리에 따른 어두워짐은 지웠다.
+  발밑 2m는 전처럼 늘 보인다. 머티리얼의 `PeripheralDim`·`EdgeDim`·`FocusSoft`·`EdgeSoft`는 이제 안 쓴다.
+- **선수:** 주변시 대상을 어두운 실루엣으로 그리던 것을 지웠다 — 보이면 그대로 보인다. 잔상은 남겼다.
+- **글씨:** 안 보이는 선수의 머리 위 라벨(`RoleLabels`)을 그리지 않는다. 그 라벨이 어둠이 숨기는 것을 알려줬다.
+- **판정은 그대로다**(`PerceptionSystem.Evaluate`). 판정에서 주변시가 쓰이는 곳은 한 군데다 — **주변시 대상도
+  "봤다"로 쳐서 `LastSeenTime`이 갱신되고, 그게 §1의 확인/블라인드 판정**(`DrillDirector.freshAtTouch`,
+  `InfoAge` < 1.6초)에 들어간다. AI는 이 상태를 읽지 않는다.
+- **표시와 판정이 어긋나는 곳 하나:** 55~80°, 14m 안의 **움직이는** 대상은 판정상 "봤다"인데, 화면에서는
+  이제 그 띠가 완전히 어둡다(전엔 옅게 보였다). 그래서 화면에 안 보인 수비수가 §1에서 "확인 후"로 셀 수 있다.
+
 ### 3.4 리시브 구속 — FC의 실제 규칙 2모드
 
 공이 날아오는 동안 이동을 제한한다. 매 프레임 **공의 남은 경로에 대한 수직 거리**로 모드를 판정한다 (히스테리시스 진입 2.4m / 이탈 3.2m).
@@ -1950,7 +1965,8 @@ Setup → Play → Result
 | 더미 런 간격 / 길이 | 8~16초 / 2.2초 | AttackerAI |
 | 지배 판정 기준 시간 | 0.9초 (재측정 완료) | PitchControl |
 | 어깨 확인 각도 | 140° | FootballerController |
-| 시야 중심/주변/말초 | 26° / 55° / 80° | ProtoCore |
+| 시야 중심/주변/말초 (판정) | 26° / 55° / 80° | ProtoCore |
+| 시야 표시 (화면) | 55° · 30m 안 한 가지 밝기, 경계 3° / 1.5m | VisionOverlay.shader |
 | 시야 최대 거리 | 30m | ProtoCore |
 | 잔상 유지 | 4.5초 | ProtoCore |
 | 구름 감속 | 5 m/s² | Ball |
@@ -2017,7 +2033,7 @@ Setup → Play → Result
 
 ### 시야 암전 (`Materials/VisionOverlay.mat`)
 
-DarkColor (0,0,0) · PeripheralDim 0.58 · EdgeDim 0.93 · BlindDim 0.972 · FocusSoft 9 / PeriphSoft 11 / EdgeSoft 14
+DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더 기본값). PeripheralDim·EdgeDim·FocusSoft·PeriphSoft·EdgeSoft는 2026-10-18부터 안 쓴다(§3.3)
 
 ---
 

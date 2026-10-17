@@ -84,13 +84,11 @@ namespace Prototype
                 LastSeenTime = now;
             }
 
-            // Peripheral targets read as dark silhouettes: you know something is
-            // there, not who it is or what they are doing.
-            Color c = s == SightState.Clear
-                ? tint
-                : new Color(tint.r * 0.28f, tint.g * 0.28f, tint.b * 0.28f, 1f);
-
-            mpb.SetColor("_BaseColor", c);
+            // Seen is seen. Peripheral targets used to be drawn as dark silhouettes -
+            // "something is there, not who" - and the screen had a dimmer band to match.
+            // Both went (user, 2026-10-18): inside the view everything looks the same.
+            // The state itself is still Peripheral, for whatever reads it.
+            mpb.SetColor("_BaseColor", tint);
             for (int i = 0; i < rends.Length; i++)
             {
                 if (rends[i] == null) continue;

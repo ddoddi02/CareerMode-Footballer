@@ -34,6 +34,7 @@ namespace Prototype
             public AttackerAI atk;
             public DefenderAI def;
             public bool human;
+            public Perceivable sight;
         }
 
         readonly List<Body> bodies = new List<Body>();
@@ -58,13 +59,13 @@ namespace Prototype
             bodies.Clear();
             var seen = new HashSet<GameObject>();
             foreach (var h in FindObjectsByType<FootballerController>())
-                if (seen.Add(h.gameObject)) bodies.Add(new Body { t = h.transform, role = h.role, human = true });
+                if (seen.Add(h.gameObject)) bodies.Add(new Body { t = h.transform, role = h.role, human = true, sight = h.GetComponent<Perceivable>() });
             foreach (var a in FindObjectsByType<AttackerAI>())
                 if (seen.Add(a.gameObject))
-                    bodies.Add(new Body { t = a.transform, role = a.role, atk = a, def = a.GetComponent<DefenderAI>() });
+                    bodies.Add(new Body { t = a.transform, role = a.role, atk = a, def = a.GetComponent<DefenderAI>(), sight = a.GetComponent<Perceivable>() });
             foreach (var d in FindObjectsByType<DefenderAI>())
                 if (seen.Add(d.gameObject))
-                    bodies.Add(new Body { t = d.transform, role = d.role, def = d, atk = d.GetComponent<AttackerAI>() });
+                    bodies.Add(new Body { t = d.transform, role = d.role, def = d, atk = d.GetComponent<AttackerAI>(), sight = d.GetComponent<Perceivable>() });
         }
 
         Side? SideOf(Body b)
@@ -176,6 +177,10 @@ namespace Prototype
             {
                 Body b = bodies[i];
                 if (b.t == null) continue;
+                // Nobody gets a name he cannot see (user, 2026-10-18). A body out of sight
+                // is hidden by Perceivable; a label floating over the empty grass would
+                // give away exactly what the dark is hiding.
+                if (b.sight != null && b.sight.State == SightState.Unknown && !PerceptionSystem.xrayDebug) continue;
                 Vector3 s = cam.WorldToScreenPoint(b.t.position + Vector3.up * headHeight);
                 if (s.z <= 0f) continue;
 

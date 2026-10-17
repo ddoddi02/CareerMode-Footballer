@@ -9,6 +9,8 @@ Shader "Prototype/VisionOverlay"
         _FocusSoft ("Focus Soft (deg)", Range(1,40)) = 9
         _PeriphSoft ("Peripheral Soft (deg)", Range(1,40)) = 12
         _EdgeSoft ("Edge Soft (deg)", Range(1,40)) = 12
+        _ViewSoft ("View Edge Soft (deg)", Range(0.5,20)) = 3
+        _RangeSoft ("View Range Soft (m)", Range(0.1,10)) = 1.5
     }
 
     SubShader
@@ -36,6 +38,8 @@ Shader "Prototype/VisionOverlay"
                 float _FocusSoft;
                 float _PeriphSoft;
                 float _EdgeSoft;
+                float _ViewSoft;
+                float _RangeSoft;
             CBUFFER_END
 
             float4 _ViewerPos;
@@ -80,16 +84,14 @@ Shader "Prototype/VisionOverlay"
                 float maxD   = _ConeParams.w;
                 float freeR  = _ConeParams2.x;
 
-                // Three plateaus with short transition bands, rather than one long
-                // gradient. Reads as distinct zones instead of a soft blob.
-                float dimP = smoothstep(focus,  focus  + _FocusSoft,  ang) * _PeripheralDim;
-                float dimE = smoothstep(periph, periph + _PeriphSoft, ang) * _EdgeDim;
-                float dimB = smoothstep(edge,   edge   + _EdgeSoft,   ang) * _BlindDim;
-                float dim = max(max(dimP, dimE), dimB);
-
-                // Detail falls off with range even straight ahead.
-                float distFade = smoothstep(maxD * 0.6, maxD, dist) * _BlindDim;
-                dim = max(dim, distFade);
+                // One zone, one brightness (user, 2026-10-18): everything inside the
+                // peripheral angle and the range is shown the same, everything outside is
+                // dark. The focus and edge bands - and the fade with distance - went: they
+                // drew distinctions the player was asked not to see any more. The judgement
+                // still has them (PerceptionSystem.Evaluate); this only draws.
+                float dimA = smoothstep(periph, periph + _ViewSoft, ang);
+                float dimR = smoothstep(maxD - _RangeSoft, maxD, dist);
+                float dim = max(dimA, dimR) * _BlindDim;
 
                 // You always know what is at your own feet.
                 float nearBubble = 1.0 - smoothstep(freeR, freeR + 1.6, dist);
