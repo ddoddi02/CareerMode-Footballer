@@ -58,7 +58,8 @@ Unity 6에서 이름이 바뀐 API를 쓴다: `linearVelocity`, `linearDamping`,
 
 `PerceptionSystem`이 `Clear / Peripheral / Unknown`을 CPU에서 판정하고, 셰이더는 화면을 어둡게 할 뿐이다. AI·리플레이·세이브가 전부 같은 데이터를 쓴다. 안 보이는 선수는 렌더러가 꺼지고 마지막 목격 위치에 **4.5초간 페이드되는 잔상**이 남는다.
 
-말초시에서는 **움직이는 대상만** 보인다. 등 뒤에 가만히 붙은 수비수는 안 잡히고 움직이는 순간 걸린다.
+~~말초시에서는 **움직이는 대상만** 보인다. 등 뒤에 가만히 붙은 수비수는 안 잡히고 움직이는 순간 걸린다.~~
+→ 2026-10-18 지웠다(아래). 이제 55° 밖은 움직여도 안 보인다.
 
 #### 표시는 한 단계 (2026-10-18, 사용자)
 
@@ -72,8 +73,12 @@ Unity 6에서 이름이 바뀐 API를 쓴다: `linearVelocity`, `linearDamping`,
 - **판정은 그대로다**(`PerceptionSystem.Evaluate`). 판정에서 주변시가 쓰이는 곳은 한 군데다 — **주변시 대상도
   "봤다"로 쳐서 `LastSeenTime`이 갱신되고, 그게 §1의 확인/블라인드 판정**(`DrillDirector.freshAtTouch`,
   `InfoAge` < 1.6초)에 들어간다. AI는 이 상태를 읽지 않는다.
-- **표시와 판정이 어긋나는 곳 하나:** 55~80°, 14m 안의 **움직이는** 대상은 판정상 "봤다"인데, 화면에서는
-  이제 그 띠가 완전히 어둡다(전엔 옅게 보였다). 그래서 화면에 안 보인 수비수가 §1에서 "확인 후"로 셀 수 있다.
+- ~~**표시와 판정이 어긋나는 곳 하나:** 55~80°, 14m 안의 **움직이는** 대상은 판정상 "봤다"인데, 화면에서는
+  이제 그 띠가 완전히 어둡다.~~ → **판정도 55°로 맞췄다**(사용자). `PerceptionSystem.Evaluate`에서 80°까지의
+  움직임 경로(`edgeAngle`, `motionThreshold`, `Perceivable.Speed`)를 지웠다. 이제 **화면에 보이는 범위 = 봤다**이고,
+  §1의 확인/블라인드도 그걸 따른다 — 보인 대상만 `LastSeenTime`이 갱신되기 때문이다. 확인: 정면 20° Clear,
+  50° Peripheral, 56°·70° Unknown, 뒤 1.5m Clear, 2.5m Unknown, 29m Clear, 31m Unknown.
+  발밑 원도 판정 반경(2m)에서 끝나게 줄였다 — 전엔 3.6m까지 밝아서, 밝은 잔디에 몸이 안 그려지는 곳이 있었다.
 
 ### 3.4 리시브 구속 — FC의 실제 규칙 2모드
 
@@ -530,6 +535,8 @@ FrontWin     짝 표                          줄별 압박
 
 수정 전 측정: **원정 수비 시간의 63%에서 누군가 골키퍼보다 깊었다**(센터백 56%, 볼란치 14%).
 홈은 0% — 위의 슬롯 차이 때문이다. 수정 후 A·B·C 모두 0%.
+
+> **2026-10-18 — 빌더는 은퇴했다**(§4 "씬이 진실 공급원"). 아래 두 문단은 그 전의 기록이다.
 
 **씬은 2026-10-08에 빌더로 다시 만들었다.** 그 전까지 씬의 `TeamDefence`에는 존 수비 시절 값이
 남아 있었다(`lateralFollow` 0.55, `depthFollow` 0.6, `maxLateralShift` 13, `maxDepthShift` 22,
@@ -1831,15 +1838,24 @@ keeper.GoalChance(…) / keeper.Params    ← 그 골키퍼의 지금 자리와 
 | `Scripts/Possession.cs` | **누가 공을 가졌는가** → 어느 두뇌가 켜지는가. 뺏기면 피치 전체를 넘기고, 발밑에서 뺏긴 사람은 1초 재태클 금지 (§3.26, §3.11) |
 | `Scripts/PassLab.cs` | **패스 벤치** (P). 전원 정지 후 패스만 — 계획 레인 대 실제 최근접 (§3.21) |
 | `Shaders/VisionOverlay.shader` | 3단계 시야 암전 |
-| `Editor/PrototypeSceneBuilder.cs` | **씬 전체를 코드로 생성** |
+| `Scripts/MouseLegend.cs` | 화면 구석의 마우스 그림 — 패스 버튼 표시 (§3.19). `DrillDirector`가 시작할 때 붙인다 |
+| `Scenes/ScanAndTurnDrill.unity` | **경기 씬 — 진실 공급원** (아래) |
 
-### 씬 재생성
+### 씬이 진실 공급원 (2026-10-18, 사용자)
 
-```
-Tools > Football Prototype > Build Drill Scene
-```
+> 예전엔 "씬은 손으로 편집하지 않는다, **빌더가 단일 진실 공급원**"이었다(`Tools > Football Prototype >
+> Build Drill Scene`). 사용자가 은퇴시켰다: "각 씬을 빌더로 실행시키지 말고, 개별 씬으로 생성해둬서 앞으로
+> 사용자가 빌드할 때마다 추가로 커밋하지 않도록." 빌드할 때마다 씬 파일 전체(1만 줄 넘게)와 머티리얼이 다시 써져서
+> 바뀐 게 없어도 커밋할 거리가 생겼다.
 
-씬은 손으로 편집하지 않는다. 피치 규격, 마킹, 선수 크기, 카메라, 컴포넌트 배선이 전부 빌더에 있다. **빌더가 단일 진실 공급원이다.** 스크립트 기본값을 바꿔도 빌더가 덮어쓰는 값이 있으니 양쪽을 맞출 것.
+- **경기 씬 `Scenes/ScanAndTurnDrill.unity`가 기준이다.** 2026-10-18에 마지막으로 빌더로 만든 것을 지금 코드로 한 번
+  다시 저장해서 커밋했다. `PrototypeSceneBuilder.cs`는 지웠다 — 되살리려면 git 이력에 있다. 경기 머티리얼
+  (`Materials/*.mat`)은 그대로 남아 있다.
+- **값을 바꿀 때는 씬의 그 값을 직접 고쳐 저장한다**(인스펙터, 또는 MCP로 씬을 열어 값을 넣고 `SaveScene`).
+  **코드 변경과 같은 커밋에** 넣는다. 스크립트 기본값만 바꾸면 씬에 저장된 옛 값이 그대로 쓰인다.
+- **새 컴포넌트는 런타임에 붙여도 된다** — `MouseLegend`(`DrillDirector`가 붙임), `RoleLabels`(스스로 생김)처럼.
+  그러면 씬을 건드리지 않아도 된다.
+- **필드를 지우거나 이름을 바꾸면** 씬에 옛 값이 남는다. 해가 없지만, 씬을 다시 저장하면 빠진다.
 
 **커리어 쪽 파일은 `Assets/Career/` 아래에 있다(§10).** 슛 훈련 드릴 씬도 같은 방식으로 코드로 만든다:
 `Tools > Career > Build Shot Drill Scene` → `Assets/Career/Scenes/ShotDrill.unity` (§10.5). 경기 머티리얼을
@@ -1965,7 +1981,7 @@ Setup → Play → Result
 | 더미 런 간격 / 길이 | 8~16초 / 2.2초 | AttackerAI |
 | 지배 판정 기준 시간 | 0.9초 (재측정 완료) | PitchControl |
 | 어깨 확인 각도 | 140° | FootballerController |
-| 시야 중심/주변/말초 (판정) | 26° / 55° / 80° | ProtoCore |
+| 시야 중심/주변 (판정) | 26° / 55° — 55° 밖은 안 보임 | ProtoCore |
 | 시야 표시 (화면) | 55° · 30m 안 한 가지 밝기, 경계 3° / 1.5m | VisionOverlay.shader |
 | 시야 최대 거리 | 30m | ProtoCore |
 | 잔상 유지 | 4.5초 | ProtoCore |

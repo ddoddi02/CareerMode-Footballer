@@ -80,7 +80,6 @@ Shader "Prototype/VisionOverlay"
 
                 float focus  = _ConeParams.x;
                 float periph = _ConeParams.y;
-                float edge   = _ConeParams.z;
                 float maxD   = _ConeParams.w;
                 float freeR  = _ConeParams2.x;
 
@@ -93,8 +92,9 @@ Shader "Prototype/VisionOverlay"
                 float dimR = smoothstep(maxD - _RangeSoft, maxD, dist);
                 float dim = max(dimA, dimR) * _BlindDim;
 
-                // You always know what is at your own feet.
-                float nearBubble = 1.0 - smoothstep(freeR, freeR + 1.6, dist);
+                // You always know what is at your own feet - out to freeRadius, the same
+                // radius the judgement uses, so nothing lit here is a body left undrawn.
+                float nearBubble = 1.0 - smoothstep(freeR - 0.5, freeR, dist);
                 dim *= (1.0 - nearBubble);
 
                 return half4(_DarkColor.rgb, saturate(dim));

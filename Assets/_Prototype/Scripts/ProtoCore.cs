@@ -408,10 +408,8 @@ namespace Prototype
 
         public static float focusAngle = 26f;
         public static float peripheralAngle = 55f;
-        public static float edgeAngle = 80f;
         public static float maxDistance = 30f;
         public static float memorySeconds = 4.5f;
-        public static float motionThreshold = 1.5f;
         public static float freeRadius = 2.0f;
         public static bool xrayDebug = false;
 
@@ -440,9 +438,11 @@ namespace Prototype
             if (ang <= focusAngle) return SightState.Clear;
             if (ang <= peripheralAngle) return SightState.Peripheral;
 
-            // At the very edge of vision you only register movement, never a still figure.
-            if (ang <= edgeAngle && p.Speed > motionThreshold && dist < 14f) return SightState.Peripheral;
-
+            // What is seen is exactly what the screen draws: nothing past peripheralAngle.
+            // There used to be an edge band out to 80 degrees where a MOVING figure inside
+            // 14 m still counted as seen - the screen stopped drawing that band, so it went
+            // too (user, 2026-10-18). Clear and Peripheral are still told apart here, for
+            // anything that wants to; the screen draws them the same.
             return SightState.Unknown;
         }
     }

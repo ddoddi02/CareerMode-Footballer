@@ -17,7 +17,6 @@ namespace Prototype
         public SightState State { get; private set; }
         public Vector3 LastSeenPos { get; private set; }
         public float LastSeenTime { get; private set; }
-        public float Speed { get; private set; }
 
         /// <summary>Seconds since this target was last actually perceived.</summary>
         public float InfoAge { get { return Time.time - LastSeenTime; } }
@@ -27,7 +26,6 @@ namespace Prototype
         MaterialPropertyBlock ghostMpb;
         GameObject ghost;
         Renderer ghostRend;
-        Vector3 prevPos;
         static Material sGhostMat;
 
         void Awake()
@@ -37,7 +35,6 @@ namespace Prototype
             rends = GetComponentsInChildren<Renderer>(true);
             mpb = new MaterialPropertyBlock();
             ghostMpb = new MaterialPropertyBlock();
-            prevPos = transform.position;
             PerceptionSystem.Register(this);
         }
 
@@ -45,13 +42,6 @@ namespace Prototype
         {
             PerceptionSystem.Unregister(this);
             if (ghost != null) Destroy(ghost);
-        }
-
-        void LateUpdate()
-        {
-            float dt = Mathf.Max(Time.deltaTime, 0.0001f);
-            Speed = Vector3.Distance(transform.position, prevPos) / dt;
-            prevPos = transform.position;
         }
 
         void EnsureGhost()
