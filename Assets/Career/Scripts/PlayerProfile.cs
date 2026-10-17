@@ -89,6 +89,8 @@ namespace Career
         [Range(StatScale.Min, StatScale.Max)] public int ballControl = 50;   // 볼 컨트롤 - no effect yet
         [Range(StatScale.Min, StatScale.Max)] public int tricks = 50;   // 개인기 - no effect yet
         [Range(StatScale.Min, StatScale.Max)] public int dribbling = 50;   // 드리블 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int agility = 50;   // 민첩성 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int physicality = 50;   // 몸싸움 - no effect yet
 
         [Tooltip("Fatigue, 0 (rested) .. 100. PROVISIONAL - role not decided.")]
         [Range(FatigueMin, FatigueMax)] public float fatigue = 0f;

@@ -444,8 +444,9 @@ namespace Career
             sb.AppendFormat("<b>마무리 {0}</b> → 정확도 {1:0.000} · 18m 오차 반경 {2:0.00} m\n\n", p.finishing, acc, BallModel.AimSpread(acc, 18f, 1f));
             sb.AppendFormat("{0}세 · 몸무게 {1:0.0} kg · 체지방 {2:0.0}% · 근육 {3:0.0} kg ({4:0.0}%)\n",
                 p.age, p.WeightKg, p.BodyFatPercent, p.muscleKg, p.MusclePercent);
-            sb.AppendFormat("속도 {0} · 민첩 {1} · 체력 {2}\n가속 {3} · 몸싸움 {4}\n",
-                Mul(m.speed), Mul(m.agility), Mul(m.stamina), Mul(m.acceleration), Mul(m.physicality));
+            BodyModel.BodyPoints bp = BodyModel.Points(p);
+            sb.AppendFormat("몸 보너스(스탯에 더함): 최고속도 {0} · 가속 {1} · 체력 {2}\n민첩 {3} · 몸싸움 {4} · 점프 {5}\n",
+                Pts(bp.topSpeed), Pts(bp.acceleration), Pts(bp.stamina), Pts(bp.agility), Pts(bp.physicality), Pts(bp.jumping));
             float hAerial, hAgility;
             BodyModel.HeightEffects(p.heightCm, p.talent, out hAerial, out hAgility);
             sb.AppendFormat("키 {0:0} cm (잠재 {1:0}) → 공중볼 {2} · 민첩(키 몫) {3}{4}\n", p.heightCm, p.peakHeightCm, Mul(m.aerial), Mul(hAgility),
@@ -454,6 +455,12 @@ namespace Career
             sb.AppendFormat("몸 특성(자동): {0}", Traits(p.traits));
             sb.Append("\n<size=14><color=#8a939d>배율은 경기에 아직 안 이어졌다. 슛 파워·마무리는 슛 드릴에서 바로 쓰인다.</color></size>");
             return sb.ToString();
+        }
+
+        static string Pts(int v)
+        {
+            if (v == 0) return "0";
+            return "<color=#" + Hex(v > 0 ? Good : Bad) + ">" + (v > 0 ? "+" + v : "−" + (-v)) + "</color>";
         }
 
         /// <summary>A multiplier, green when it helps and red when it hurts.</summary>

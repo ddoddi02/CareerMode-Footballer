@@ -148,6 +148,44 @@ namespace Career
             return m;
         }
 
+        // ---- body effects as points (user, 2026-10-18) -----------------------------------
+        // The body does not multiply the stats it touches; it adds to them, the way shot power
+        // is base + body bonus. One percent of the old multiplier is one point on the 1..100
+        // scale, so the +-15% band is +-15 points. The sum stops at 100 like shot power's (only
+        // perks and traits go past it) and at 1 at the bottom. Nothing reads these in a match yet.
+
+        /// <summary>Points the body adds to the stats it touches. Negative takes away.</summary>
+        public struct BodyPoints
+        {
+            public int topSpeed, acceleration, stamina, agility, physicality, jumping;
+        }
+
+        public static int ToPoints(float multiplier)
+        {
+            return Mathf.RoundToInt((multiplier - 1f) * 100f);
+        }
+
+        public static BodyPoints Points(PlayerProfile p)
+        {
+            BodyModifiers m = Evaluate(p);
+            BodyPoints r;
+            r.topSpeed = ToPoints(m.speed);
+            r.acceleration = ToPoints(m.acceleration);
+            r.stamina = ToPoints(m.stamina);
+            r.agility = ToPoints(m.agility);
+            r.physicality = ToPoints(m.physicality);
+            // Jumping goes with muscle (user), not height: the same muscle curve as acceleration,
+            // without the young-acceleration softening.
+            r.jumping = ToPoints(1f + MaxSwing * MuscleT(p.MusclePercent));
+            return r;
+        }
+
+        /// <summary>A stat with the body's points on it: 1..100.</summary>
+        public static int WithBody(int stat, int points)
+        {
+            return Mathf.Clamp(stat + points, StatScale.Min, StatScale.Max);
+        }
+
         /// <summary>Aerial multiplier for a height: 1 at 170 cm, 0.89 at 155, 1.075 at 180.</summary>
         public static float Aerial(float heightCm)
         {
