@@ -199,29 +199,31 @@ namespace Career
         void BuildStats(RectTransform col)
         {
             Header(col, "스탯 — 1~100, 5씩. 재능이 준 합계를 나눠 준다");
-            Note(col, "모든 스탯은 재능의 시작 오버롤에서 출발한다. 하나를 올리려면 다른 것을 내려야 한다. 평균이 오버롤이다. 오른쪽 숫자는 출발점과의 차이");
+            Note(col, "모든 스탯은 재능의 시작 오버롤에서 출발한다. 하나를 올리려면 다른 것을 내려야 한다. 평균이 오버롤이다. 오른쪽 숫자는 출발점과의 차이. 휠로 넘긴다");
+            // The list grows with CreationRules.Stats (18 now), so it scrolls inside a fixed box.
+            RectTransform list = ScrollList(col, 470f);
             for (int i = 0; i < CreationRules.Stats.Length; i++)
             {
                 int k = i;
                 CreationRules.StatDef s = CreationRules.Stats[i];
-                RectTransform row = RowBox(col, 52f);
+                RectTransform row = RowBox(list, 36f);
                 var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-                h.spacing = 6f; h.padding = new RectOffset(10, 8, 4, 4);
+                h.spacing = 4f; h.padding = new RectOffset(10, 8, 2, 2);
                 h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false;
-                Text name = Label(row, "", 19, Color.white, TextAnchor.MiddleLeft);
+                Text name = Label(row, "", 17, Color.white, TextAnchor.MiddleLeft);
                 statNames.Add(name);
                 var nameLe = name.gameObject.AddComponent<LayoutElement>();
-                nameLe.minWidth = 140f; nameLe.preferredWidth = 215f; nameLe.flexibleWidth = 1f;   // gives way first on a narrow screen
-                Fixed(Btn(row, "−", 26, () => { draft.StepStat(k, -1); Refresh(); }), 46f).name = "Stat_" + s.id + "_Down";
-                statValues.Add(Fixed(Label(row, "", 22, Color.white, TextAnchor.MiddleCenter), 96f));
-                Button up = Fixed(Btn(row, "+", 26, () => { if (!draft.StepStat(k, +1)) Flash("올릴 스탯 포인트가 없다 — 다른 스탯을 먼저 내려라"); Refresh(); }), 46f);
+                nameLe.minWidth = 140f; nameLe.preferredWidth = 240f; nameLe.flexibleWidth = 1f;   // gives way first on a narrow screen
+                Fixed(Btn(row, "−", 22, () => { draft.StepStat(k, -1); Refresh(); }), 38f).name = "Stat_" + s.id + "_Down";
+                statValues.Add(Fixed(Label(row, "", 19, Color.white, TextAnchor.MiddleCenter), 84f));
+                Button up = Fixed(Btn(row, "+", 22, () => { if (!draft.StepStat(k, +1)) Flash("올릴 스탯 포인트가 없다 — 다른 스탯을 먼저 내려라"); Refresh(); }), 38f);
                 up.name = "Stat_" + s.id + "_Up";
                 statUps.Add(up);
-                statDiffs.Add(Fixed(Label(row, "", 18, Dim, TextAnchor.MiddleRight), 60f));
+                statDiffs.Add(Fixed(Label(row, "", 16, Dim, TextAnchor.MiddleRight), 48f));
             }
             Header(col, "몸과 특전에서 나오는 값 (고르는 즉시 바뀜)");
-            derivedText = Label(col, "", 18, new Color(0.88f, 0.90f, 0.92f), TextAnchor.UpperLeft);
-            Flexible(derivedText, 420f);
+            derivedText = Label(col, "", 16, new Color(0.88f, 0.90f, 0.92f), TextAnchor.UpperLeft);
+            Flexible(derivedText, 300f);
         }
 
         void BuildPerks(RectTransform col)
@@ -382,7 +384,7 @@ namespace Career
             for (int i = 0; i < CreationRules.Stats.Length; i++)
             {
                 CreationRules.StatDef sd = CreationRules.Stats[i];
-                statNames[i].text = string.Format("{0}\n<size=14><color=#9aa3ad>{1} · 기준 {2} · {3}</color></size>", sd.name, sd.effect, draft.Ordinary, Tag(sd.link));
+                statNames[i].text = string.Format("{0}  <size=13><color=#9aa3ad>{1} · {2}</color></size>", sd.name, sd.effect, Tag(sd.link));
                 int d = draft.PerkDelta(i);
                 statValues[i].text = d == 0 ? draft.FinalStat(i).ToString()
                     : string.Format("{0} <size=15><color=#{1}>({2:+0;−0})</color></size>", draft.FinalStat(i), Hex(d > 0 ? Good : Bad), d);
@@ -503,6 +505,53 @@ namespace Career
             go.GetComponent<Image>().color = Row;
             go.AddComponent<LayoutElement>().minHeight = height;
             return go.GetComponent<RectTransform>();
+        }
+
+        /// <summary>A box of fixed height whose content scrolls with the wheel. Returns the content to fill.</summary>
+        RectTransform ScrollList(RectTransform parent, float height)
+        {
+            var box = new GameObject("StatList", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+            box.transform.SetParent(parent, false);
+            box.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.15f);
+            var le = box.AddComponent<LayoutElement>();
+            le.minHeight = height; le.preferredHeight = height;
+
+            var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter)).GetComponent<RectTransform>();
+            content.SetParent(box.transform, false);
+            content.anchorMin = new Vector2(0f, 1f); content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.offsetMin = new Vector2(0f, 0f); content.offsetMax = new Vector2(-14f, 0f);   // room for the bar
+            var v = content.GetComponent<VerticalLayoutGroup>();
+            v.spacing = 3f;
+            v.childControlHeight = true; v.childControlWidth = true;
+            v.childForceExpandHeight = false; v.childForceExpandWidth = true;
+            content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var barGo = new GameObject("Scrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+            var bar = barGo.GetComponent<RectTransform>();
+            bar.SetParent(box.transform, false);
+            bar.anchorMin = new Vector2(1f, 0f); bar.anchorMax = new Vector2(1f, 1f);
+            bar.pivot = new Vector2(1f, 0.5f);
+            bar.sizeDelta = new Vector2(10f, 0f);
+            barGo.GetComponent<Image>().color = new Color(0.05f, 0.06f, 0.08f);
+            var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            handle.transform.SetParent(bar, false);
+            handle.color = Dim;
+            Stretch(handle.rectTransform, Vector2.zero, Vector2.zero);
+            var sb = barGo.GetComponent<Scrollbar>();
+            sb.handleRect = handle.rectTransform;
+            sb.targetGraphic = handle;
+            sb.direction = Scrollbar.Direction.BottomToTop;
+
+            var sr = box.GetComponent<ScrollRect>();
+            sr.content = content;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = 30f;
+            sr.verticalScrollbar = sb;
+            sr.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            return content;
         }
 
         /// <summary>A labelled row: name on the left, controls after it.</summary>

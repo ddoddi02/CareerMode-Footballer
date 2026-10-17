@@ -74,6 +74,22 @@ namespace Career
         [Tooltip("Mental strength, 1..100. PROVISIONAL - role not decided.")]
         [Range(StatScale.Min, StatScale.Max)] public int mentalStrength = 50;
 
+        [Header("Football attributes, 1..100 (user, 2026-10-18) - chosen at creation, nothing reads them yet")]
+        [Range(StatScale.Min, StatScale.Max)] public int topSpeed = 50;   // 최고속도 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int acceleration = 50;   // 가속도 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int stamina = 50;   // 체력 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int positioning = 50;   // 위치선정 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int tackling = 50;   // 태클 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int longPassing = 50;   // 긴 패스 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int shortPassing = 50;   // 짧은 패스 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int crossing = 50;   // 크로스 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int curve = 50;   // 커브 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int jumping = 50;   // 점프 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int aerialAbility = 50;   // 공중볼 처리 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int ballControl = 50;   // 볼 컨트롤 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int tricks = 50;   // 개인기 - no effect yet
+        [Range(StatScale.Min, StatScale.Max)] public int dribbling = 50;   // 드리블 - no effect yet
+
         [Tooltip("Fatigue, 0 (rested) .. 100. PROVISIONAL - role not decided.")]
         [Range(FatigueMin, FatigueMax)] public float fatigue = 0f;
 

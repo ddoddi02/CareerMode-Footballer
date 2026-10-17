@@ -7,6 +7,14 @@ namespace Career
     /// spell without training costs, and how much a match teaches. The career systems do not
     /// exist yet, so those numbers wait in the table for them; the start is live now.
     /// </summary>
+    public enum TalentTier
+    {
+        GreatestEver,   // 인류 역사상 최고 - very easy
+        WorldClass,     // 월드클래스 - easy
+        TopFlight,      // 1부리거 - normal
+        Dullard,        // 둔재 - hard
+    }
+
     /// <summary>How growing taller (or not) turns into choices over the career (user, 2026-10-17).</summary>
     public enum HeightEvents
     {
@@ -16,14 +24,6 @@ namespace Career
         Sometimes,
         /// <summary>Every growth step asks the player how his play changes.</summary>
         Always,
-    }
-
-    public enum TalentTier
-    {
-        GreatestEver,   // 인류 역사상 최고 - very easy
-        WorldClass,     // 월드클래스 - easy
-        TopFlight,      // 1부리거 - normal
-        Dullard,        // 둔재 - hard
     }
 
     public class TalentDef
