@@ -165,6 +165,29 @@ namespace Prototype
         }
 
         /// <summary>
+        /// How well this slot plays it LONG, 0..1: the ball over the top, the switch, the
+        /// through ball. PassingFor is the short game - the ball to feet.
+        ///
+        /// Split because they are different players. The eights are the best at both, but
+        /// the centre-backs and the pivot - who play the diagonals - are better long than
+        /// the front three, who are better short. Read off the role like ShootingFor, so
+        /// it needs no scene rebuild.
+        /// </summary>
+        public static float LongPassingFor(Role r)
+        {
+            switch (r)
+            {
+                case Role.GK: return 0.50f;
+                case Role.LCB: case Role.RCB: return 0.60f;
+                case Role.LB: case Role.RB: return 0.58f;
+                case Role.DM: return 0.72f;
+                case Role.LCM: case Role.RCM: return 0.74f;
+                case Role.LW: case Role.RW: return 0.55f;
+                default: return 0.45f;      // ST
+            }
+        }
+
+        /// <summary>
         /// How well this slot finishes, 0..1. Feeds the same aim spread as a pass
         /// (BallModel.AimSpread), so it decides how wide a shot can go - not how hard.
         ///

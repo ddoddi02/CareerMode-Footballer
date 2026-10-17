@@ -68,6 +68,8 @@ namespace Prototype
         [Header("Attributes")]
         [Tooltip("How well he passes, 0..1. Lives here rather than on the director so there is ONE of it: the pass selector reads the same number the strike does when it asks whether a team-mate is a better passer than him.")]
         [Range(0f, 1f)] public float passing = 0.70f;
+        [Tooltip("How well he plays it long, 0..1 - the ball over the top and the through ball. Short passing above is the ball to feet. Same split the bots have (Formation.LongPassingFor).")]
+        [Range(0f, 1f)] public float longPassing = 0.70f;
 
         [Header("Refs")]
         public Camera cam;
@@ -84,6 +86,7 @@ namespace Prototype
         public float LastPassPress { get; private set; }
         public float LastThroughPress { get; private set; }
         public float LastCrossPress { get; private set; }
+        public float LastLobPress { get; private set; }
         public float LastShootPress { get; private set; }
         public float BodyAngle { get; private set; }
         public float HeadAngle { get; private set; }
@@ -145,6 +148,7 @@ namespace Prototype
             LastPassPress = -99f;
             LastThroughPress = -99f;
             LastCrossPress = -99f;
+            LastLobPress = -99f;
             LastShootPress = -99f;
             CallDir = new Vector2(0f, 1f);
             TrackBall = true;
@@ -163,6 +167,7 @@ namespace Prototype
             LastPassPress = -99f;
             LastThroughPress = -99f;
             LastCrossPress = -99f;
+            LastLobPress = -99f;
             LastShootPress = -99f;
             CallDir = new Vector2(0f, 1f);
             EndReceive();
@@ -224,6 +229,7 @@ namespace Prototype
             if (ProtoInput.PassPressed()) LastPassPress = Time.time;
             if (ProtoInput.ThroughPassPressed()) LastThroughPress = Time.time;
             if (ProtoInput.CrossPressed()) LastCrossPress = Time.time;
+            if (ProtoInput.LobPressed()) LastLobPress = Time.time;
             if (ProtoInput.ShootPressed()) LastShootPress = Time.time;
 
             UpdateAim();

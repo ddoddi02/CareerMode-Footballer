@@ -120,32 +120,50 @@ namespace Prototype
 #endif
         }
 
+        /// <summary>Short pass to feet: left click. E is the same thing on the keyboard.</summary>
         public static bool PassPressed()
         {
 #if ENABLE_INPUT_SYSTEM
+            var ms = Mouse.current;
+            if (ms != null && ms.leftButton.wasPressedThisFrame) return true;
             var kb = Keyboard.current;
             if (kb != null && kb.eKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonSouth.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.E);
+            return Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.E);
 #else
             return false;
 #endif
         }
 
-        /// <summary>Call for the ball to be played into the space ahead of your run.</summary>
+        /// <summary>Through ball into space: the back side button (mouse 4). F is the same thing.</summary>
         public static bool ThroughPassPressed()
         {
 #if ENABLE_INPUT_SYSTEM
+            var ms = Mouse.current;
+            if (ms != null && ms.backButton.wasPressedThisFrame) return true;
             var kb = Keyboard.current;
             if (kb != null && kb.fKey.wasPressedThisFrame) return true;
             var gp = Gamepad.current;
             if (gp != null && gp.buttonNorth.wasPressedThisFrame) return true;
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.F);
+            return Input.GetMouseButtonDown(3) || Input.GetKeyDown(KeyCode.F);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Lofted ball over the top to the cursor: wheel click (mouse 3).</summary>
+        public static bool LobPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var ms = Mouse.current;
+            return ms != null && ms.middleButton.wasPressedThisFrame;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetMouseButtonDown(2);
 #else
             return false;
 #endif

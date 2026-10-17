@@ -383,7 +383,7 @@ namespace Prototype
         /// pass is (PROJECT.md 3.5): guess the flight time, move him along it, re-solve.
         /// Three passes is plenty - the correction shrinks fast.
         /// </summary>
-        static Vector3 LeadPoint(Vector3 from, Transform receiver, PassRules r, Ball ball, bool lofted)
+        public static Vector3 LeadPoint(Vector3 from, Transform receiver, PassRules r, Ball ball, bool lofted)
         {
             Vector3 here = Flat(receiver.position);
             Vector3 v = Flat(VelocityOf(receiver));

@@ -139,6 +139,52 @@ namespace Prototype
 
         void Awake() { ApplyScale(); }
 
+        // ----------------------------------------------------------- shadow ----
+        // The ball is unlit and casts nothing, and the camera looks down at 58 degrees, so
+        // a ball in the air just looks like a ball further up the screen. A dark disc on
+        // the grass under it, only while it is up, is what makes the height readable.
+
+        [Header("Shadow - only while it is in the air")]
+        public bool showShadow = true;
+        public float shadowSize = 0.35f;
+        [Range(0f, 1f)] public float shadowAlpha = 0.45f;
+
+        Transform shadow;
+        const string ShadowName = "BallShadow";
+
+        void Start()
+        {
+            if (!showShadow) return;
+            // A script reload in play mode loses this field but not the object - take it back.
+            GameObject go = GameObject.Find(ShadowName);
+            if (go == null)
+            {
+                // A flattened cylinder: round, where a quad would be a square.
+                go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = ShadowName;
+                Collider c = go.GetComponent<Collider>();
+                if (c != null) Destroy(c);
+                Renderer r = go.GetComponent<Renderer>();
+                r.sharedMaterial = ProtoMat.UnlitFade(new Color(0f, 0f, 0f, shadowAlpha));
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            shadow = go.transform;
+            shadow.gameObject.SetActive(false);
+        }
+
+        void LateUpdate()
+        {
+            if (shadow == null) return;
+            float up = transform.position.y - radius;
+            bool show = showShadow && up > 0.15f;
+            if (shadow.gameObject.activeSelf != show) shadow.gameObject.SetActive(show);
+            if (!show) return;
+            shadow.position = new Vector3(transform.position.x, 0.03f, transform.position.z);
+            float w = shadowSize * (1f + up * 0.05f);
+            shadow.localScale = new Vector3(w, 0.005f, w);
+        }
+
         void OnValidate() { ApplyScale(); }
 
         // ------------------------------------------------------------ carry ----

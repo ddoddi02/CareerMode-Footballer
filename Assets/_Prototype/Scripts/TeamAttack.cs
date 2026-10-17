@@ -933,11 +933,14 @@ namespace Prototype
         /// </summary>
         Vector3 ChasePoint()
         {
-            Vector3 rest = ballBody.Predict(chaseLookAhead);
+            // A ball in the air cannot be collected until it comes down, so the search
+            // starts where it lands - otherwise he runs to a spot it sails over.
+            float land = ballBody.Airborne ? ballBody.LandingTime() : 0f;
+            Vector3 rest = ballBody.Predict(land + chaseLookAhead);
             rest.y = 0f;
             if (!ballBody.InFlight) return rest;
 
-            for (float t = 0.1f; t <= chaseLookAhead; t += 0.1f)
+            for (float t = Mathf.Max(0.1f, land); t <= land + chaseLookAhead; t += 0.1f)
             {
                 Vector3 p = ballBody.Predict(t);
                 p.y = 0f;
@@ -1030,7 +1033,7 @@ namespace Prototype
                 // it is folded into how far up the line the aim point sits; the strike
                 // speed it returns is unused, because Loft solves that from the distance
                 // and the apex.
-                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, 0f, who.passing, diff);
+                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, 0f, who.LongPassing, diff);
                 float over = 1f + st.speedErrorPct * 0.01f;
                 Vector3 landing = from + st.direction * (pending.distance * over);
                 ballBody.Loft(from, landing, PassPlanner.LoftApex(pending.distance, pass));
@@ -1091,6 +1094,19 @@ namespace Prototype
         float Pressure(Vector3 p)
         {
             return Mathf.Clamp01(Mathf.InverseLerp(pressLoose, pressTight, NearestOpponent(p)));
+        }
+
+        /// <summary>
+        /// The human has just played it. `receiver` is the team-mate it was meant for, or
+        /// null for a ball into space - then whoever can get to it first goes (TickChase).
+        /// Without this the man the LAST bot pass was meant for kept first claim on the
+        /// human's ball, wherever it went.
+        /// </summary>
+        public void HumanPlayed(Transform receiver)
+        {
+            IntendedReceiver = receiver;
+            lastPasser = null;
+            looseSince = -1f;
         }
 
         /// <summary>Forget the ball - a restart.</summary>

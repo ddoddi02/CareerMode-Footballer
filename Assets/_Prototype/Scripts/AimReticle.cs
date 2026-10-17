@@ -62,6 +62,14 @@ namespace Prototype
         public float looseAt = 2.5f;
         public Color lineCol = new Color(1f, 1f, 1f, 0.30f);
 
+        [Header("Short pass - who it would go to")]
+        [Tooltip("Ring under the team-mate a click would play it to (DrillDirector.ShortPassReceiver).")]
+        public Color receiverCol = new Color(0.45f, 0.85f, 1f, 0.95f);
+        public float receiverRing = 0.9f;
+        [Tooltip("A faint ring of the scan radius round the cursor, so it is clear how near a man has to be.")]
+        public bool showScanRadius = true;
+        public Color scanCol = new Color(1f, 1f, 1f, 0.12f);
+
         [Header("The shot")]
         [Tooltip("Also draw where a shot would cross the goal line, as a bar on the line itself. Read it against the posts: all of it inside them is a shot that cannot miss the frame.")]
         public bool showShot = true;
@@ -143,7 +151,10 @@ namespace Prototype
         void Draw()
         {
             Vector3 from = player.transform.position;
-            Vector3 target = director.AimTarget();
+            // The short pass: to the man nearest the cursor if there is one, else the cursor.
+            // Both numbers come from the director, which strikes with exactly these.
+            Transform receiver = director.ShortPassReceiver();
+            Vector3 target = director.ShortPassTarget();
             float spread = director.AimSpreadNow();
 
             Color c = Color.Lerp(tightCol, looseCol,
@@ -152,6 +163,8 @@ namespace Prototype
             if (showAimLine) Segment(from, target, lineCol);
             Ring(target, spread, c, ringWidth);
             if (centreDotRadius > 0f) Ring(target, centreDotRadius, c, ringWidth * 0.7f);
+            if (receiver != null) Ring(receiver.position, receiverRing, receiverCol, ringWidth * 1.4f);
+            if (showScanRadius) Ring(director.ScanCentre(), director.scanRadius, scanCol, ringWidth * 0.6f);
 
             if (showShot) DrawShot(from);
         }

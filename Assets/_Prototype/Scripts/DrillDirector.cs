@@ -4,8 +4,9 @@ namespace Prototype
 {
     public enum PassType
     {
-        ToFeet,  // weak prediction - arrives at you, you receive without hunting for it
-        Through  // strong prediction - thrown well ahead, you have to run onto it
+        ToFeet,  // short, along the floor, to the team-mate nearest the cursor - left click / E
+        Through, // long, along the floor, into the space under the cursor - mouse 4 / F
+        Lob      // long, in the air, onto the grass under the cursor - wheel click
     }
 
     /// <summary>
@@ -67,6 +68,10 @@ namespace Prototype
         public float blindPassDistance = 14f;
         [Tooltip("How long after passing he cannot collect the ball back himself.")]
         public float selfPassLock = 0.8f;
+        [Tooltip("The short pass looks for a team-mate this close to the cursor and plays it to his feet - the nearest to the cursor if there are several. Nobody that close, and it goes where the cursor points: a pass to nobody.")]
+        public float scanRadius = 10f;
+        [Tooltip("Longest ball over the top. The ground passes stop at PassRules.groundRange.")]
+        public float lobRange = 50f;
 
         [Header("Tuning")]
         public float tightGap = 1.5f;
@@ -514,6 +519,7 @@ namespace Prototype
             if (Time.time - player.LastCrossPress < passBuffer) { Cross(true); return; }
             if (Time.time - player.LastPassPress < passBuffer) { PlayIt(PassType.ToFeet, true); return; }
             if (Time.time - player.LastThroughPress < passBuffer) { PlayIt(PassType.Through, true); return; }
+            if (Time.time - player.LastLobPress < passBuffer) { PlayIt(PassType.Lob, true); return; }
 
             EnterCarry();
         }
@@ -533,6 +539,7 @@ namespace Prototype
             if (Time.time - player.LastCrossPress < passBuffer) { Cross(false); return; }
             if (Time.time - player.LastPassPress < passBuffer) { PlayIt(PassType.ToFeet, false); return; }
             if (Time.time - player.LastThroughPress < passBuffer) { PlayIt(PassType.Through, false); return; }
+            if (Time.time - player.LastLobPress < passBuffer) { PlayIt(PassType.Lob, false); return; }
 
             var d = NearestDefender();
             if (d == null || !d.WantsTackle(ball.transform.position, ball.Exposure)) return;
@@ -613,6 +620,12 @@ namespace Prototype
         /// </summary>
         public Vector3 AimTarget()
         {
+            return AimTarget(attack != null ? attack.pass.groundRange : 30f);
+        }
+
+        /// <summary>The same, clamped to `reach` instead - the ball over the top goes further.</summary>
+        public Vector3 AimTarget(float reach)
+        {
             Vector3 pp = player.transform.position;
             Vector3 flat = new Vector3(pp.x, 0f, pp.z);
 
@@ -624,7 +637,6 @@ namespace Prototype
                 want = flat + new Vector3(f.x, 0f, f.y) * blindPassDistance;
             }
 
-            float reach = attack != null ? attack.pass.groundRange : 30f;
             Vector3 d = want - flat;
             if (d.magnitude > reach) want = flat + d.normalized * reach;
             return want;
@@ -638,42 +650,128 @@ namespace Prototype
         {
             if (player == null) return 0f;
             Vector3 pp = player.transform.position;
-            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), AimTarget());
+            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), ShortPassTarget());
             return BallModel.AimSpread(player.passing, dist,
                                        BallModel.Difficulty(PressureOf(GapNow()), 0f, false, false));
         }
 
         /// <summary>
-        /// The human's pass. It goes where he is pointing, and how near that is to where
-        /// he wanted it is his problem: the spread grows with distance (3.9), so a ball
-        /// asked to travel further is a ball asked to be luckier.
+        /// Who a short pass would go to right now: the team-mate nearest the cursor, if one
+        /// is within scanRadius of it and within a ground pass of him. Null means nobody -
+        /// the ball would go to the grass under the cursor. Asked every frame, so the
+        /// reticle can mark him before the click (AimReticle).
+        ///
+        /// This puts back, for the short pass only, the snap to a man that 3.19 took out.
+        /// The cursor still decides: it is the man nearest it, not nearest the passer.
+        /// </summary>
+        public Transform ShortPassReceiver()
+        {
+            if (player == null || attack == null || attack.mates == null) return null;
+
+            Vector3 pp = player.transform.position; pp.y = 0f;
+            Vector3 cursor = ScanCentre();
+            float reach = attack.pass.groundRange;
+
+            Transform best = null;
+            float bd = scanRadius;
+            for (int i = 0; i < attack.mates.Length; i++)
+            {
+                Transform m = attack.mates[i];
+                if (m == null || m == player.transform) continue;
+                Vector3 mp = m.position; mp.y = 0f;
+                if ((mp - pp).magnitude > reach) continue;
+                float d = (mp - cursor).magnitude;
+                if (d < bd) { bd = d; best = m; }
+            }
+            return best;
+        }
+
+        /// <summary>The point the short pass scans around: the cursor itself, not clamped to any range.</summary>
+        public Vector3 ScanCentre()
+        {
+            return player.HasAim ? new Vector3(player.AimPoint.x, 0f, player.AimPoint.z) : AimTarget();
+        }
+
+        /// <summary>Where a short pass would be aimed: his feet, led the way bots lead theirs - or the cursor.</summary>
+        public Vector3 ShortPassTarget()
+        {
+            Transform r = ShortPassReceiver();
+            if (r == null) return AimTarget();
+            Vector3 t = PassPlanner.LeadPoint(player.transform.position, r, attack.pass, ball, false);
+            t.y = 0f;
+            return t;
+        }
+
+        /// <summary>
+        /// The human's pass. Three of them:
+        ///
+        ///   short     to the feet of the team-mate nearest the cursor (ShortPassReceiver),
+        ///             or - nobody there - where the cursor points. Short passing.
+        ///   through   along the floor into the space under the cursor, kept onside.
+        ///   lob       over the top onto the grass under the cursor, as high as a ball that
+        ///             long needs to be (PassPlanner.LoftApex - the bots' long ball).
+        ///
+        /// The two long ones go where they are pointed whoever is there, and whoever of ours
+        /// can get to it first goes after it (TeamAttack.TickChase). Both use long passing.
+        /// How near the ball gets to where he wanted it is his problem: the spread grows
+        /// with distance (3.9), so a ball asked to travel further is asked to be luckier.
         /// </summary>
         void PlayIt(PassType type, bool firstTime)
         {
-            bool through = type == PassType.Through;
             Vector3 pp = player.transform.position;
             PassRules rules = attack != null ? attack.pass : new PassRules();
+            float diff = BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false);
 
-            Vector3 target = AimTarget();
-            if (through && attack != null)
+            Transform receiver = null;
+            Vector3 target;
+            float stat;
+            if (type == PassType.ToFeet)
+            {
+                receiver = ShortPassReceiver();
+                target = ShortPassTarget();
+                stat = player.passing;
+            }
+            else if (type == PassType.Through)
             {
                 // He has already said where with the cursor, so there is no lead to add -
                 // only the offside line to respect, which is what makes a run timed.
-                target = Offside.KeepOnside(target, attack.OffsideLine,
-                                            attack.attacksPositiveZ, rules.maxLead * 0.25f);
+                target = AimTarget();
+                if (attack != null)
+                    target = Offside.KeepOnside(target, attack.OffsideLine,
+                                                attack.attacksPositiveZ, rules.maxLead * 0.25f);
+                stat = player.longPassing;
+            }
+            else
+            {
+                target = AimTarget(lobRange);
+                stat = player.longPassing;
             }
             target.y = 0f;
 
             float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), target);
-            float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel);
-            var st = BallModel.Resolve(pp, target, 0f, v0, player.passing,
-                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
+            BallModel.Strike st;
+            if (type == PassType.Lob)
+            {
+                // The same as the bots' ball over the top (TeamAttack.PlayPass): Resolve gives
+                // the sprayed direction, and the weight error becomes a LENGTH error, because
+                // Loft solves the strike from the distance and the apex.
+                st = BallModel.Resolve(pp, target, 0f, 0f, stat, diff);
+                Vector3 landing = pp + st.direction * (dist * (1f + st.speedErrorPct * 0.01f));
+                ball.Loft(pp, landing, PassPlanner.LoftApex(dist, rules));
+            }
+            else
+            {
+                float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel);
+                st = BallModel.Resolve(pp, target, 0f, v0, stat, diff);
+                ball.Release(st.direction, st.speed);
+            }
 
             lastAimErr = st.aimErrorM;
             lastSpeedErr = st.speedErrorPct;
-            lastStrike = through ? "스루패스" : "패스";
+            lastStrike = type == PassType.Lob ? "로빙" : type == PassType.Through ? "스루패스"
+                       : receiver != null ? "패스" : "빈 곳 패스";
 
-            ball.Release(st.direction, st.speed);
+            if (attack != null) attack.HumanPlayed(receiver);
 
             player.EndReceive();
             player.TrackBall = true;
@@ -681,10 +779,9 @@ namespace Prototype
             awaitingHumanPass = true;
             incomingForHuman = false;
 
-            float spread = BallModel.AimSpread(player.passing, dist,
-                              BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
-            Flash(string.Format("{0:0.0}m · 오차 ±{1:0.0}m (실제 {2:+0.0;-0.0}m)",
-                                dist, spread, st.aimErrorM));
+            float spread = BallModel.AimSpread(stat, dist, diff);
+            Flash(string.Format("{0} {1:0.0}m · 오차 ±{2:0.0}m (실제 {3:+0.0;-0.0}m)",
+                                lastStrike, dist, spread, st.aimErrorM));
         }
 
         /// <summary>
