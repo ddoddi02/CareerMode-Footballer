@@ -73,6 +73,12 @@ namespace Prototype
         [Tooltip("Longest ball over the top. The ground passes stop at PassRules.groundRange.")]
         public float lobRange = 50f;
 
+        [Header("Passing - rolled at kickoff")]
+        [Tooltip("Give every player, the human included, a fresh short and long passing on the 1..100 scale when the match starts. Off: whatever the bodies already have.")]
+        public bool rollPassing = true;
+        [Tooltip("Inclusive range of the roll, 1..100 (Career.StatScale).")]
+        public Vector2Int passingRoll = new Vector2Int(70, 85);
+
         [Header("Tuning")]
         public float tightGap = 1.5f;
         public float mediumGap = 3.2f;
@@ -126,9 +132,11 @@ namespace Prototype
         string body = "";
         Color titleCol = Color.white;
 
-        LineRenderer passLine, passRing, receiveGuide;
+        LineRenderer passRing;          // where the ball in flight is going to land / arrive
+        Vector3 flightMark;
+        int flightSerial = -1;          // Ball.LaunchSerial the mark belongs to
+        int seenHomePasses = -1, seenAwayPasses = -1;
         GUIStyle sBig, sMid, sSmall;
-        Texture2D texWhite;
 
         static readonly Color FeetCol = new Color(1f, 1f, 1f, 1f);
         static readonly Color LoftCol = new Color(1f, 0.78f, 0.35f, 1f);
@@ -137,12 +145,37 @@ namespace Prototype
         void Start()
         {
             Material dim = ProtoMat.UnlitFade(new Color(1f, 1f, 1f, 0.3f));
-            passLine = MakeLine("PassLine", dim, 0.10f, 2);
             passRing = MakeLine("PassTarget", dim, 0.08f, 33);
-            receiveGuide = MakeLine("ReceiveGuide", dim, 0.07f, 2);
+
+            RollPassing();
+            if (GetComponent<MouseLegend>() == null) gameObject.AddComponent<MouseLegend>();
 
             phase = Phase.Setup;
             phaseT = 0f;
+        }
+
+        /// <summary>
+        /// Short and long passing for everybody, each its own whole number in passingRoll,
+        /// rolled once per match. Replaces the per-role table that used to set them
+        /// (Formation.PassingFor) - the user's call, 2026-10-18.
+        /// </summary>
+        void RollPassing()
+        {
+            if (!rollPassing) return;
+            int lo = Mathf.Clamp(Mathf.Min(passingRoll.x, passingRoll.y), 1, 100);
+            int hi = Mathf.Clamp(Mathf.Max(passingRoll.x, passingRoll.y), 1, 100);
+
+            var bots = FindObjectsByType<AttackerAI>(FindObjectsSortMode.None);
+            for (int i = 0; i < bots.Length; i++)
+            {
+                bots[i].shortPassing = Random.Range(lo, hi + 1);
+                bots[i].longPassing = Random.Range(lo, hi + 1);
+            }
+            if (player != null)
+            {
+                player.shortPassing = Random.Range(lo, hi + 1);
+                player.longPassing = Random.Range(lo, hi + 1);
+            }
         }
 
         LineRenderer MakeLine(string name, Material m, float width, int points)
@@ -529,7 +562,6 @@ namespace Prototype
             ball.Attach(player);
             player.EndReceive();
             player.TrackBall = false;      // head up, not staring at his own feet
-            receiveGuide.enabled = false;
             deadSince = -1f;
         }
 
@@ -643,19 +675,6 @@ namespace Prototype
         }
 
         /// <summary>
-        /// The radius of the circle the ball might go through, for the aim he is holding
-        /// right now. The reticle draws THIS - it does not work one out for itself.
-        /// </summary>
-        public float AimSpreadNow()
-        {
-            if (player == null) return 0f;
-            Vector3 pp = player.transform.position;
-            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), ShortPassTarget());
-            return BallModel.AimSpread(player.passing, dist,
-                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, false, false));
-        }
-
-        /// <summary>
         /// Who a short pass would go to right now: the team-mate nearest the cursor, if one
         /// is within scanRadius of it and within a ground pass of him. Null means nobody -
         /// the ball would go to the grass under the cursor. Asked every frame, so the
@@ -739,12 +758,12 @@ namespace Prototype
                 if (attack != null)
                     target = Offside.KeepOnside(target, attack.OffsideLine,
                                                 attack.attacksPositiveZ, rules.maxLead * 0.25f);
-                stat = player.longPassing;
+                stat = player.LongPassing;
             }
             else
             {
                 target = AimTarget(lobRange);
-                stat = player.longPassing;
+                stat = player.LongPassing;
             }
             target.y = 0f;
 
@@ -758,12 +777,14 @@ namespace Prototype
                 st = BallModel.Resolve(pp, target, 0f, 0f, stat, diff);
                 Vector3 landing = pp + st.direction * (dist * (1f + st.speedErrorPct * 0.01f));
                 ball.Loft(pp, landing, PassPlanner.LoftApex(dist, rules));
+                MarkFlight(landing);
             }
             else
             {
                 float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel);
                 st = BallModel.Resolve(pp, target, 0f, v0, stat, diff);
                 ball.Release(st.direction, st.speed);
+                MarkFlight(target);
             }
 
             lastAimErr = st.aimErrorM;
@@ -812,19 +833,6 @@ namespace Prototype
             if (dir.z > 0.05f)
                 return from + dir * ((goalZ - from.z) / dir.z);
             return from + dir * 30f;
-        }
-
-        /// <summary>
-        /// How wide this shot might go, measured ON the goal line - the reticle draws it
-        /// there, next to the posts, so it can be read against them.
-        /// </summary>
-        public float ShotSpreadNow()
-        {
-            if (player == null) return 0f;
-            Vector3 pp = player.transform.position;
-            float dist = Vector3.Distance(new Vector3(pp.x, 0f, pp.z), ShotTarget());
-            return BallModel.AimSpread(playerShooting, dist,
-                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, false, false));
         }
 
         /// <summary>
@@ -906,9 +914,7 @@ namespace Prototype
         /// </summary>
         public void HideLines()
         {
-            if (passLine != null) passLine.enabled = false;
             if (passRing != null) passRing.enabled = false;
-            if (receiveGuide != null) receiveGuide.enabled = false;
         }
 
         void EndRound()
@@ -916,9 +922,7 @@ namespace Prototype
             player.EndReceive();
             player.TrackBall = true;
             incomingForHuman = false;
-            passLine.enabled = false;
             passRing.enabled = false;
-            receiveGuide.enabled = false;
         }
 
         void Finish(string t, string b, Color c)
@@ -979,39 +983,51 @@ namespace Prototype
             lr.endColor = c;
         }
 
+        /// <summary>
+        /// Where the ball in flight is going to land or arrive - the one mark left on the
+        /// match screen besides the cursor and the players (user, 2026-10-18).
+        ///
+        ///   in the air     where it comes down - from the ball itself (Ball.Predict at
+        ///                  Ball.LandingTime), so the spray of the strike is already in it
+        ///   on the ground  where the pass was aimed: a bot's plan (TeamAttack.LastPlan), or
+        ///                  the human's own target
+        ///
+        /// A mark belongs to one strike (Ball.LaunchSerial). A touch, a deflection or a save
+        /// is a new strike, and the old mark goes.
+        /// </summary>
         void DrawLive()
         {
-            // The ball that is actually travelling, and where it was aimed.
-            if (attack != null && attack.LastPlan.valid && ball.InFlight)
+            NoteBotPass(possession.homeAttack, ref seenHomePasses);
+            NoteBotPass(possession.awayAttack, ref seenAwayPasses);
+
+            bool lofted = ball.Airborne;
+            bool have = false;
+            Vector3 mark = Vector3.zero;
+            if (ball.InFlight && !ball.Carried)
             {
-                PassPlan p = attack.LastPlan;
-                Color c = p.kind == PassKind.Lofted ? LoftCol : FeetCol;
-                c.a = 0.34f;
-                SetLine(passLine, p.from, p.target, c);
-                SetRing(passRing, p.target, p.kind == PassKind.Lofted ? 1.1f : 0.75f, c, 32);
-            }
-            else
-            {
-                passLine.enabled = false;
-                passRing.enabled = false;
+                if (lofted) { mark = ball.Predict(ball.LandingTime()); have = true; }
+                else if (flightSerial == ball.LaunchSerial) { mark = flightMark; have = true; }
             }
 
-            if (!incomingForHuman || ball.Carried) { receiveGuide.enabled = false; return; }
+            if (!have) { passRing.enabled = false; return; }
+            Color c = lofted ? LoftCol : FeetCol;
+            c.a = 0.6f;
+            SetRing(passRing, mark, lofted ? 1.1f : 0.75f, c, 32);
+        }
 
-            Vector3 bp = Flat(ball.transform.position);
-            Vector3 pp = Flat(player.transform.position);
+        void NoteBotPass(TeamAttack side, ref int seen)
+        {
+            if (side == null) return;
+            if (seen == side.PassSerial) return;
+            seen = side.PassSerial;
+            if (side.LastPlan.valid) MarkFlight(side.LastPlan.target);
+        }
 
-            if (player.Mode == FootballerController.Receive.OnLine)
-            {
-                Vector3 d = ball.Velocity; d.y = 0f;
-                if (d.sqrMagnitude < 0.01f) d = pp - bp;
-                d.Normalize();
-                SetLine(receiveGuide, bp - d * 2f, bp + d * 14f, new Color(0.55f, 0.85f, 1f, 0.4f));
-            }
-            else
-            {
-                SetLine(receiveGuide, pp, bp, new Color(1f, 0.55f, 0.3f, 0.45f));
-            }
+        /// <summary>The ball just struck is heading for `p`.</summary>
+        void MarkFlight(Vector3 p)
+        {
+            flightMark = new Vector3(p.x, 0f, p.z);
+            flightSerial = ball.LaunchSerial;
         }
 
         static Vector3 Flat(Vector3 v) { return new Vector3(v.x, 0.04f, v.z); }
@@ -1048,9 +1064,6 @@ namespace Prototype
 
             if (f != null) { sBig.font = f; sMid.font = f; sSmall.font = f; }
 
-            texWhite = new Texture2D(1, 1);
-            texWhite.SetPixel(0, 0, Color.white);
-            texWhite.Apply();
         }
 
         void OnGUI()
@@ -1059,20 +1072,6 @@ namespace Prototype
             int w = Screen.width, h = Screen.height;
 
             var near = player != null ? NearestDefender() : null;
-            if (near != null && player != null)
-            {
-                float gap = near.Gap(player.transform.position);
-                if (gap < 1.2f)
-                {
-                    float a = Mathf.InverseLerp(1.2f, 0.6f, gap) * (0.35f + 0.25f * Mathf.Sin(Time.time * 14f));
-                    GUI.color = new Color(1f, 0.15f, 0.15f, Mathf.Clamp01(a));
-                    GUI.DrawTexture(new Rect(0, 0, w, 14), texWhite);
-                    GUI.DrawTexture(new Rect(0, h - 14, w, 14), texWhite);
-                    GUI.DrawTexture(new Rect(0, 0, 14, h), texWhite);
-                    GUI.DrawTexture(new Rect(w - 14, 0, 14, h), texWhite);
-                    GUI.color = Color.white;
-                }
-            }
 
             GUILayout.BeginArea(new Rect(14, 14, 348, 316), GUI.skin.box);
             GUILayout.Label(string.Format("홈 {0} : {1} 원정    ·    공: {2}",
@@ -1132,9 +1131,10 @@ namespace Prototype
             GUILayout.BeginArea(new Rect(w - 316, 14, 302, 292), GUI.skin.box);
             GUILayout.Label("WASD / 좌스틱     이동", sSmall);
             GUILayout.Label("마우스 / 우스틱   시선 · 조준", sSmall);
-            GUILayout.Label("E / A (✕)         패스 · 레이오프", sSmall);
+            GUILayout.Label("좌클릭 / E / A    짧은 패스 · 레이오프", sSmall);
+            GUILayout.Label("마우스4 / F / Y   스루패스", sSmall);
+            GUILayout.Label("마우스5           로빙", sSmall);
             GUILayout.Label("R / B (○)         슛", sSmall);
-            GUILayout.Label("F / Y (△)         스루패스", sSmall);
             GUILayout.Label("C / X (□)         크로스", sSmall);
             GUILayout.Label("Q                 어깨 너머 확인", sSmall);
             GUILayout.Label("Shift / RB        스프린트", sSmall);
@@ -1149,7 +1149,7 @@ namespace Prototype
             {
                 prompt = ball.Exposure > 0.9f
                     ? "터치가 깁니다 — 속도를 줄이거나 몸을 넣으세요 (Space)"
-                    : "드리블 중 — 마우스로 겨냥하고 E 패스 · F 스루 · R 슛";
+                    : "드리블 중 — 커서로 겨냥하고 좌클릭 패스 · 마우스4 스루 · 마우스5 로빙 · R 슛";
             }
             else if (incomingForHuman && ball != null && ball.InFlight)
             {

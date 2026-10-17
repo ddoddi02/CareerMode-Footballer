@@ -19,8 +19,8 @@ namespace Prototype
     public class RoleLabels : MonoBehaviour
     {
         public bool show = true;
-        [Tooltip("Line from each body to the station his running brain is steering to.")]
-        public bool showStation = true;
+        [Tooltip("Line from each body to the station his running brain is steering to. Off by default - a debugging aid, not part of the match screen (user, 2026-10-18).")]
+        public bool showStation = false;
         public float headHeight = 2.3f;
         public float lineWidth = 0.12f;
 

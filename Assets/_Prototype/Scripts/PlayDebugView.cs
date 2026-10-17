@@ -39,6 +39,8 @@ namespace Prototype
         public PassLab lab;
 
         [Header("Toggle")]
+        [Tooltip("Whether it is up at the start. Off: the match screen shows only the cursor, where the ball will land and who is where (user, 2026-10-18). G brings it up.")]
+        public bool startShown = false;
         public bool show = true;
 
         [Header("Which rings")]
@@ -83,6 +85,7 @@ namespace Prototype
 
         void Awake()
         {
+            show = startShown;
             mat = ProtoMat.UnlitFade(new Color(1f, 1f, 1f, 0.5f));
 
             // Anything left unwired finds itself. There is exactly one of each in the

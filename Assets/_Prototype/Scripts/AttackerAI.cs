@@ -49,10 +49,15 @@ namespace Prototype
         public float unstickPeriod = 1.4f;
 
         [Header("On the ball")]
-        [Tooltip("How well he passes, 0..1. Drives his own error (PROJECT.md 3.8) and makes him worth passing TO - the selector prefers giving it to a better passer than the man on it.")]
-        [Range(0f, 1f)] public float passing = 0.65f;
-        /// <summary>How well he plays it long, 0..1 - his balls over the top. From his slot (Formation.LongPassingFor); `passing` is the short game.</summary>
-        public float LongPassing { get { return Formation.LongPassingFor(role); } }
+        [Tooltip("Short passing, 1..100 - the ball to feet. Rolled at kickoff (DrillDirector.rollPassing). Drives his own error (PROJECT.md 3.8) and makes him worth passing TO - the selector prefers giving it to a better passer than the man on it.")]
+        [Range(1, 100)] public int shortPassing = 78;
+        [Tooltip("Long passing, 1..100 - his balls over the top.")]
+        [Range(1, 100)] public int longPassing = 78;
+
+        /// <summary>Short passing on the 0..1 scale the kick model works in (Career.StatScale.To01).</summary>
+        public float passing { get { return Career.StatScale.To01(shortPassing); } }
+        /// <summary>Long passing, 0..1.</summary>
+        public float LongPassing { get { return Career.StatScale.To01(longPassing); } }
 
         /// <summary>How well he finishes, 0..1. From his slot (Formation.ShootingFor).</summary>
         public float Shooting { get { return Formation.ShootingFor(role); } }

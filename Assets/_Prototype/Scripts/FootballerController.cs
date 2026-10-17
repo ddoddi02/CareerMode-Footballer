@@ -66,10 +66,15 @@ namespace Prototype
         public Role role = Role.DM;
 
         [Header("Attributes")]
-        [Tooltip("How well he passes, 0..1. Lives here rather than on the director so there is ONE of it: the pass selector reads the same number the strike does when it asks whether a team-mate is a better passer than him.")]
-        [Range(0f, 1f)] public float passing = 0.70f;
-        [Tooltip("How well he plays it long, 0..1 - the ball over the top and the through ball. Short passing above is the ball to feet. Same split the bots have (Formation.LongPassingFor).")]
-        [Range(0f, 1f)] public float longPassing = 0.70f;
+        [Tooltip("Short passing, 1..100 - the ball to feet. Rolled at kickoff (DrillDirector.rollPassing). Lives here rather than on the director so there is ONE of it: the pass selector reads the same number the strike does.")]
+        [Range(1, 100)] public int shortPassing = 78;
+        [Tooltip("Long passing, 1..100 - the ball over the top and the through ball.")]
+        [Range(1, 100)] public int longPassing = 78;
+
+        /// <summary>Short passing on the 0..1 scale the kick model works in (Career.StatScale.To01).</summary>
+        public float passing { get { return Career.StatScale.To01(shortPassing); } }
+        /// <summary>Long passing, 0..1.</summary>
+        public float LongPassing { get { return Career.StatScale.To01(longPassing); } }
 
         [Header("Refs")]
         public Camera cam;

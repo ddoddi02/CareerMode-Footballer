@@ -139,62 +139,13 @@ namespace Prototype
         }
 
         /// <summary>
-        /// How well this slot passes, 0..1.
-        ///
-        /// Data rather than something the scene builder invents, for the same reason the
-        /// slot coordinates are: it is a property of the ROLE, and the pass selector now
-        /// asks "is there a better passer than me to give this to" (PassRules.wQuality).
-        /// With one shared number for the whole side that question has no answer and the
-        /// term is dead weight.
-        ///
-        /// The eights are the highest because that is who a side plays through. Real
-        /// per-player attributes replace this the moment there is a squad to load.
-        /// </summary>
-        public static float PassingFor(Role r)
-        {
-            switch (r)
-            {
-                case Role.GK: return 0.45f;
-                case Role.LCB: case Role.RCB: return 0.56f;
-                case Role.LB: case Role.RB: return 0.60f;
-                case Role.DM: return 0.72f;
-                case Role.LCM: case Role.RCM: return 0.80f;
-                case Role.LW: case Role.RW: return 0.66f;
-                default: return 0.62f;      // ST
-            }
-        }
-
-        /// <summary>
-        /// How well this slot plays it LONG, 0..1: the ball over the top, the switch, the
-        /// through ball. PassingFor is the short game - the ball to feet.
-        ///
-        /// Split because they are different players. The eights are the best at both, but
-        /// the centre-backs and the pivot - who play the diagonals - are better long than
-        /// the front three, who are better short. Read off the role like ShootingFor, so
-        /// it needs no scene rebuild.
-        /// </summary>
-        public static float LongPassingFor(Role r)
-        {
-            switch (r)
-            {
-                case Role.GK: return 0.50f;
-                case Role.LCB: case Role.RCB: return 0.60f;
-                case Role.LB: case Role.RB: return 0.58f;
-                case Role.DM: return 0.72f;
-                case Role.LCM: case Role.RCM: return 0.74f;
-                case Role.LW: case Role.RW: return 0.55f;
-                default: return 0.45f;      // ST
-            }
-        }
-
-        /// <summary>
         /// How well this slot finishes, 0..1. Feeds the same aim spread as a pass
         /// (BallModel.AimSpread), so it decides how wide a shot can go - not how hard.
         ///
         /// Ordered by who a side expects its goals from: the front three, then the eights,
         /// and the back line least. Read straight off the role rather than stored on the
         /// body, so it needs no scene rebuild; real per-player attributes replace it the
-        /// moment there is a squad to load, as with PassingFor.
+        /// moment there is a squad to load.
         /// </summary>
         public static float ShootingFor(Role r)
         {

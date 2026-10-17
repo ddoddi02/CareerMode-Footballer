@@ -107,8 +107,6 @@ public static class PrototypeSceneBuilder
 
         var fc = player.AddComponent<FootballerController>();
         fc.role = Role.DM;                        // 원 볼란치 - the slot the human plays
-        fc.passing = Formation.PassingFor(Role.DM);
-        fc.longPassing = Formation.LongPassingFor(Role.DM);
         fc.headMarker = headPivot;
         fc.pitchHalfX = HalfW;
         fc.pitchHalfZ = HalfL;
@@ -207,7 +205,6 @@ public static class PrototypeSceneBuilder
                     Slot(passer, root, pos, away, "Passer (Home LCB)");
                     passerAi.role = slot.role;
                     passerAi.homeSlot = pos;
-                    passerAi.passing = Formation.PassingFor(slot.role);
                     passerDef.role = slot.role;
                     passerDef.homeSlot = pos;
                     homeAtk.Add(passerAi);
@@ -224,7 +221,6 @@ public static class PrototypeSceneBuilder
                     dai.homeSlot = pos;
                     daiAtk.role = slot.role;
                     daiAtk.homeSlot = pos;
-                    daiAtk.passing = Formation.PassingFor(slot.role);
                     awayDef.Add(dai);
                     awayAtk.Add(daiAtk);
                     awayBodies.Add(defender.transform);
@@ -253,7 +249,6 @@ public static class PrototypeSceneBuilder
                     var a = body.GetComponent<AttackerAI>();
                     a.role = slot.role;
                     a.homeSlot = pos;
-                    a.passing = Formation.PassingFor(slot.role);
 
                     var b = body.GetComponent<DefenderAI>();
                     b.role = slot.role;

@@ -156,14 +156,14 @@ namespace Prototype
 #endif
         }
 
-        /// <summary>Lofted ball over the top to the cursor: wheel click (mouse 3).</summary>
+        /// <summary>Lofted ball over the top to the cursor: the front side button (mouse 5).</summary>
         public static bool LobPressed()
         {
 #if ENABLE_INPUT_SYSTEM
             var ms = Mouse.current;
-            return ms != null && ms.middleButton.wasPressedThisFrame;
+            return ms != null && ms.forwardButton.wasPressedThisFrame;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetMouseButtonDown(2);
+            return Input.GetMouseButtonDown(4);
 #else
             return false;
 #endif
