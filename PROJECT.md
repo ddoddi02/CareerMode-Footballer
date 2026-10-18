@@ -1814,13 +1814,13 @@ keeper.GoalChance(…) / keeper.Params    ← 그 골키퍼의 지금 자리와 
 | `Scripts/ProtoCore.cs` | `SightState`, `ProtoMat`(머티리얼 헬퍼), **`ProtoInput`**(키 바인딩 전부), **`PerceptionSystem`**(시야 판정) |
 | `Scripts/Perceivable.cs` | 인지 대상. 안 보이면 렌더러 끄고 잔상 표시 |
 | `Scripts/FootballerController.cs` | 이동·몸통/시선 분리·어깨 확인·리시브 구속 |
-| `Scripts/Formation.cs` | 4-1-2-3 슬롯 좌표 (데이터만, AI 없음). `Role`, `FormationSlot`, `WorldPos` |
+| `Scripts/Formation.cs` | 4-1-2-3 슬롯 좌표와 포지션별 마무리 값 (데이터만, AI 없음). `Role`, `FormationSlot`, `WorldPos`, `ShootingFor` |
 | `Scripts/TacticalPitch.cs` | 5레인 구분 + 위험도 `Danger()`. 콜라이더 아님, 순수 산술 |
 | `Scripts/PitchIntel.cs` | 공격 쪽이 '믿고 있는' 그림. 1초 텀 스냅샷 (수비는 실시간이라 안 씀) |
 | `Scripts/TeamDefence.cs` | **맨마킹** — 각자 정해진 상대 슬롯의 골쪽에 선다 / 세 줄 형태 유지 + 공이 있는 띠의 줄에서 한 명 압박 + 태클 + 골키퍼 앞 바닥 (§3.15) |
 | `Scripts/Offside.cs` | 오프사이드 라인 = 뒤에서 두 번째 수비수 (공·하프라인 max) |
 | `Scripts/TeamAttack.cs` | 공격 5원칙(점수) + **공 소유·패스 실행·루즈볼 수거** + 공 가진 봇의 패스/드리블 판단 (§3.17b) |
-| `Scripts/PassPlanner.cs` | **누구에게 보낼 것인가.** 레인 판정 / 롱패스 / 플레이어 웨지 |
+| `Scripts/PassPlanner.cs` | **봇이 누구에게 보낼 것인가.** 레인 판정 / 롱패스 / 리드 지점(`LeadPoint`, 사람의 짧은 패스도 씀) |
 | `Scripts/AttackerAI.cs` | 오프더볼 실행 + 침투/흔들기 타이머 + 공 몰고 달리기 |
 | `Scripts/Ball.cs` | 구름 마찰 + **포물선 체공** + 드리블 소유 + `Predict()` |
 | `Scripts/BallModel.cs` | 스탯 → 속도/방향오차/강약오차 |
@@ -1832,12 +1832,12 @@ keeper.GoalChance(…) / keeper.Params    ← 그 골키퍼의 지금 자리와 
 | `Scripts/PlayerMotion.cs` | **몸이 할 수 있는 것.** 가감속·회전 반경·후진 (§3.23) |
 | `Scripts/PitchControl.cs` | **각 칸을 누가 먼저 잡는가.** 공격·수비 각각 하나씩 (§3.24) |
 | `Scripts/PlayDebugView.cs` | **판정 거리와 지배 격자를 잔디에 그린다** (G). 읽기 전용 |
-| `Scripts/AimReticle.cs` | **조준원.** 토글 없음 — 디버그가 아니라 인터페이스 (§3.19b) |
+| `Scripts/AimReticle.cs` | **짧은 패스가 도착할 곳과 받을 동료 고리.** 토글 없음 — 디버그가 아니라 인터페이스 (§3.19) |
 | `Scripts/PressDrill.cs` | **압박 드릴** (T). 공을 4백에 묶고 마킹 짝·압박 범위·세 줄과 바닥·분당 뛴 거리를 보여준다 (§3.19d) |
 | `Scripts/GoalkeeperAI.cs` | **골키퍼.** 공–골문 선 위에 서고, 차는 순간 닿는지·막는지를 닫힌 해로 정한다. 잡기는 재시작, 쳐내기는 루즈볼/아웃. 판정식 `Judge`·`GoalChance`는 공개 정적 함수 (§3.27) |
 | `Scripts/Possession.cs` | **누가 공을 가졌는가** → 어느 두뇌가 켜지는가. 뺏기면 피치 전체를 넘기고, 발밑에서 뺏긴 사람은 1초 재태클 금지 (§3.26, §3.11) |
 | `Scripts/PassLab.cs` | **패스 벤치** (P). 전원 정지 후 패스만 — 계획 레인 대 실제 최근접 (§3.21) |
-| `Shaders/VisionOverlay.shader` | 3단계 시야 암전 |
+| `Shaders/VisionOverlay.shader` | 시야 암전 — 보이는 범위는 한 가지 밝기, 밖은 어둡게 (§3.3) |
 | `Scripts/MouseLegend.cs` | 화면 구석의 마우스 그림 — 패스 버튼 표시 (§3.19). `DrillDirector`가 시작할 때 붙인다 |
 | `Scenes/ScanAndTurnDrill.unity` | **경기 씬 — 진실 공급원** (아래) |
 
