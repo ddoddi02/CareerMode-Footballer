@@ -710,6 +710,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Career.ShotDrill
   profile:
+    displayName: "\uC2E0\uC778"
+    age: 15
+    heightCm: 180
+    peakHeightCm: 180
+    talent: 2
+    appearance:
+      build: 1
+      skin: 2
+      hairColor: 0
+      hairStyle: 1
+      kitColor: 0
+    perks: []
     fatKg: 7.5
     muscleKg: 36
     frameKg: 31.5
@@ -717,8 +729,25 @@ MonoBehaviour:
     finishing: 60
     shotPowerBase: 60
     mentalStrength: 50
+    topSpeed: 50
+    acceleration: 50
+    stamina: 50
+    positioning: 50
+    tackling: 50
+    longPassing: 50
+    shortPassing: 50
+    crossing: 50
+    curve: 50
+    jumping: 50
+    aerialAbility: 50
+    ballControl: 50
+    tricks: 50
+    dribbling: 50
+    agility: 50
+    physicality: 50
     fatigue: 0
     traits: 0
+  useSavedCharacter: 1
   finishingMap: 0
   speedAtOne: 22.1
   speedAtAverage: 26
@@ -1855,6 +1884,9 @@ MonoBehaviour:
   touchFar: 1.45
   touchCurve: 2.5
   carryLerp: 11
+  showShadow: 1
+  shadowSize: 0.35
+  shadowAlpha: 0.45
 --- !u!23 &1320741227
 MeshRenderer:
   m_ObjectHideFlags: 0

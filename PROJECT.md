@@ -1857,10 +1857,11 @@ keeper.GoalChance(…) / keeper.Params    ← 그 골키퍼의 지금 자리와 
   그러면 씬을 건드리지 않아도 된다.
 - **필드를 지우거나 이름을 바꾸면** 씬에 옛 값이 남는다. 해가 없지만, 씬을 다시 저장하면 빠진다.
 
-**커리어 쪽 파일은 `Assets/Career/` 아래에 있다(§10).** 슛 훈련 드릴 씬도 같은 방식으로 코드로 만든다:
-`Tools > Career > Build Shot Drill Scene` → `Assets/Career/Scenes/ShotDrill.unity` (§10.5). 경기 머티리얼을
-읽기만 하므로 경기 씬을 한 번 빌드한 뒤에 돌릴 것. 캐릭터 생성 화면은
-`Tools > Career > Build Character Creation Scene` → `Assets/Career/Scenes/CharacterCreation.unity` (§10.6).
+**커리어 쪽 파일은 `Assets/Career/` 아래에 있다(§10).** 커리어 씬도 같은 규칙이다. `Scenes/ShotDrill.unity`(§10.5)와
+`Scenes/CharacterCreation.unity`(§10.6)가 기준이다. 2026-10-18에 지금 코드로 한 번 다시 저장해서 커밋했다.
+`ShotDrillBuilder.cs`·`CharacterCreationBuilder.cs`(`Tools > Career > …` 메뉴)는 지웠다 — 되살리려면 git 이력에
+있다. 슛 드릴은 경기 머티리얼(`_Prototype/Materials/*.mat`)을 쓴다. 캐릭터 생성 화면의 UI는 지금처럼 플레이를
+시작할 때 코드가 만든다(`CharacterCreationScreen`). 그래서 UI 배치를 바꿔도 씬은 건드리지 않는다.
 
 ---
 
@@ -2139,7 +2140,7 @@ DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더
 | `Scripts/BodyModel.cs` | **몸 → 경기 보정값과 특성.** 순수 정적 함수. `Evaluate`, `NextTraits` |
 | `Scripts/ShotPower.cs` | **슛 파워 능력치 = 기본값 + 몸 보너스(100 상한) + 특성 점수.** `MuscleBonus`, `FlexibilityBonus`, `TraitPoints`, `Explain`, `Attribute` (10.4) |
 | `Scripts/Drill/ShotDrill.cs` | **슛 훈련 드릴.** 수동(마우스 조준·클릭)과 자동(파워 × 마무리 표). 경기의 `Ball`·`BallModel.Resolve`·`GoalkeeperAI`(`alwaysLive`)를 그대로 쓴다 (10.5) |
-| `Editor/ShotDrillBuilder.cs` | **드릴 씬을 코드로 생성** → `Scenes/ShotDrill.unity`. `Tools > Career > Build Shot Drill Scene` |
+| `Scenes/ShotDrill.unity` | **슛 드릴 씬 — 기준.** 값은 씬에서 직접 고친다(§4 "씬이 진실 공급원"). ~~`Editor/ShotDrillBuilder.cs`~~는 10-18에 지웠다 |
 | `Scripts/Talent.cs` | **재능(난이도).** `TalentTier` 4단계와 단계별 시작 오버롤·특전 포인트·성장·노화·획득 배율 표 `TalentCatalog` (10.7) |
 | `Scripts/Perks.cs` | **특전.** `PerkCatalog.All` 한 줄이 특전 하나: 비용, 효과, 연결 정도, 같이 못 고르는 특전 (10.6) |
 | `Scripts/Appearance.cs` | 외형 고르기 값(체형 번호, 피부·머리색·머리 모양·유니폼)과 팔레트 |
@@ -2147,7 +2148,7 @@ DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더
 | `Scripts/Creation/CharacterDraft.cs` | **포인트 규칙**(`CreationRules`: 시작 포인트, 스탯 비용, 체형, 공유 풀)과 만드는 중인 선수(`CharacterDraft` → `PlayerProfile`) |
 | `Scripts/Creation/CharacterCreationScreen.cs` | **생성 화면.** uGUI를 시작할 때 코드로 만든다. 바꿀 때마다 포인트·스탯·배율을 다시 그린다 |
 | `Scripts/Creation/AvatarPreview.cs` | 돌아가는 플레이스홀더 선수. 자기 카메라로 렌더 텍스처에 그린다 |
-| `Editor/CharacterCreationBuilder.cs` | 생성 씬 → `Scenes/CharacterCreation.unity`. `Tools > Career > Build Character Creation Scene` |
+| `Scenes/CharacterCreation.unity` | **생성 씬 — 기준.** 카메라·이벤트 시스템·아바타·화면 컴포넌트만 있고 UI는 런타임에 생긴다. ~~`Editor/CharacterCreationBuilder.cs`~~는 10-18에 지웠다 |
 
 ### 10.1 첫 네 항목
 
@@ -2347,11 +2348,12 @@ DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더
 
 ### 10.5 슛 훈련 드릴 (`ShotDrill`)
 
-경기에 바로 연결하지 않고 이 드릴에서 시험한다(사용자). `Tools > Career > Build Shot Drill Scene`으로 씬을
-만들고 `Assets/Career/Scenes/ShotDrill.unity`를 연다. 경기 씬(`ScanAndTurnDrill`)과 따로다.
+경기에 바로 연결하지 않고 이 드릴에서 시험한다(사용자). `Assets/Career/Scenes/ShotDrill.unity`를 열어 플레이한다.
+경기 씬(`ScanAndTurnDrill`)과 따로다. 씬이 기준이다. 키퍼 수치·카메라 같은 값은 씬에서 직접 고친다(§4).
+~~`Tools > Career > Build Shot Drill Scene`~~(10-18에 빌더를 지움).
 
 - **구성:** +Z 골대 쪽 마지막 50m, 골대, 공, 키퍼, 슈터. 카메라는 뒤쪽 위에 고정돼 40m 지점까지 보인다.
-  머티리얼은 경기 빌더가 만든 `_Prototype/Materials`를 읽기만 한다.
+  머티리얼은 경기 쪽 `_Prototype/Materials`의 것을 쓴다.
 - **골문 화면(`GoalCam`, 왼쪽 아래):** 큰 화면에서는 50m 밖의 1.8m 키퍼가 20픽셀쯤이라 다이빙이 녹색 점으로만
   보인다. 페널티 박스 끝(골라인에서 15m, 높이 4.5m)에서 골문을 보는 두 번째 카메라를 화면 왼쪽 아래 35%×40%에
   띄운다. 여기서는 눕는 게 분명히 보인다.
@@ -2425,8 +2427,8 @@ DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더
 
 #### 여는 법과 조작
 
-`Tools > Career > Build Character Creation Scene`으로 씬을 만들고, `Assets/Career/Scenes/CharacterCreation.unity`를
-열어 플레이한다. 조작은 마우스로 누르는 것뿐이다.
+`Assets/Career/Scenes/CharacterCreation.unity`를 열어 플레이한다. 조작은 마우스로 누르는 것뿐이다.
+(~~`Tools > Career > Build Character Creation Scene`~~ — 10-18에 빌더를 지웠다. 씬이 기준이다.)
 
 **첫 단계는 재능(난이도) 고르기다(10.7).** `다음 — 스탯 · 특전 · 외형`을 누르면 아래 화면으로 넘어간다. 위 막대의
 `재능: … 눌러서 바꾸기`를 누르면 재능 단계로 돌아간다. 고른 스탯·특전·외형은 그대로 남는다.
@@ -2455,8 +2457,8 @@ DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m (셰이더
 - uGUI의 내장 동적 폰트(`LegacyRuntime.ttf`)는 OS 폰트로 넘어가서 한글이 바로 나온다. UI Toolkit이나
   TextMeshPro는 한글 폰트 애셋을 따로 만들어야 한다.
 - 이 화면에 필요한 것은 버튼, 슬라이더, 글 입력칸뿐이다.
-- UI는 플레이를 시작할 때 코드로 만든다. 빌더는 카메라, 이벤트 시스템(`InputSystemUIInputModule`), 아바타, 화면
-  컴포넌트만 놓는다. 그래서 배치가 코드 한 곳에만 있다.
+- UI는 플레이를 시작할 때 코드로 만든다. 씬에는 카메라, 이벤트 시스템(`InputSystemUIInputModule`), 아바타, 화면
+  컴포넌트만 있다. 그래서 배치가 코드 한 곳에만 있고, UI를 바꿔도 씬을 다시 저장할 일이 없다.
 
 #### 특전 포인트와 스탯 배분 (`CreationRules`, 2026-10-18)
 
