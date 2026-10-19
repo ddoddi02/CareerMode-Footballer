@@ -632,10 +632,12 @@ A_left  = 2·hz·(hx + gx) + hz·(px - gx)
 
 #### 선방 판정 — 차는 순간 한 번, 닫힌 해로
 
-공 길(구름 마찰 반직선, §3.6) 위의 **그에게 가장 가까이 지나는 점**과 **골라인을 넘는 점**을 `Ball.TravelTime`으로 시험한다:
+공 길 위의 **그에게 가장 가까이 지나는 점**과 **골라인을 넘는 점**을 시험한다. 땅볼은 구름 마찰 반직선(§3.6,
+`Ball.TravelTime`), 뜬 공은 비행 그대로(`Air` — 공중에선 속도 유지, 한 번 튀어 `bounceKeep` 0.62로 구른다,
+`Ball.Predict`와 같은 식)로 도착 시각과 높이를 낸다:
 
 ```
-닿는 범위(t) = 몸 0.7m + 다이빙 6m/s × (t − 딜레이), 최대 MaxReach
+닿는 범위(t) = 몸 0.7m + 다이빙 6m/s × (t − 딜레이), 최대 ReachAcross(그 점의 공 높이)
 여유        = 닿는 범위 − 그 점까지 거리     ← 둘 중 여유가 큰 점으로 간다
 여유 < 0    → 못 닿는다 (포스트 안이면 골)
 여유 ≥ 0    → 뻗은 정도 = 거리 / 닿는 범위, 막을 확률 = lerp(정면, 끝까지, 뻗은 정도²)
@@ -649,10 +651,11 @@ A_left  = 2·hz·(hx + gx) + hz·(px - gx)
 | 정면 (`saveStraight`) | 0.85 | **0.94** | 0.99 |
 | 끝까지 뻗어서 (`saveFullStretch`) | 0.05 | **0.38** | 0.55 |
 
-포스트 밖 공은 그에게 오는 것(몸 0.7m 안)만 다룬다. 손 높이 `reachHeight` 2.5m 위는 못 막는다(슛이 전부 땅볼이라 지금은 안 걸림).
+포스트 밖 공은 그에게 오는 것(몸 0.7m 안)만 다룬다. 골라인에서 공 중심이 크로스바(`TacticalPitch.GoalHeight` 2.44m)
+이상이면 `overBar` — 그의 공이 아니다(`DrillDirector`도 아웃).
 
 **폼(§3.17d)은 `Params`에서 반응속도·키핑에 건다** — 개인 폼 `GoalkeeperAI.form`(`IForm`), 팀 폼은 그 편 명단
-(`TeamDefence.SideDefending`). 선방·잡기와 공격의 `GoalChance`가 같은 값을 쓴다. `keeping01`은 적힌 값 그대로다.
+(`TeamDefence.SideDefending`). 선방·잡기, 공격의 `GoalChance`와 슛 기록(`Params.keeping01`)이 같은 값을 쓴다.
 확인(친밀도 50, 18m 정면, 2m 옆 26 m/s): 폼 60/100/120 → 키핑 0.38/0.65/0.78, 막을 확률 75/81/84% = 1 − 공격 `GoalChance`.
 
 #### 다이빙 — 190cm, 가운데에서 아래 구석까지 공 1.5개 (사용자 기준)
@@ -663,9 +666,14 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 
 - 정중앙에서 포스트까지 3.66m, 공 1.5개(0.33m)를 남기면 손끝 3.33m. 판정은 공 중심까지 재므로 반지름을 더한다
   — 같은 자리에서 포스트 안쪽 0.11m 띠는 손이 안 닿는다.
-- 키에 비례: 다이빙 길이 = 디딤발 + 몸 + 팔. `heightCm`은 입력(커리어 신체 모델에 키가 생기면 넘긴다). 아래 구석
-  값이다 — 높이별 값은 열어만 뒀다.
+- 키에 비례: 다이빙 길이 = 디딤발 + 몸 + 팔. `heightCm`은 입력(커리어 신체 모델에 키가 생기면 넘긴다).
 - `diveSpeed` 6 m/s — 몸 0.7m에서 끝까지 0.46초.
+- **높이(어시스턴트 임시값, 10-20):** 닿는 곳은 타원 — 바닥에서 `MaxReach`, 바로 위로 `HighReach` = 키 ×
+  `highReachPerHeight` 1.5(190cm → 2.85m, 점프한 손끝). `ReachAcross(높이)` = MaxReach × √(1 − (높이/HighReach)²):
+  190cm에서 1m 3.2 · 1.5m 2.9 · 바 바로 아래 2.0m. 높은 구석이 가장 어렵다.
+- 확인(20m 정면, 슛 0.7, 서는 자리 3m): 게이지 0.5(정점 0.73m)는 골 앞에 떨어져 굴러오고, 도착이 굴림 계산보다 0.06초
+  빠르다. 0.8(1.86m)은 골라인 1.76m로 와서 2.5m 옆 막을 확률 73 → 58%, 3.2m 옆은 못 닿는다. 1.0(2.9m)은 3.0m로
+  바를 넘어 그가 움직이지 않는다. 플레이(1/60초 고정 프레임)에서도 같은 판정이 나왔다.
 
 #### 반응 — 시스템이 강제하는 딜레이 (`ReactionDelay`)
 
@@ -706,7 +714,7 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 
 켜면 `DrillDirector`·공 소유 없이 자기 골로 오는 모든 공을 판정하고 다이빙한다(슛 드릴이 쓴다). **밖에서 읽는
 이름은 바꾸지 말 것:** `diveSpeed`, `bodyReach`, `holdWithin`, `hold`, `parryKeep`, `roundThePostFrom`,
-`keeping01`(`TeamAttack` 슛 기록), `Params`(`ShotDrill`; `maxReach`는 `MaxReach`에서 채운다).
+`Params`(`ShotDrill`, `TeamAttack` 슛 기록; `maxReach`·`highReach`는 `MaxReach`·`HighReach`에서 채운다).
 
 #### 막은 뒤 — 잡기 / 쳐내기
 
@@ -733,6 +741,8 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 - `GoalkeeperAI.GoalChance(출발점, 조준점, 속도, 감속, 오차 폭, 골키퍼 …, out 포스트 안 몫)` → 포스트 안으로 가고
   골키퍼도 뚫을 확률. 인스턴스 `keeper.GoalChance(…)`·`keeper.Params`는 그 골키퍼의 지금 자리와 수치로. 공격의
   슛 판단(`TeamAttack`)이 그대로 부른다.
+- 뜬 공: `Judge(줄, Air, …)`·`GoalChance(…, Air, …)`, 차기 전에 묻는 쪽은 `GoalkeeperAI.Lofted(ball, 정점)` 또는
+  인스턴스 `keeper.GoalChance(…, 정점, out …)` — 키퍼가 실제로 쓰는 `AirOf(ball)`과 같은 비행이다.
 - 적분은 킥과 같은 분포: 횡오차 `BallModel.AimSpread × Bell()`을 `BallModel.Resolve`처럼 각도로, 가중치
   `BallModel.BellCdf`(Irwin–Hall n=3), [-1, 1] 24구간 중점 적분. 속도 오차는 뺀다(도착 시각만 몇 백분의 1초 달라진다).
 
@@ -877,6 +887,7 @@ WASD는 뛰는 곳, 커서는 보는 곳, 보는 곳이 곧 보이는 것.
 | 골키퍼 깊이 | 골라인에서 1 + 0.1 × 공까지 거리, 1~5m | GoalkeeperAI |
 | 골키퍼 딜레이 | lerp(0.16, 0.04, 반응속도01) × clamp(15m ÷ 거리, 0.5, 1.4) — 반응속도 60: 11m 0.12초 · 18m 0.09초 | GoalkeeperAI |
 | 골키퍼 몸 / 다이빙 / 최대 (키 190cm) | 0.7m / 6 m/s / 3.44m (끝까지 0.46초) | GoalkeeperAI |
+| 골키퍼 닿는 높이 / 높이별 가로 | 키 × 1.5 = 2.85m / 타원 (1m 3.2 · 1.5m 2.9 · 바 아래 2.0m) | GoalkeeperAI |
 | 골키퍼 반응속도 / 키핑 → 막을 확률 정면·끝 | 60 / 65 (1~100) → 0.94 · 0.38 | GoalkeeperAI |
 | 잡기 한계·확률 / 쳐낸 공 / 포스트 밖 / 수거 / 일어나기 | 0.5·0.76 / 35% / 2.6m / 1.1m / 0.8초 | GoalkeeperAI |
 | 정보 갱신 텀 (평시/급박) / 급박 거리 | 1.0 / 1.8초 / 블록 중심 12m | PitchIntel |

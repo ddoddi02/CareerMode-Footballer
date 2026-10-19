@@ -27,6 +27,8 @@ namespace Prototype
         public const float PenDepth = 16.5f;
         public const float PenHalfW = 20.16f;
         public const float GoalHalfW = 3.66f;
+        /// <summary>Crossbar height. A ball whose centre crosses the line this high or higher is over.</summary>
+        public const float GoalHeight = 2.44f;
         public const float ArcRadius = 9.15f;
         public const float PenSpot = 11f;
 

@@ -108,6 +108,9 @@ namespace Prototype
         public Vector3 Velocity { get { return vel; } }
         public float SpeedNow { get { return new Vector2(vel.x, vel.z).magnitude; } }
 
+        /// <summary>How fast it is climbing, m/s - negative on the way down, 0 on the grass.</summary>
+        public float Climb { get { return Airborne ? vy : 0f; } }
+
         /// <summary>Horizontal gap from the carrier. This is what a defender is aiming at.</summary>
         public float Exposure
         {

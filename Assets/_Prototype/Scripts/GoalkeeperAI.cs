@@ -19,10 +19,11 @@ namespace Prototype
     /// THE SAVE IS DECIDED ONCE, THE MOMENT THE BALL IS STRUCK, and in closed form - the
     /// same way the pass maths are (PROJECT.md 3.6, 3.7). The ball's path is a ray with
     /// rolling friction, so for any point on it Ball.TravelTime says when the ball gets
-    /// there. Two points are tried: the closest the ball comes to him, and where it
-    /// crosses his goal line. For each:
+    /// there - or, struck off the grass, its flight says when and how high (Air). Two
+    /// points are tried: the closest the ball comes to him, and where it crosses his goal
+    /// line. For each:
     ///
-    ///   reach(t)  = bodyReach + diveSpeed x (t - ReactionDelay), at most MaxReach
+    ///   reach(t)  = bodyReach + diveSpeed x (t - ReactionDelay), at most ReachAcross(height)
     ///   miss      = how far that point is from where he stands
     ///
     /// MaxReach comes from his height - a 190 cm keeper on his line in the middle of the
@@ -103,8 +104,8 @@ namespace Prototype
         public float heightCm = 190f;
         [Tooltip("Fingertips from the middle of his body on a full-length dive to the bottom corner, as a multiple of his height. 1.75 x 1.90 m = 3.33 m: standing on his line in the middle of the goal, that leaves 1.5 balls (0.33 m) to the post.")]
         public float diveLengthPerHeight = 1.75f;
-        [Tooltip("Highest he can get a hand to.")]
-        public float reachHeight = 2.5f;
+        [Tooltip("Highest he gets a hand to, straight up with a jump, as a multiple of his height: 1.5 x 1.90 m = 2.85 m. Between that and the grass his reach across narrows as an ellipse (ReachAcross) - the top corner is the hardest. A placeholder (assistant, 2026-10-20).")]
+        public float highReachPerHeight = 1.5f;
 
         [Header("Without a match around him")]
         [Tooltip("Go for every ball coming at his goal whether or not a DrillDirector says the ball is live, and whoever had it. For rigs with no match around them - the shot drill.")]
@@ -263,13 +264,11 @@ namespace Prototype
             line.dir = ball.Velocity;
             line.speed = ball.SpeedNow;
             line.decel = ball.rollDecel;
+            // In the air, its flight: when it gets there and how high it is (Air).
+            Air air = AirOf(ball);
             Model m = Params;
-            Verdict v = Judge(line, transform.position, defendsPositiveZ, m, Mathf.Max(0f, downUntil - Time.time));
+            Verdict v = Judge(line, air, transform.position, defendsPositiveZ, m, Mathf.Max(0f, downUntil - Time.time));
             if (!v.his) return;
-
-            // A ball over his head is not his either. Ground shots never are; this is
-            // here for the day a shot is lofted.
-            if (ball.Airborne && ball.Predict(v.time).y > reachHeight) { v.reachable = false; v.save = 0f; }
 
             Report r = new Report();
             r.distance = Flat(ball.LaunchOrigin - goal).magnitude;
@@ -291,7 +290,7 @@ namespace Prototype
             planStruck = Time.time;
             planWait = v.wait;
             planArrive = Time.time + v.time;
-            planSpeed = Mathf.Max(line.speed - line.decel * v.time, 0f);
+            planSpeed = PaceAt(line.speed, line.decel, air, v.time);
             planReport = r;
             diveYaw = transform.eulerAngles.y;
             going = true;
@@ -308,7 +307,7 @@ namespace Prototype
         {
             public float reflexes01, delayRefDistance;
             public Vector2 delayAt1And100, delayFactorRange;
-            public float bodyReach, diveSpeed, maxReach;
+            public float bodyReach, diveSpeed, maxReach, highReach;
             public Vector2 saveStraight, saveFullStretch;
             public float keeping01;
         }
@@ -360,6 +359,27 @@ namespace Prototype
         }
 
         /// <summary>
+        /// How far off the grass a ball's centre can be and still get a hand on it, straight
+        /// above him (fingertips with a jump - highReachPerHeight). 2.85 m at 190 cm, so
+        /// anything under the bar is within his reach somewhere.
+        /// </summary>
+        public float HighReach { get { return heightCm * 0.01f * highReachPerHeight; } }
+
+        /// <summary>
+        /// How far across he gets to a ball this far off the grass: an ellipse, MaxReach
+        /// along the grass and nothing at highReach. At 190 cm, 3.44 m on the grass, 3.2 m at
+        /// 1 m, 2.9 m at 1.5 m, 2.0 m just under the bar. A placeholder inside the height
+        /// model (assistant, 2026-10-20) - the user's yardstick is only the bottom corner.
+        /// </summary>
+        public static float ReachAcross(Model m, float lift)
+        {
+            if (lift <= 0f || m.highReach <= 0f) return m.maxReach;
+            if (lift >= m.highReach) return float.NegativeInfinity;
+            float r = lift / m.highReach;
+            return m.maxReach * Mathf.Sqrt(1f - r * r);
+        }
+
+        /// <summary>
         /// This keeper's numbers, with his reflexes and keeping as they play today - his form
         /// and his side's (Form). His own saves and every GoalChance the attack asks for go
         /// through here, so both use the same numbers.
@@ -371,7 +391,7 @@ namespace Prototype
                 Model m;
                 m.reflexes01 = Today01(reflexes); m.delayAt1And100 = delayAt1And100;
                 m.delayRefDistance = delayRefDistance; m.delayFactorRange = delayFactorRange;
-                m.bodyReach = bodyReach; m.diveSpeed = diveSpeed; m.maxReach = MaxReach;
+                m.bodyReach = bodyReach; m.diveSpeed = diveSpeed; m.maxReach = MaxReach; m.highReach = HighReach;
                 m.saveStraight = saveStraight; m.saveFullStretch = saveFullStretch; m.keeping01 = Today01(keeping);
                 return m;
             }
@@ -396,10 +416,90 @@ namespace Prototype
             public float speed, decel;
         }
 
+        /// <summary>
+        /// The same ball off the grass: how high its centre is and how fast it is climbing.
+        /// `up` false (the default) is a ball on the grass, and the rest is ignored. In the
+        /// air it keeps its pace across; it comes down once, keeps bounceKeep of that pace,
+        /// and rolls on as a Line does - the flight Ball.Update flies and Ball.Predict reads.
+        /// </summary>
+        public struct Air
+        {
+            public bool up;
+            public float y, climb;          // centre height and vertical speed now, m and m/s
+            public float rest;              // centre height on the grass: the ball's radius
+            public float gravity, bounceKeep;
+        }
+
+        /// <summary>This ball as it is now, in the air or not.</summary>
+        public static Air AirOf(Ball b)
+        {
+            Air a;
+            a.up = b.Airborne;
+            a.y = b.transform.position.y;
+            a.climb = b.Climb;
+            a.rest = b.radius;
+            a.gravity = b.gravity;
+            a.bounceKeep = b.bounceKeep;
+            return a;
+        }
+
+        /// <summary>A ball about to be struck off the grass to `apex` with Ball.Loft - for asking before the strike.</summary>
+        public static Air Lofted(Ball b, float apex)
+        {
+            Air a = AirOf(b);
+            a.up = true;
+            a.y = b.radius;
+            a.climb = Mathf.Sqrt(2f * b.gravity * Mathf.Max(apex, 0.5f));     // Loft lifts nothing lower
+            return a;
+        }
+
+        /// <summary>Seconds until a ball in the air is back on the grass.</summary>
+        static float Landing(Air a)
+        {
+            float g = Mathf.Max(a.gravity, 0.01f);
+            float h = Mathf.Max(a.y - a.rest, 0f);
+            return (a.climb + Mathf.Sqrt(a.climb * a.climb + 2f * g * h)) / g;
+        }
+
+        /// <summary>
+        /// How long the ball takes to come `s` metres down its path, and how far its centre
+        /// is off the grass there (`lift`, 0 once it rolls).
+        /// </summary>
+        static float Path(float v0, float decel, Air a, float s, out float lift)
+        {
+            lift = 0f;
+            if (!a.up) return Ball.TravelTime(s, v0, decel);
+            float land = Landing(a);
+            float flown = v0 * land;
+            if (s > flown) return land + Ball.TravelTime(s - flown, v0 * a.bounceKeep, decel);
+            float t = s / Mathf.Max(v0, 0.01f);
+            lift = Mathf.Max(a.y - a.rest + a.climb * t - 0.5f * a.gravity * t * t, 0f);
+            return t;
+        }
+
+        /// <summary>How far down its path it gets before it stops.</summary>
+        static float Stops(float v0, float decel, Air a)
+        {
+            float d = 2f * Mathf.Max(decel, 0.01f);
+            if (!a.up) return v0 * v0 / d;
+            float roll = v0 * a.bounceKeep;
+            return v0 * Landing(a) + roll * roll / d;
+        }
+
+        /// <summary>Its pace `t` seconds on - what a parry sends back.</summary>
+        static float PaceAt(float v0, float decel, Air a, float t)
+        {
+            if (!a.up) return Mathf.Max(v0 - decel * t, 0f);
+            float land = Landing(a);
+            return t <= land ? v0 : Mathf.Max(v0 * a.bounceKeep - decel * (t - land), 0f);
+        }
+
         public struct Verdict
         {
             public bool his;          // he goes for it: on target, or coming straight at him
-            public bool onTarget;     // crosses between the posts
+            public bool onTarget;     // crosses between the posts, under the bar
+            public bool overBar;      // between the posts, over the bar - not his to stop
+            public float lineY;       // its centre's height where it crosses his goal line
             public bool reachable;
             public float save;        // P(he keeps it out), 0 if out of reach
             public float stretch;     // 0 straight at him .. 1 the very end of his reach
@@ -416,6 +516,16 @@ namespace Prototype
         /// </summary>
         public static Verdict Judge(Line ball, Vector3 keeper, bool defendsPositiveZ, Model m, float delay)
         {
+            return Judge(ball, default(Air), keeper, defendsPositiveZ, m, delay);
+        }
+
+        /// <summary>
+        /// The same for a ball that may be in the air: arrival times and heights come off
+        /// its flight, his reach narrows with height (ReachAcross), and a ball crossing
+        /// between the posts over the bar is not his.
+        /// </summary>
+        public static Verdict Judge(Line ball, Air air, Vector3 keeper, bool defendsPositiveZ, Model m, float delay)
+        {
             Verdict v = new Verdict();
             Vector3 goal = TacticalPitch.GoalCentre(defendsPositiveZ);
             Vector3 b = Flat(ball.from);
@@ -428,11 +538,16 @@ namespace Prototype
             if (towardGoal <= 0.05f) return v;                                 // going away
 
             float decel = ball.decel;
-            float stops = v0 * v0 / (2f * Mathf.Max(decel, 0.01f));
+            float stops = Stops(v0, decel, air);
             float toLine = Mathf.Abs(goal.z - b.z) / towardGoal;
             v.lineX = b.x + u.x * toLine;
             bool reachesLine = stops > toLine;
-            v.onTarget = reachesLine && Mathf.Abs(v.lineX - goal.x) < TacticalPitch.GoalHalfW;
+            bool mouth = reachesLine && Mathf.Abs(v.lineX - goal.x) < TacticalPitch.GoalHalfW;
+            float liftLine = 0f;
+            if (reachesLine) Path(v0, decel, air, toLine, out liftLine);
+            v.lineY = liftLine + air.rest;
+            v.overBar = mouth && v.lineY >= TacticalPitch.GoalHeight;
+            v.onTarget = mouth && !v.overBar;
 
             Vector3 k = Flat(keeper);
             float end = Mathf.Min(toLine, stops);
@@ -441,9 +556,9 @@ namespace Prototype
             // Candidate 1: the closest the ball comes to him. Candidate 2: the line.
             float near = Mathf.Clamp(Vector3.Dot(k - b, u), 0f, end);
             float spareNear, spareLine = float.NegativeInfinity;
-            float tNear = Spare(b, u, v0, decel, near, k, m, v.wait, out spareNear);
+            float tNear = Spare(b, u, v0, decel, air, near, k, m, v.wait, out spareNear);
             float tLine = Mathf.Infinity;
-            if (reachesLine) tLine = Spare(b, u, v0, decel, toLine, k, m, v.wait, out spareLine);
+            if (reachesLine) tLine = Spare(b, u, v0, decel, air, toLine, k, m, v.wait, out spareLine);
 
             bool lineBetter = v.onTarget && spareLine > spareNear;
             v.along = lineBetter ? toLine : near;
@@ -452,7 +567,7 @@ namespace Prototype
             v.point = b + u * v.along;
 
             float miss = Flat(v.point - k).magnitude;
-            v.his = v.onTarget || miss <= m.bodyReach;
+            v.his = v.onTarget || (miss <= m.bodyReach && !v.overBar);
             if (!v.his) return v;
 
             v.reachable = spare >= 0f;
@@ -481,6 +596,15 @@ namespace Prototype
                                        Vector3 keeper, bool defendsPositiveZ, Model m, float delay,
                                        out float onTarget, int bins = 24)
         {
+            return GoalChance(from, aim, speed, decel, spread, default(Air), keeper, defendsPositiveZ, m, delay,
+                              out onTarget, bins);
+        }
+
+        /// <summary>The same for a ball struck off the grass (`air`, e.g. Lofted): `speed` is its pace across.</summary>
+        public static float GoalChance(Vector3 from, Vector3 aim, float speed, float decel, float spread, Air air,
+                                       Vector3 keeper, bool defendsPositiveZ, Model m, float delay,
+                                       out float onTarget, int bins = 24)
+        {
             Vector3 d = Flat(aim - from);
             float dist = d.magnitude;
             Vector3 dir = dist > 1e-4f ? d / dist : Vector3.forward;
@@ -499,7 +623,7 @@ namespace Prototype
                 l.dir = Quaternion.Euler(0f, deg, 0f) * dir;
                 l.speed = speed;
                 l.decel = decel;
-                Verdict v = Judge(l, keeper, defendsPositiveZ, m, delay);
+                Verdict v = Judge(l, air, keeper, defendsPositiveZ, m, delay);
                 if (!v.onTarget) continue;
                 onTarget += w;
                 goal += w * (1f - v.save);
@@ -514,14 +638,23 @@ namespace Prototype
                               Mathf.Max(0f, downUntil - Time.time), out onTarget);
         }
 
+        /// <summary>The same for a shot to be struck with Ball.Loft to `apex` - the human's lifted shot.</summary>
+        public float GoalChance(Vector3 from, Vector3 aim, float speed, float decel, float spread, float apex, out float onTarget)
+        {
+            return GoalChance(from, aim, speed, decel, spread, ball != null ? Lofted(ball, apex) : default(Air),
+                              transform.position, defendsPositiveZ, Params, Mathf.Max(0f, downUntil - Time.time),
+                              out onTarget);
+        }
+
         /// <summary>
         /// How long the ball takes to get `along` metres down its path, and - out through
         /// `spare` - how much reach he would have left over there. Negative is out of reach.
         /// </summary>
-        static float Spare(Vector3 b, Vector3 u, float v0, float decel, float along, Vector3 k, Model m, float wait, out float spare)
+        static float Spare(Vector3 b, Vector3 u, float v0, float decel, Air air, float along, Vector3 k, Model m, float wait, out float spare)
         {
-            float t = Ball.TravelTime(along, v0, decel);
-            float reach = Mathf.Min(m.bodyReach + m.diveSpeed * Mathf.Max(0f, t - wait), m.maxReach);
+            float lift;
+            float t = Path(v0, decel, air, along, out lift);
+            float reach = Mathf.Min(m.bodyReach + m.diveSpeed * Mathf.Max(0f, t - wait), ReachAcross(m, lift));
             spare = reach - Flat(b + u * along - k).magnitude;
             return t;
         }
