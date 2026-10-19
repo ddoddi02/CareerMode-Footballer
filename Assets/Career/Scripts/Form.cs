@@ -3,28 +3,34 @@ using UnityEngine;
 namespace Career
 {
     /// <summary>
-    /// Form, 0..100 with 50 as usual - a state that moves day by day, like fatigue. The user:
-    /// a squad that gets on well plays better, so form follows team chemistry
-    /// (<see cref="Squad.TeamChemistry"/>). What form does in a match is not decided. Every
-    /// number here is PROVISIONAL (PROJECT.md 10.9).
+    /// Form (user, 2026-10-20): how much of a player's core attributes he gets out on the day.
+    /// Two parts that apply separately - his own form, and the team's, which comes from team
+    /// chemistry in steps. In a match: attribute x personal form x (1 + team form), cut to
+    /// 1..100. The match side does that sum itself with these numbers (PROJECT.md 10.9).
     /// </summary>
     public static class FormModel
     {
-        public const float Min = 0f, Max = 100f, Neutral = 50f;
-        /// <summary>Share of the gap to its target that form closes in a day.</summary>
-        public const float Follow = 0.1f;
-        /// <summary>Most form moves in a day, either way.</summary>
-        public const float MaxDailyChange = 5f;
+        /// <summary>Personal form, as a share of the attribute: 60% .. 120%, 100% as usual. What moves it is not decided.</summary>
+        public const float PersonalMin = 0.6f, PersonalMax = 1.2f, PersonalNeutral = 1f;
 
         /// <summary>
-        /// Tomorrow's form. The target is team chemistry itself, so a neutral squad (50) holds
-        /// form at 50 and a close one (80) draws it up to 80 over a few weeks. Other pulls
-        /// (results, fatigue) will move the target when they exist.
+        /// Team form from team chemistry (<see cref="Squad.TeamChemistry"/>), added to 1:
+        /// 90+ +5%, 70..89 +3%, 31..69 nothing, 11..30 -5%, 0..10 -10% (user).
         /// </summary>
-        public static float NextDay(float form, float teamChemistry)
+        public static float TeamForm(float teamChemistry)
         {
-            float step = Mathf.Clamp(Follow * (teamChemistry - form), -MaxDailyChange, MaxDailyChange);
-            return Mathf.Clamp(form + step, Min, Max);
+            if (teamChemistry >= 90f) return 0.05f;
+            if (teamChemistry >= 70f) return 0.03f;
+            if (teamChemistry > 30f) return 0f;
+            if (teamChemistry > 10f) return -0.05f;
+            return -0.10f;
+        }
+
+        /// <summary>An attribute as it plays in a match: attribute x personal form x (1 + team form), 1..100.</summary>
+        public static int Apply(int attribute, float personalForm, float teamForm)
+        {
+            float f = Mathf.Clamp(personalForm, PersonalMin, PersonalMax);
+            return Mathf.Clamp(Mathf.RoundToInt(attribute * f * (1f + teamForm)), StatScale.Min, StatScale.Max);
         }
     }
 }

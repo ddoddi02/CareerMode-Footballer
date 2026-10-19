@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace Career
 {
+    /// <summary>Where a pair's chemistry falls (user): liked from 80 up, disliked at 30 and under.</summary>
+    public enum Standing { Disliked, Neutral, Liked }
+
     /// <summary>How well two people in the squad get on, 0..100. One value a pair, the same both ways.</summary>
     [Serializable]
     public class Bond
@@ -19,14 +22,16 @@ namespace Career
     /// teammate and the teammates' among themselves. Daily life fills it; the match reads it
     /// (passes, dribbling, answering a call for the ball - the attack session's side).
     ///
-    /// Closeness and liking are one number for now, and the same both ways. A pair nobody has
-    /// touched is <see cref="Neutral"/> and is not stored. Every number here is PROVISIONAL
-    /// (PROJECT.md 10.9).
+    /// Closeness and liking are one number, the same both ways; its range says which it is
+    /// (<see cref="StandingOf"/>), and 50 is neither. A pair nobody has touched is
+    /// <see cref="Neutral"/> and is not stored. Every number here is PROVISIONAL (PROJECT.md 10.9).
     /// </summary>
     [Serializable]
     public class Chemistry
     {
         public const float Min = 0f, Max = 100f, Neutral = 50f;
+        /// <summary>Liked from here up, and disliked at or under <see cref="DislikedAtOrBelow"/> - the same steps as answering a call for the ball.</summary>
+        public const float LikedFrom = 80f, DislikedAtOrBelow = 30f;
         /// <summary>Most daily life can move one pair in a day, either way: 50 to 100 takes ten good days at the least.</summary>
         public const float MaxDailyChange = 5f;
 
@@ -37,6 +42,15 @@ namespace Career
             Bond b = Find(x, y, false);
             return b != null ? b.value : Neutral;
         }
+
+        public static Standing StandingOf(float value)
+        {
+            if (value >= LikedFrom) return Standing.Liked;
+            if (value <= DislikedAtOrBelow) return Standing.Disliked;
+            return Standing.Neutral;
+        }
+
+        public Standing StandingOf(string x, string y) { return StandingOf(Get(x, y)); }
 
         /// <summary>
         /// What daily actions call: moves the pair by up to <paramref name="delta"/>, within what

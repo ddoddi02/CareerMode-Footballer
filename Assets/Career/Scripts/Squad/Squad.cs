@@ -63,13 +63,12 @@ namespace Career
         /// <summary>The player's mean with his teammates.</summary>
         public float PlayerChemistry { get { return chemistry.AverageWith(PlayerId, Ids()); } }
 
-        /// <summary>
-        /// The end of a day: form moves with team chemistry (<see cref="FormModel"/>), then every
-        /// pair's daily limit starts again. The daily system calls this once a day.
-        /// </summary>
-        public void EndDay(PlayerProfile player)
+        /// <summary>Team form from team chemistry, added to 1 in a match (<see cref="FormModel.TeamForm"/>).</summary>
+        public float TeamForm { get { return FormModel.TeamForm(TeamChemistry); } }
+
+        /// <summary>The end of a day: every pair's daily limit starts again. The daily system calls this once a day.</summary>
+        public void EndDay()
         {
-            player.form = FormModel.NextDay(player.form, TeamChemistry);
             chemistry.NewDay();
         }
     }
