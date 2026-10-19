@@ -124,6 +124,7 @@ namespace Prototype
         Act kept1st = Act.None;         // his first touch, already chosen
         float keptUntil = -1f;
         float calledAt = -99f;          // the pass press that was a call, not a pass
+        int seenDrops;
         float seenPass = -99f, seenThrough = -99f, seenLob = -99f, seenShoot = -99f, seenCross = -99f;
 
         float exposureAtTackle;
@@ -161,6 +162,7 @@ namespace Prototype
 
             RollPassing();
             if (GetComponent<MouseLegend>() == null) gameObject.AddComponent<MouseLegend>();
+            if (TeamChemistry.Active == null) gameObject.AddComponent<TeamChemistry>();
 
             phase = Phase.Setup;
             phaseT = 0f;
@@ -266,6 +268,7 @@ namespace Prototype
             deadSince = -1f;
             kept1st = Act.None;
             seenPass = seenThrough = seenLob = seenShoot = seenCross = -99f;
+            seenDrops = attack != null ? attack.RequestsDropped : 0;
             seenPassSerial = attack != null ? attack.PassSerial : -1;
             seenTurnovers = possession.Turnovers;
             homeHeldSince = Time.time;
@@ -331,6 +334,10 @@ namespace Prototype
 
             if (incomingForHuman) player.BeginReceive();
             else player.EndReceive();
+
+            // His call was answered. The touch he kept waits for this ball, however long
+            // it is in the air.
+            if (incomingForHuman && kept1st != Act.None) keptUntil = Time.time + requestHold;
         }
 
         /// <summary>
@@ -356,6 +363,13 @@ namespace Prototype
             bool shoot = Fresh(player.LastShootPress, ref seenShoot);
             bool cross = Fresh(player.LastCrossPress, ref seenCross);
 
+            // The call ended without the ball coming to him - the man it went to has given
+            // it to somebody else - and the touch he kept for it goes with it.
+            if (attack != null && attack.RequestsDropped != seenDrops)
+            {
+                seenDrops = attack.RequestsDropped;
+                kept1st = Act.None;
+            }
             if (kept1st != Act.None && Time.time > keptUntil) kept1st = Act.None;
             if (humanHasIt || possession.InPossession != Side.Home) return;
 
@@ -844,6 +858,7 @@ namespace Prototype
                 receiver = ShortPassReceiver();
                 target = ShortPassTarget();
                 stat = player.passing;
+                diff *= TeamChemistry.ErrorScale(player.transform, receiver);
             }
             else if (type == PassType.Through)
             {
@@ -1166,15 +1181,11 @@ namespace Prototype
         /// screen for it - one line of text (screen rule, PROJECT.md 3.19).</summary>
         string CallLine()
         {
-            switch (kept1st)
-            {
-                case Act.Shoot: return "요청: 슛";
-                case Act.Through: return "요청: 스루패스";
-                case Act.Lob: return "요청: 로빙";
-            }
-            if (attack != null && player != null && attack.Requested && attack.Requester == player.transform)
-                return "요청: 패스";
-            return null;
+            bool asked = attack != null && player != null && attack.Requested && attack.Requester == player.transform;
+            string what = kept1st == Act.Shoot ? "슛" : kept1st == Act.Through ? "스루패스"
+                        : kept1st == Act.Lob ? "로빙" : asked ? "패스" : null;
+            if (what == null) return null;
+            return (asked && attack.RequestRefused ? "요청 무시됨: " : "요청: ") + what;
         }
 
         void OnGUI()

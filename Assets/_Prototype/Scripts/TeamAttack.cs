@@ -342,6 +342,7 @@ namespace Prototype
 
             if (BallCarrier == null)
             {
+                if (Requester != null && Time.time >= requestUntil) DropRequest();
                 hasPending = false;
                 shotPending = false;
                 holdUntil = -1f;
@@ -354,10 +355,11 @@ namespace Prototype
             looseSince = -1f;
             SendChaser(null);
 
-            // The human has called for it. He comes before anything the man on the ball
-            // would pick for himself - his own shot included. A shot he has already
-            // turned onto is left to go; it is in his body by then.
-            if (Requested && !shotPending)
+            // The human has called for it. If this man says yes (TeamChemistry), the human
+            // comes before anything he would pick for himself - his own shot included. A
+            // shot he has already turned onto is left to go; it is in his body by then.
+            TickRequest();
+            if (Requested && requestAccepted && requestHolder == BallCarrier && !shotPending)
             {
                 if (hasPending && pending.receiver == Requester) PlayPass(BallCarrier);
                 else Commit(ToRequester(ballBody.transform.position), BallCarrier);
@@ -398,6 +400,10 @@ namespace Prototype
         ///
         /// The turn onto the pass stays (alignAngle / maxTurnWait). That is not waiting,
         /// it is his body.
+        ///
+        /// How well the side gets on leans all of this (TeamChemistry.DribbleLean): the
+        /// forward ball has to gain more and he may carry longer when they do not, less
+        /// when they do, and a pressed man may keep it rather than play (RunsInstead).
         /// </summary>
         void TickOnBall(AttackerAI who)
         {
@@ -423,8 +429,13 @@ namespace Prototype
             Carry run = BestCarry(who);     // also reads nearNow, and builds the chasers
             Shot chance = BestShot(who, from);
 
+            // A side that gets on passes sooner; one that does not keeps it more
+            // (TeamChemistry). 0 is the match as it was.
+            float lean = TeamChemistry.DribbleLean(mates);
+            float leanScale = Mathf.Pow(2f, lean);
+
             bool onFloor = any.valid && any.kind == PassKind.Ground;
-            bool overdue = Time.time - onBallSince > maxCarry;
+            bool overdue = Time.time - onBallSince > maxCarry * leanScale;
             bool canRun = run.valid && run.margin > 0f;
             bool pressed = nearNow < pressRoom;
 
@@ -440,7 +451,7 @@ namespace Prototype
 
             if (pressed)
             {
-                if (onFloor) { Commit(any, who); return; }
+                if (onFloor && !RunsInstead(lean, canRun && !overdue, run)) { Commit(any, who); return; }
                 if (canRun && !overdue) { RunWith(who, run); return; }
                 if (any.valid) { Commit(any, who); return; }
                 who.ClearCarry();
@@ -449,11 +460,23 @@ namespace Prototype
 
             // Free. Forward by foot unless a ball forward is on.
             PassPlan onward = BestOnward(from);
-            if (onward.valid && Gain(from, onward.target) >= progressiveGain) { Commit(onward, who); return; }
+            if (onward.valid && Gain(from, onward.target) >= progressiveGain * leanScale) { Commit(onward, who); return; }
             if (canRun && run.progress > 0f && !overdue) { RunWith(who, run); return; }
             if (onward.valid) { Commit(onward, who); return; }
             if (any.valid) { Commit(any, who); return; }
             who.ClearCarry();
+        }
+
+        /// <summary>
+        /// A pressed man in a side that does not get on (lean above 0) keeps the ball
+        /// instead of playing the open pass - if the way out is clear enough. The worse
+        /// they get on, the less clear it has to be: never at lean 0, a fully open route
+        /// (carryMargin) at 0.5, any route he wins at 1.
+        /// </summary>
+        bool RunsInstead(float lean, bool canRun, Carry run)
+        {
+            if (lean <= 0f || !canRun) return false;
+            return run.margin >= carryMargin * (1f - lean) / lean;
         }
 
         void RunWith(AttackerAI who, Carry run)
@@ -1034,7 +1057,8 @@ namespace Prototype
             bool rushed = Time.time - pendingSince > maxTurnWait;
             if (off > alignAngle && !rushed) return;
 
-            float diff = BallModel.Difficulty(Pressure(from), off, rushed, false);
+            float diff = BallModel.Difficulty(Pressure(from), off, rushed, false)
+                       * TeamChemistry.ErrorScale(who.transform, pending.receiver);
 
             if (pending.kind == PassKind.Lofted)
             {
@@ -1061,7 +1085,7 @@ namespace Prototype
             who.ReleaseBall();
             lastPasser = who.transform;
             IntendedReceiver = pending.receiver;
-            if (pending.receiver == Requester) Requester = null;
+            if (pending.receiver == Requester) CancelRequest();
             PassSerial++;
             hasPending = false;
             holdUntil = -1f;
@@ -1123,20 +1147,61 @@ namespace Prototype
         /// <summary>Who has called for the ball, while the call stands.</summary>
         public Transform Requester { get; private set; }
         float requestUntil;
+        AttackerAI requestHolder;       // the man on the ball the call went to
+        bool requestAccepted;
         public bool Requested { get { return Requester != null && Time.time < requestUntil; } }
 
+        /// <summary>The man on the ball has heard the call and is not giving it.</summary>
+        public bool RequestRefused { get { return Requested && requestHolder != null && !requestAccepted; } }
+
+        /// <summary>Calls that ended without the ball being played to him.</summary>
+        public int RequestsDropped { get; private set; }
+
         /// <summary>
-        /// The human wants it (DrillDirector, 2026-10-20). Whichever of ours is on the ball
-        /// plays it to him next, before anything he would choose for himself, until it has
-        /// been played or `seconds` run out.
+        /// The human wants it (DrillDirector, 2026-10-20). The call goes to whichever of
+        /// ours is on the ball - now, or the first to take it if it is loose - and he says
+        /// yes or no once (TeamChemistry.AcceptChance). Yes: he plays it to the human next,
+        /// before anything he would choose for himself. Either way the call ends when the
+        /// ball is played to the human, when another of ours has it, or after `seconds`.
+        ///
+        /// Calling again does not ask him again: a man who has said no keeps saying no
+        /// while he has the ball.
         /// </summary>
         public void RequestBall(Transform who, float seconds)
         {
+            bool same = Requester == who && requestHolder != null && BallCarrier == requestHolder;
             Requester = who;
             requestUntil = Time.time + seconds;
+            if (!same) requestHolder = null;
         }
 
-        public void CancelRequest() { Requester = null; }
+        public void CancelRequest()
+        {
+            Requester = null;
+            requestHolder = null;
+        }
+
+        void DropRequest()
+        {
+            Requester = null;
+            requestHolder = null;
+            RequestsDropped++;
+        }
+
+        /// <summary>Who the call is with, and whether he has said yes.</summary>
+        void TickRequest()
+        {
+            if (Requester == null) return;
+            if (Time.time >= requestUntil) { DropRequest(); return; }
+            if (BallCarrier == null) return;
+
+            if (requestHolder == null)
+            {
+                requestHolder = BallCarrier;
+                requestAccepted = Random.value < TeamChemistry.AcceptChance(Requester, BallCarrier.transform);
+            }
+            else if (requestHolder != BallCarrier) DropRequest();
+        }
 
         /// <summary>
         /// The ball to the man who called for it: on the floor if the lane to him is open
@@ -1172,6 +1237,7 @@ namespace Prototype
             BallCarrier = null;
             IntendedReceiver = null;
             Requester = null;
+            requestHolder = null;
             Chaser = null;
             hasPending = false;
             shotPending = false;
