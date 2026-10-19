@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Prototype
@@ -56,6 +57,15 @@ namespace Prototype
         [Tooltip("How long a man who has just had the ball taken off him - tackled, or touched off him by the human - waits before he may tackle back. He is standing right beside the man who took it, and without this he went straight back in. Covers the new carrier's turn to play it (TeamAttack.maxTurnWait, 0.9 s).")]
         public float lostBallHold = 1.0f;
         [Range(0f, 1f)] public float tackling01 = 0.60f;
+
+        /// <summary>Set by TeamDefence: his side's roster, which team form is read off (Form).</summary>
+        [HideInInspector] public IList<Transform> side;
+
+        /// <summary>
+        /// His tackling as it plays today - his own form (his body's IForm) and his side's.
+        /// Every tackle reads this, the bots' and the one on the human alike.
+        /// </summary>
+        public float TacklingToday { get { return Form.Stat01(tackling01, transform, side); } }
 
         public bool Recovering { get { return Time.time < recoverUntil; } }
 

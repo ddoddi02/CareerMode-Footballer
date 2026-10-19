@@ -695,7 +695,7 @@ namespace Prototype
             ti.attackerFacing = player.BodyForward;
             // Moving or actively shielding counts. Standing still does not.
             ti.attackerResisting = player.InputDir.sqrMagnitude > 0.09f || player.Shielding;
-            ti.tackling01 = d.tackling01;
+            ti.tackling01 = d.TacklingToday;
             ti.strength01 = Today(playerStrength);
             ti.reach = Tackle.Reach;
 

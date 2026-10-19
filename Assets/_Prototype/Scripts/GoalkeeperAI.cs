@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Prototype
@@ -48,7 +49,7 @@ namespace Prototype
     /// The dive is drawn - he goes over and lies there until he gets up - but the drawing
     /// never decides anything.
     /// </summary>
-    public class GoalkeeperAI : MonoBehaviour
+    public class GoalkeeperAI : MonoBehaviour, IForm
     {
         [Header("Who he is")]
         [Tooltip("True if he keeps the goal at +Z.")]
@@ -64,6 +65,10 @@ namespace Prototype
         /// _Prototype does not reference Career; change both together.
         /// </summary>
         public float keeping01 { get { return Mathf.Clamp01((keeping - 1f) / 99f); } }
+
+        [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
+        [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;
+        public int FormPercent { get { return form; } }
 
         [Header("Refs - found automatically if left empty")]
         public Ball ball;
@@ -258,7 +263,8 @@ namespace Prototype
             line.dir = ball.Velocity;
             line.speed = ball.SpeedNow;
             line.decel = ball.rollDecel;
-            Verdict v = Judge(line, transform.position, defendsPositiveZ, Params, Mathf.Max(0f, downUntil - Time.time));
+            Model m = Params;
+            Verdict v = Judge(line, transform.position, defendsPositiveZ, m, Mathf.Max(0f, downUntil - Time.time));
             if (!v.his) return;
 
             // A ball over his head is not his either. Ground shots never are; this is
@@ -271,7 +277,7 @@ namespace Prototype
             r.reachable = v.reachable;
 
             willSave = v.reachable && Random.value < v.save;
-            willHold = willSave && v.stretch <= holdWithin && Random.value < Lerp(hold);
+            willHold = willSave && v.stretch <= holdWithin && Random.value < Mathf.Lerp(hold.x, hold.y, m.keeping01);
             roundPost = willSave && !willHold && v.onTarget && Mathf.Abs(v.lineX - goal.x) >= roundThePostFrom;
             r.saved = willSave;
             r.held = willHold;
@@ -353,18 +359,34 @@ namespace Prototype
             get { return heightCm * 0.01f * diveLengthPerHeight + (ball != null ? ball.radius : 0.11f); }
         }
 
-        /// <summary>This keeper's numbers.</summary>
+        /// <summary>
+        /// This keeper's numbers, with his reflexes and keeping as they play today - his form
+        /// and his side's (Form). His own saves and every GoalChance the attack asks for go
+        /// through here, so both use the same numbers.
+        /// </summary>
         public Model Params
         {
             get
             {
                 Model m;
-                m.reflexes01 = Reflexes01; m.delayAt1And100 = delayAt1And100;
+                m.reflexes01 = Today01(reflexes); m.delayAt1And100 = delayAt1And100;
                 m.delayRefDistance = delayRefDistance; m.delayFactorRange = delayFactorRange;
                 m.bodyReach = bodyReach; m.diveSpeed = diveSpeed; m.maxReach = MaxReach;
-                m.saveStraight = saveStraight; m.saveFullStretch = saveFullStretch; m.keeping01 = keeping01;
+                m.saveStraight = saveStraight; m.saveFullStretch = saveFullStretch; m.keeping01 = Today01(keeping);
                 return m;
             }
+        }
+
+        IList<Transform> roster;
+
+        /// <summary>
+        /// A 1..100 attribute of his as it plays today, on 0..1 (the same copy of To01 as
+        /// above). Team form is his side's (TeamDefence.SideDefending) - he is on neither roster.
+        /// </summary>
+        float Today01(float stat)
+        {
+            if (roster == null) roster = TeamDefence.SideDefending(defendsPositiveZ);
+            return Mathf.Clamp01((Form.Stat(stat, transform, roster) - 1f) / 99f);
         }
 
         /// <summary>A ball on the ground: where it is, which way, how fast, how fast it slows.</summary>
@@ -613,8 +635,6 @@ namespace Prototype
             if (director != null) director.KeeperCaught(this);
             return true;
         }
-
-        float Lerp(Vector2 ends) { return Mathf.Lerp(ends.x, ends.y, keeping01); }
 
         static Vector3 Flat(Vector3 v) { v.y = 0f; return v; }
     }

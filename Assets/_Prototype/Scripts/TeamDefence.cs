@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Prototype
@@ -250,8 +251,13 @@ namespace Prototype
             Presser = null;
             PressLine = -1;
 
+            IList<Transform> roster = Ours;
             for (int i = 0; i < n; i++)
-                if (members[i] != null) members[i].defendsPositiveZ = defendsPositiveZ;   // read when he judges a turn
+            {
+                if (members[i] == null) continue;
+                members[i].defendsPositiveZ = defendsPositiveZ;   // read when he judges a turn
+                members[i].side = roster;                         // read when he tackles (Form)
+            }
 
             if (HoldingShape) HoldShape(carrier, goal);
             else ManMark(carrier, goal);
@@ -657,6 +663,27 @@ namespace Prototype
             return -1;
         }
 
+        // ------------------------------------------------------------------ form --
+
+        IList<Transform> ourSide, theirSide;
+
+        /// <summary>Our roster - the one team form is read off (Form). Found once.</summary>
+        IList<Transform> Ours { get { return ourSide ?? (ourSide = SideDefending(defendsPositiveZ)); } }
+        IList<Transform> Theirs { get { return theirSide ?? (theirSide = SideDefending(!defendsPositiveZ)); } }
+
+        /// <summary>
+        /// The roster of the side that keeps this goal: its attack's mates. Team form is
+        /// worked out from that one list (Form), so a side has the same form with the ball
+        /// and without it, and its keeper - on neither roster - shares it.
+        /// </summary>
+        public static IList<Transform> SideDefending(bool positiveZ)
+        {
+            var all = FindObjectsByType<TeamAttack>(FindObjectsSortMode.None);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i].attacksPositiveZ != positiveZ) return all[i].mates;
+            return null;
+        }
+
         // ---------------------------------------------------------------- tackle --
 
         /// <summary>
@@ -693,8 +720,9 @@ namespace Prototype
             ti.attackerFacing = carrier.CarrierForward;
             // A bot standing it up is not fighting for it; one on the move is.
             ti.attackerResisting = carrier.Velocity.sqrMagnitude > 1f;
-            ti.tackling01 = d.tackling01;
-            ti.strength01 = 0.5f;
+            ti.tackling01 = d.TacklingToday;
+            // A bot has no strength attribute - an even 0.5 - but his form still counts.
+            ti.strength01 = Form.Stat01(0.5f, carrier.transform, Theirs);
             ti.reach = Tackle.Reach;
 
             string why;

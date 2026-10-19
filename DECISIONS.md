@@ -199,12 +199,6 @@
 - **[사용자]** 경기에 잇기보다 슛 훈련 드릴을 새로 만들어 시험한다. 마무리를 지금 만들고, 평범한 선수는 60이다. 유연성의 다른 역할은 나중에 정한다.
 - **[어시스턴트]** 드릴은 `Assets/Career/`에 두고 `_Prototype/`은 고치지 않는다. 킥은 `BallModel.Resolve`의 "속도를 직접 받는" 길로, 판정은 `GoalkeeperAI.Judge`·`GoalChance`로 한다. → PROJECT §10.5
 
-### 빌더가 URP 머티리얼 상태를 지우던 문제 — 수비 세션
-
-- **[사용자]** 10-08에 띄운 작업 칩을 이 세션에서 진행한다.
-- **[어시스턴트]** 원인: 빌더가 코드로 만든 머티리얼 속성을 애셋에 복사만 해서 URP 검증을 거치지 않아 `RenderType` 태그·꺼 둔 패스·`_DstBlendAlpha`·`_Color`가 재생성마다 지워졌다.
-- **[어시스턴트]** 저장 직전에 URP 인스펙터와 같은 `BaseShaderGUI.SetMaterialKeywords`(Lit은 `LitGUI.SetMaterialKeywords`)를 부른다. 확인: .mat 10개가 커밋된 것과 바이트 단위로 같았다.
-
 ## 2026-10-15
 
 ### 골키퍼 다이빙 — 수비 세션 ([PROJECT.md §3.27](PROJECT.md))
@@ -423,3 +417,12 @@
 - **[어시스턴트]** (매니저 임시값) 쓰는 능력치 = 능력치 × 개인 폼 × (1 + 팀 폼), 1~100으로 자른다. 계산은 `Prototype.Form` 한 곳에서 한다.
 - **[어시스턴트]** 개인 폼은 `AttackerAI.form`·`FootballerController.form`(`IForm`)에 둔다. 다른 몸은 `IForm`을 달면 읽힌다.
 - **[어시스턴트]** 폼은 능력치를 쓰는 곳에만 건다(킥·사람의 몸싸움). 봇의 슛 판단도 같은 값을 쓴다. 패스 선택의 능력치 비교는 적힌 값 그대로다.
+
+### 수비의 폼 — 수비 세션 · 근거 [PROJECT.md §3.11·§3.27](PROJECT.md)
+
+- **[사용자]** 수비 쪽 능력치(태클, 골키퍼 반응속도·키핑)에도 같은 헬퍼로 폼을 건다. (매니저 세션 전달)
+- **[어시스턴트]** 태클은 `DefenderAI.TacklingToday` 하나로 읽는다 — 봇끼리(`TeamDefence.TickTackle`)와 사람 상대(`DrillDirector`) 모두.
+- **[어시스턴트]** 팀 명단은 그 팀 공격의 `mates`(`TeamDefence.SideDefending`)다. 공이 있을 때와 없을 때 팀 폼이 같고, 명단에 없는 골키퍼도 같은 값을 쓴다.
+- **[어시스턴트]** 개인 폼: 수비수는 같은 몸의 `AttackerAI.form`, 골키퍼는 새 `GoalkeeperAI.form`(`IForm`).
+- **[어시스턴트]** 골키퍼는 `Params`에서 반응속도·키핑에 폼을 건다. 자기 선방·잡기와 공격의 `GoalChance`·슛 드릴이 같은 값을 쓴다. `keeping01`(슛 기록)은 적힌 값 그대로다.
+- **[어시스턴트]** 봇 캐리어의 몸싸움(능력치 없이 0.5)에도 폼을 건다 — 사람의 몸싸움과 맞췄다.
