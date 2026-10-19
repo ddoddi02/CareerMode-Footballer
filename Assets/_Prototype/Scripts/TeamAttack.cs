@@ -354,6 +354,16 @@ namespace Prototype
             looseSince = -1f;
             SendChaser(null);
 
+            // The human has called for it. He comes before anything the man on the ball
+            // would pick for himself - his own shot included. A shot he has already
+            // turned onto is left to go; it is in his body by then.
+            if (Requested && !shotPending)
+            {
+                if (hasPending && pending.receiver == Requester) PlayPass(BallCarrier);
+                else Commit(ToRequester(ballBody.transform.position), BallCarrier);
+                return;
+            }
+
             if (playAtOnce) { TickOnBall(BallCarrier); return; }
 
             if (holdUntil < 0f) holdUntil = Time.time + Random.Range(holdMin, holdMax);
@@ -1051,6 +1061,7 @@ namespace Prototype
             who.ReleaseBall();
             lastPasser = who.transform;
             IntendedReceiver = pending.receiver;
+            if (pending.receiver == Requester) Requester = null;
             PassSerial++;
             hasPending = false;
             holdUntil = -1f;
@@ -1109,11 +1120,58 @@ namespace Prototype
             looseSince = -1f;
         }
 
+        /// <summary>Who has called for the ball, while the call stands.</summary>
+        public Transform Requester { get; private set; }
+        float requestUntil;
+        public bool Requested { get { return Requester != null && Time.time < requestUntil; } }
+
+        /// <summary>
+        /// The human wants it (DrillDirector, 2026-10-20). Whichever of ours is on the ball
+        /// plays it to him next, before anything he would choose for himself, until it has
+        /// been played or `seconds` run out.
+        /// </summary>
+        public void RequestBall(Transform who, float seconds)
+        {
+            Requester = who;
+            requestUntil = Time.time + seconds;
+        }
+
+        public void CancelRequest() { Requester = null; }
+
+        /// <summary>
+        /// The ball to the man who called for it: on the floor if the lane to him is open
+        /// and he is in range of a ground ball, otherwise over the top - the same ball the
+        /// long pass is (PassPlanner.LongBall).
+        /// </summary>
+        PassPlan ToRequester(Vector3 from)
+        {
+            PassPlan p = new PassPlan();
+            p.from = from;
+            p.valid = true;
+            p.receiver = Requester;
+
+            Vector3 feet = PassPlanner.LeadPoint(from, Requester, pass, ballBody, false);
+            p.distance = Flat(feet - from).magnitude;
+            p.clearance = PassPlanner.LaneClearance(from, feet, opponents, pass.carrierShadow);
+            if (p.distance <= pass.groundRange && p.clearance >= pass.laneHalfWidth)
+            {
+                p.target = feet;
+                p.kind = PassKind.Ground;
+                return p;
+            }
+
+            p.target = PassPlanner.LeadPoint(from, Requester, pass, ballBody, true);
+            p.distance = Flat(p.target - from).magnitude;
+            p.kind = PassKind.Lofted;
+            return p;
+        }
+
         /// <summary>Forget the ball - a restart.</summary>
         public void ResetPossession()
         {
             BallCarrier = null;
             IntendedReceiver = null;
+            Requester = null;
             Chaser = null;
             hasPending = false;
             shotPending = false;

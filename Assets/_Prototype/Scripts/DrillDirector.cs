@@ -79,6 +79,10 @@ namespace Prototype
         [Tooltip("Inclusive range of the roll, 1..100 (Career.StatScale).")]
         public Vector2Int passingRoll = new Vector2Int(70, 85);
 
+        [Header("Calling for it - his buttons while a team-mate has the ball")]
+        [Tooltip("How long a call for the ball stands, and how long a shot, through ball or lob pressed without the ball is kept as his first touch. Ends sooner if he touches the ball or the other side wins it.")]
+        public float requestHold = 4f;
+
         [Header("Tuning")]
         public float tightGap = 1.5f;
         public float mediumGap = 3.2f;
@@ -113,6 +117,14 @@ namespace Prototype
         float gapAtTouch;
         bool armed;              // he touched it and the possession has not been settled yet
         bool awaitingHumanPass;
+
+        enum Act { None, Shoot, Cross, Pass, Through, Lob }
+
+        // what he asked for without the ball (WatchCalls)
+        Act kept1st = Act.None;         // his first touch, already chosen
+        float keptUntil = -1f;
+        float calledAt = -99f;          // the pass press that was a call, not a pass
+        float seenPass = -99f, seenThrough = -99f, seenLob = -99f, seenShoot = -99f, seenCross = -99f;
 
         float exposureAtTackle;
         float lastAimErr, lastSpeedErr;
@@ -252,6 +264,8 @@ namespace Prototype
             incomingForHuman = false;
             humanCollectAt = -99f;
             deadSince = -1f;
+            kept1st = Act.None;
+            seenPass = seenThrough = seenLob = seenShoot = seenCross = -99f;
             seenPassSerial = attack != null ? attack.PassSerial : -1;
             seenTurnovers = possession.Turnovers;
             homeHeldSince = Time.time;
@@ -269,6 +283,7 @@ namespace Prototype
             DrawLive();
 
             bool humanHasIt = ball.Carried && ReferenceEquals(ball.Carrier, player);
+            WatchCalls(humanHasIt);
 
             if (humanHasIt)
             {
@@ -316,6 +331,88 @@ namespace Prototype
 
             if (incomingForHuman) player.BeginReceive();
             else player.EndReceive();
+        }
+
+        /// <summary>
+        /// Without the ball, while his side has it, his buttons ask for it (2026-10-20, the
+        /// user's call):
+        ///
+        ///   pass                        "give it here" - the man on the ball plays it to him
+        ///                               before anything else (TeamAttack.RequestBall)
+        ///   shot / through ball / lob   the same call, and that button is also kept as his
+        ///                               first touch when the ball reaches him, aimed wherever
+        ///                               the cursor is at that moment
+        ///
+        /// The later button wins: a pass or a cross drops a kept touch and goes back to the
+        /// ordinary passBuffer. The kept touch lapses when he touches the ball, when the
+        /// other side wins it, or after requestHold. A pass pressed while a ball is already
+        /// on its way to him is not a call - it is the first-time pass it always was.
+        /// </summary>
+        void WatchCalls(bool humanHasIt)
+        {
+            bool pass = Fresh(player.LastPassPress, ref seenPass);
+            bool through = Fresh(player.LastThroughPress, ref seenThrough);
+            bool lob = Fresh(player.LastLobPress, ref seenLob);
+            bool shoot = Fresh(player.LastShootPress, ref seenShoot);
+            bool cross = Fresh(player.LastCrossPress, ref seenCross);
+
+            if (kept1st != Act.None && Time.time > keptUntil) kept1st = Act.None;
+            if (humanHasIt || possession.InPossession != Side.Home) return;
+
+            if (pass || cross) kept1st = Act.None;
+            if (shoot) Keep(Act.Shoot);
+            if (through) Keep(Act.Through);
+            if (lob) Keep(Act.Lob);
+
+            if ((pass || shoot || through || lob) && !incomingForHuman && attack != null)
+            {
+                attack.RequestBall(player.transform, requestHold);
+                if (pass) calledAt = player.LastPassPress;
+            }
+        }
+
+        void Keep(Act a)
+        {
+            kept1st = a;
+            keptUntil = Time.time + requestHold;
+        }
+
+        static bool Fresh(float pressedAt, ref float seen)
+        {
+            if (pressedAt <= seen) return false;
+            seen = pressedAt;
+            return true;
+        }
+
+        /// <summary>
+        /// The button he pressed last within passBuffer, if any. The latest wins, so a pass
+        /// pressed after a shot is the pass. The press that called for the ball is not a
+        /// pass - a short ball can arrive inside the buffer, and he asked to have it.
+        /// </summary>
+        Act Buffered()
+        {
+            Act a = Act.None;
+            float t = Time.time - passBuffer;
+            if (player.LastShootPress > t) { a = Act.Shoot; t = player.LastShootPress; }
+            if (player.LastCrossPress > t) { a = Act.Cross; t = player.LastCrossPress; }
+            if (player.LastPassPress > t && player.LastPassPress != calledAt) { a = Act.Pass; t = player.LastPassPress; }
+            if (player.LastThroughPress > t) { a = Act.Through; t = player.LastThroughPress; }
+            if (player.LastLobPress > t) { a = Act.Lob; }
+            return a;
+        }
+
+        /// <summary>Strike it as `a` says. False if there was nothing to do.</summary>
+        bool Do(Act a, bool firstTime)
+        {
+            switch (a)
+            {
+                case Act.Shoot: Shoot(firstTime); return true;
+                case Act.Cross: Cross(firstTime); return true;
+                case Act.Pass: PlayIt(PassType.ToFeet, firstTime); return true;
+                case Act.Through: PlayIt(PassType.Through, firstTime); return true;
+                case Act.Lob: PlayIt(PassType.Lob, firstTime); return true;
+            }
+            return false;
         }
 
         void LooseBall()
@@ -410,6 +507,7 @@ namespace Prototype
                 Settle(false);
                 incomingForHuman = false;
                 awaitingHumanPass = false;
+                kept1st = Act.None;
                 player.EndReceive();
                 player.TrackBall = true;
             }
@@ -548,11 +646,12 @@ namespace Prototype
             awaitingHumanPass = false;
             incomingForHuman = false;
 
-            if (Time.time - player.LastShootPress < passBuffer) { Shoot(true); return; }
-            if (Time.time - player.LastCrossPress < passBuffer) { Cross(true); return; }
-            if (Time.time - player.LastPassPress < passBuffer) { PlayIt(PassType.ToFeet, true); return; }
-            if (Time.time - player.LastThroughPress < passBuffer) { PlayIt(PassType.Through, true); return; }
-            if (Time.time - player.LastLobPress < passBuffer) { PlayIt(PassType.Lob, true); return; }
+            // He has it - the call is answered. A touch he kept while he waited for it
+            // (WatchCalls) is newer than any pass or cross, which would have dropped it.
+            if (attack != null) attack.CancelRequest();
+            Act first = kept1st != Act.None ? kept1st : Buffered();
+            kept1st = Act.None;
+            if (Do(first, true)) return;
 
             EnterCarry();
         }
@@ -567,11 +666,7 @@ namespace Prototype
 
         void Carry()
         {
-            if (Time.time - player.LastShootPress < passBuffer) { Shoot(false); return; }
-            if (Time.time - player.LastCrossPress < passBuffer) { Cross(false); return; }
-            if (Time.time - player.LastPassPress < passBuffer) { PlayIt(PassType.ToFeet, false); return; }
-            if (Time.time - player.LastThroughPress < passBuffer) { PlayIt(PassType.Through, false); return; }
-            if (Time.time - player.LastLobPress < passBuffer) { PlayIt(PassType.Lob, false); return; }
+            if (Do(Buffered(), false)) return;
 
             var d = NearestDefender();
             if (d == null || !d.WantsTackle(ball.transform.position, ball.Exposure)) return;
@@ -922,6 +1017,7 @@ namespace Prototype
             player.EndReceive();
             player.TrackBall = true;
             incomingForHuman = false;
+            kept1st = Act.None;
             passRing.enabled = false;
         }
 
@@ -1066,6 +1162,21 @@ namespace Prototype
 
         }
 
+        /// <summary>What he has asked for without the ball, while it stands. The only thing on
+        /// screen for it - one line of text (screen rule, PROJECT.md 3.19).</summary>
+        string CallLine()
+        {
+            switch (kept1st)
+            {
+                case Act.Shoot: return "요청: 슛";
+                case Act.Through: return "요청: 스루패스";
+                case Act.Lob: return "요청: 로빙";
+            }
+            if (attack != null && player != null && attack.Requested && attack.Requester == player.transform)
+                return "요청: 패스";
+            return null;
+        }
+
         void OnGUI()
         {
             EnsureStyles();
@@ -1118,6 +1229,9 @@ namespace Prototype
             {
                 GUILayout.Label("센터백이 공을 잡고 있습니다", sSmall);
             }
+
+            string call = CallLine();
+            if (call != null) GUILayout.Label(call, sSmall);
 
             GUILayout.Label(string.Format("{0}  오차 {1:+0.00;-0.00}m  ·  강약 {2:+0.0;-0.0}%",
                             lastStrike, lastAimErr, lastSpeedErr), sSmall);
