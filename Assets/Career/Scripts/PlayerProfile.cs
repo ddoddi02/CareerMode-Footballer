@@ -95,6 +95,9 @@ namespace Career
         [Tooltip("Fatigue, 0 (rested) .. 100. PROVISIONAL - role not decided.")]
         [Range(FatigueMin, FatigueMax)] public float fatigue = 0f;
 
+        [Tooltip("Form, 0..100, 50 = usual. Moves day by day toward team chemistry (FormModel, Squad.EndDay). PROVISIONAL - no match effect yet.")]
+        [Range(FormModel.Min, FormModel.Max)] public float form = FormModel.Neutral;
+
         [Tooltip("Traits showing right now. Set only by BodyModel.NextTraits - it has the hysteresis.")]
         public BodyTrait traits = BodyTrait.None;
 
