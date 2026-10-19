@@ -5,9 +5,10 @@ namespace Prototype
 {
     /// <summary>
     /// A small mouse in the bottom-right corner, drawn in lines and filled shapes - no
-    /// image file - with the three pass buttons coloured and labelled:
+    /// image file - with the strike buttons coloured and labelled:
     ///
     ///   left button        short pass
+    ///   right + left       shot      (the right button alone does nothing)
     ///   front side button  lob       (mouse 5)
     ///   back side button   through   (mouse 4)
     ///
@@ -28,11 +29,13 @@ namespace Prototype
         public Color shortCol = new Color(0.45f, 0.85f, 1f, 0.9f);
         public Color throughCol = new Color(0.45f, 1f, 0.6f, 0.9f);
         public Color lobCol = new Color(1f, 0.78f, 0.35f, 0.9f);
+        public Color shotCol = new Color(1f, 0.55f, 0.35f, 0.9f);
 
         Material mat;
         GUIStyle label;
         readonly List<Vector2> body = new List<Vector2>();
         readonly List<Vector2> leftButton = new List<Vector2>();
+        readonly List<Vector2> rightButton = new List<Vector2>();
 
         void OnGUI()
         {
@@ -55,6 +58,7 @@ namespace Prototype
                 BuildShapes(x0, y0, w, h, cx, split);
                 Begin();
                 Fan(new Vector2(x0 + w * 0.26f, y0 + h * 0.26f), leftButton, shortCol);
+                Fan(new Vector2(x0 + w * 0.74f, y0 + h * 0.26f), rightButton, shotCol);
                 Fill(lob, lobCol);
                 Fill(thru, throughCol);
 
@@ -79,6 +83,7 @@ namespace Prototype
             EnsureLabel();
             float right = x0 - 30f * s;
             Label(right, y0 + h * 0.2f, "좌클릭  짧은 패스", shortCol);
+            Label(x0 + w, y0 - 14f * s, "우클릭 누른 채 좌클릭  슛", shotCol);
             Label(right, lob.center.y, "마우스5  로빙", lobCol);
             Label(right, thru.center.y, "마우스4  스루패스", throughCol);
         }
@@ -111,6 +116,16 @@ namespace Prototype
                 leftButton.Add(new Vector2(cx + Mathf.Cos(a) * r, y0 + r + Mathf.Sin(a) * r));
             }
             leftButton.Add(new Vector2(cx, split));
+
+            // The right button, its mirror.
+            rightButton.Clear();
+            rightButton.Add(new Vector2(x0 + w, split));
+            for (int i = 0; i <= 6; i++)
+            {
+                float a = 2f * Mathf.PI - Mathf.PI * 0.5f * i / 6f;
+                rightButton.Add(new Vector2(cx + Mathf.Cos(a) * r, y0 + r + Mathf.Sin(a) * r));
+            }
+            rightButton.Add(new Vector2(cx, split));
         }
 
         void Begin()

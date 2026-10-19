@@ -60,9 +60,10 @@ namespace Prototype
     ///   move    WASD        / left stick
     ///   look    mouse       / right stick      <- always live, no button. also what you can SEE
     ///   aim     mouse       / right stick      <- the same cursor: you pass where you are looking
-    ///   pass    E           / A (south)
-    ///   shoot   R           / B (east)
-    ///   through F           / Y (north)
+    ///   pass    left click, E          / A (south)    } held: the longer, the harder -
+    ///   shoot   right + left click, R  / B (east)     } struck on release
+    ///   through mouse 4, F             / Y (north)    }
+    ///   lob     mouse 5                               }
     ///   cross   C           / X (west)
     ///   scan    Q                              <- the short look behind (unchanged)
     ///   sprint  LeftShift   / RB
@@ -120,50 +121,75 @@ namespace Prototype
 #endif
         }
 
-        /// <summary>Short pass to feet: left click. E is the same thing on the keyboard.</summary>
-        public static bool PassPressed()
+        // The strike buttons are read HELD, not pressed: a strike charges while the button
+        // is down and goes on release (FootballerController.PollStrike, 2026-10-20).
+
+        /// <summary>Left mouse button. A short pass - or, with the right button held, a shot.</summary>
+        public static bool LeftHeld()
         {
 #if ENABLE_INPUT_SYSTEM
             var ms = Mouse.current;
-            if (ms != null && ms.leftButton.wasPressedThisFrame) return true;
-            var kb = Keyboard.current;
-            if (kb != null && kb.eKey.wasPressedThisFrame) return true;
-            var gp = Gamepad.current;
-            if (gp != null && gp.buttonSouth.wasPressedThisFrame) return true;
-            return false;
+            return ms != null && ms.leftButton.isPressed;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.E);
+            return Input.GetMouseButton(0);
 #else
             return false;
 #endif
         }
 
-        /// <summary>Through ball into space: the back side button (mouse 4). F is the same thing.</summary>
-        public static bool ThroughPassPressed()
+        /// <summary>Right mouse button: held, it turns the left click into a shot. Alone it does nothing.</summary>
+        public static bool RightHeld()
         {
 #if ENABLE_INPUT_SYSTEM
             var ms = Mouse.current;
-            if (ms != null && ms.backButton.wasPressedThisFrame) return true;
-            var kb = Keyboard.current;
-            if (kb != null && kb.fKey.wasPressedThisFrame) return true;
-            var gp = Gamepad.current;
-            if (gp != null && gp.buttonNorth.wasPressedThisFrame) return true;
-            return false;
+            return ms != null && ms.rightButton.isPressed;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetMouseButtonDown(3) || Input.GetKeyDown(KeyCode.F);
+            return Input.GetMouseButton(1);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Short pass on the keyboard and pad: E / A.</summary>
+        public static bool PassKeyHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && kb.eKey.isPressed) return true;
+            var gp = Gamepad.current;
+            return gp != null && gp.buttonSouth.isPressed;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKey(KeyCode.E);
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>Through ball into space: the back side button (mouse 4), F, Y.</summary>
+        public static bool ThroughHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var ms = Mouse.current;
+            if (ms != null && ms.backButton.isPressed) return true;
+            var kb = Keyboard.current;
+            if (kb != null && kb.fKey.isPressed) return true;
+            var gp = Gamepad.current;
+            return gp != null && gp.buttonNorth.isPressed;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetMouseButton(3) || Input.GetKey(KeyCode.F);
 #else
             return false;
 #endif
         }
 
         /// <summary>Lofted ball over the top to the cursor: the front side button (mouse 5).</summary>
-        public static bool LobPressed()
+        public static bool LobHeld()
         {
 #if ENABLE_INPUT_SYSTEM
             var ms = Mouse.current;
-            return ms != null && ms.forwardButton.wasPressedThisFrame;
+            return ms != null && ms.forwardButton.isPressed;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetMouseButtonDown(4);
+            return Input.GetMouseButton(4);
 #else
             return false;
 #endif
@@ -185,17 +211,16 @@ namespace Prototype
 #endif
         }
 
-        /// <summary>D = shoot. Gamepad circle/B, as in FC.</summary>
-        public static bool ShootPressed()
+        /// <summary>Shot on the keyboard and pad: R / B (circle), as in FC. The mouse shot is right + left.</summary>
+        public static bool ShootKeyHeld()
         {
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && kb.rKey.wasPressedThisFrame) return true;
+            if (kb != null && kb.rKey.isPressed) return true;
             var gp = Gamepad.current;
-            if (gp != null && gp.buttonEast.wasPressedThisFrame) return true;
-            return false;
+            return gp != null && gp.buttonEast.isPressed;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKeyDown(KeyCode.R);
+            return Input.GetKey(KeyCode.R);
 #else
             return false;
 #endif

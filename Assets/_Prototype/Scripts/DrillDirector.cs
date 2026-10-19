@@ -79,6 +79,16 @@ namespace Prototype
         [Tooltip("Inclusive range of the roll, 1..100 (Career.StatScale).")]
         public Vector2Int passingRoll = new Vector2Int(70, 85);
 
+        [Header("Power - hold the button to strike harder (FootballerController.chargeSeconds)")]
+        [Tooltip("A pass's pace as a multiple of the ball the cursor asks for, at an empty gauge and a full one. Half a gauge is exactly the cursor's ball: less falls short, more runs on and is harder to take.")]
+        public Vector2 passPower = new Vector2(0.6f, 1.4f);
+        [Tooltip("A shot's pace at an empty gauge, as a fraction of his full shot. A full gauge is his full shot.")]
+        [Range(0f, 1f)] public float shotPowerMin = 0.45f;
+        [Tooltip("How high a full-gauge shot climbs, m. It rises with the square of the gauge, so most of the gauge keeps it low (under 0.5 m of apex it is struck along the floor). At 2.9 a full one from 13 to 29 m out goes over the bar.")]
+        public float shotApexFull = 2.9f;
+        [Tooltip("Crossbar height. A ball crossing the goal line above it is out, not a goal.")]
+        public float crossbarHeight = 2.44f;
+
         [Header("Calling for it - his buttons while a team-mate has the ball")]
         [Tooltip("How long a call for the ball stands, and how long a shot, through ball or lob pressed without the ball is kept as his first touch. Ends sooner if he touches the ball or the other side wins it.")]
         public float requestHold = 4f;
@@ -399,32 +409,81 @@ namespace Prototype
         }
 
         /// <summary>
-        /// The button he pressed last within passBuffer, if any. The latest wins, so a pass
-        /// pressed after a shot is the pass. The press that called for the ball is not a
-        /// pass - a short ball can arrive inside the buffer, and he asked to have it.
+        /// The strike he let go of last within passBuffer, if any, and the gauge it went at -
+        /// strikes go on release (FootballerController.PollStrike); the cross still goes on
+        /// the press. The latest wins, so a pass let go after a shot is the pass. The press
+        /// that called for the ball is not a pass - a short ball can arrive inside the
+        /// buffer, and he asked to have it.
         /// </summary>
-        Act Buffered()
+        Act Buffered(out float power)
         {
             Act a = Act.None;
+            power = 0.5f;
             float t = Time.time - passBuffer;
-            if (player.LastShootPress > t) { a = Act.Shoot; t = player.LastShootPress; }
-            if (player.LastCrossPress > t) { a = Act.Cross; t = player.LastCrossPress; }
-            if (player.LastPassPress > t && player.LastPassPress != calledAt) { a = Act.Pass; t = player.LastPassPress; }
-            if (player.LastThroughPress > t) { a = Act.Through; t = player.LastThroughPress; }
-            if (player.LastLobPress > t) { a = Act.Lob; }
+            Released(FootballerController.Strike.Shoot, Act.Shoot, ref a, ref t, ref power);
+            if (player.LastCrossPress > t) { a = Act.Cross; t = player.LastCrossPress; power = 0.5f; }
+            if (player.LastPassPress != calledAt) Released(FootballerController.Strike.Pass, Act.Pass, ref a, ref t, ref power);
+            Released(FootballerController.Strike.Through, Act.Through, ref a, ref t, ref power);
+            Released(FootballerController.Strike.Lob, Act.Lob, ref a, ref t, ref power);
             return a;
         }
 
-        /// <summary>Strike it as `a` says. False if there was nothing to do.</summary>
-        bool Do(Act a, bool firstTime)
+        void Released(FootballerController.Strike s, Act act, ref Act a, ref float t, ref float power)
+        {
+            float at = player.ReleasedAt(s);
+            if (at <= t) return;
+            a = act;
+            t = at;
+            power = player.ReleasePower(s);
+        }
+
+        /// <summary>
+        /// A strike button still held as the ball reaches him: he hits it first time with
+        /// the gauge as it stands. Not the pass press that called for the ball - that one
+        /// asked to have it.
+        /// </summary>
+        bool HeldOnArrival(out Act a, out float power)
+        {
+            a = ActOf(player.Charging);
+            power = player.Gauge;
+            if (a == Act.Pass && player.LastPassPress == calledAt) a = Act.None;
+            return a != Act.None;
+        }
+
+        static Act ActOf(FootballerController.Strike s)
+        {
+            switch (s)
+            {
+                case FootballerController.Strike.Pass: return Act.Pass;
+                case FootballerController.Strike.Through: return Act.Through;
+                case FootballerController.Strike.Lob: return Act.Lob;
+                case FootballerController.Strike.Shoot: return Act.Shoot;
+            }
+            return Act.None;
+        }
+
+        static FootballerController.Strike StrikeOf(Act a)
         {
             switch (a)
             {
-                case Act.Shoot: Shoot(firstTime); return true;
+                case Act.Pass: return FootballerController.Strike.Pass;
+                case Act.Through: return FootballerController.Strike.Through;
+                case Act.Lob: return FootballerController.Strike.Lob;
+                case Act.Shoot: return FootballerController.Strike.Shoot;
+            }
+            return FootballerController.Strike.None;
+        }
+
+        /// <summary>Strike it as `a` says, at `power` 0..1. False if there was nothing to do.</summary>
+        bool Do(Act a, bool firstTime, float power)
+        {
+            switch (a)
+            {
+                case Act.Shoot: Shoot(firstTime, power); return true;
                 case Act.Cross: Cross(firstTime); return true;
-                case Act.Pass: PlayIt(PassType.ToFeet, firstTime); return true;
-                case Act.Through: PlayIt(PassType.Through, firstTime); return true;
-                case Act.Lob: PlayIt(PassType.Lob, firstTime); return true;
+                case Act.Pass: PlayIt(PassType.ToFeet, firstTime, power); return true;
+                case Act.Through: PlayIt(PassType.Through, firstTime, power); return true;
+                case Act.Lob: PlayIt(PassType.Lob, firstTime, power); return true;
             }
             return false;
         }
@@ -588,7 +647,8 @@ namespace Prototype
             Vector3 p = ball.transform.position;
             if (Mathf.Abs(p.z) <= pitchHalfZ && Mathf.Abs(p.x) <= pitchHalfX) return false;
 
-            bool inMouth = Mathf.Abs(p.x) < goalHalfWidth;
+            // Between the posts AND under the bar - a lifted shot can clear it (Shoot).
+            bool inMouth = Mathf.Abs(p.x) < goalHalfWidth && p.y < crossbarHeight;
             bool homeGoal = p.z > pitchHalfZ && inMouth;      // home attacks +Z
             bool awayGoal = p.z < -pitchHalfZ && inMouth;     // away attacks -Z
 
@@ -661,11 +721,21 @@ namespace Prototype
             incomingForHuman = false;
 
             // He has it - the call is answered. A touch he kept while he waited for it
-            // (WatchCalls) is newer than any pass or cross, which would have dropped it.
+            // (WatchCalls) is newer than any pass or cross, which would have dropped it;
+            // its power is the gauge now if he is still holding the button, or where he
+            // let it go. Otherwise a button still held, then one let go just before.
             if (attack != null) attack.CancelRequest();
-            Act first = kept1st != Act.None ? kept1st : Buffered();
+            Act first;
+            float power;
+            if (kept1st != Act.None)
+            {
+                first = kept1st;
+                FootballerController.Strike s = StrikeOf(first);
+                power = player.Charging == s ? player.Gauge : player.ReleasePower(s);
+            }
+            else if (!HeldOnArrival(out first, out power)) first = Buffered(out power);
             kept1st = Act.None;
-            if (Do(first, true)) return;
+            if (Do(first, true, power)) { player.CancelCharge(); return; }
 
             EnterCarry();
         }
@@ -680,7 +750,9 @@ namespace Prototype
 
         void Carry()
         {
-            if (Do(Buffered(), false)) return;
+            float power;
+            Act a = Buffered(out power);
+            if (Do(a, false, power)) return;
 
             var d = NearestDefender();
             if (d == null || !d.WantsTackle(ball.transform.position, ball.Exposure)) return;
@@ -850,9 +922,11 @@ namespace Prototype
         /// How near the ball gets to where he wanted it is his problem: the spread grows
         /// with distance (3.9), so a ball asked to travel further is asked to be luckier.
         /// </summary>
-        void PlayIt(PassType type, bool firstTime)
+        void PlayIt(PassType type, bool firstTime, float power)
         {
             Vector3 pp = player.transform.position;
+            // Half a gauge is the ball the cursor asked for; less falls short, more runs on.
+            float weight = Mathf.Lerp(passPower.x, passPower.y, Mathf.Clamp01(power));
             PassRules rules = attack != null ? attack.pass : new PassRules();
             float diff = BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false);
 
@@ -890,17 +964,22 @@ namespace Prototype
                 // The same as the bots' ball over the top (TeamAttack.PlayPass): Resolve gives
                 // the sprayed direction, and the weight error becomes a LENGTH error, because
                 // Loft solves the strike from the distance and the apex.
+                // The apex is the cursor's ball's, so a harder lob is a faster, longer one.
                 st = BallModel.Resolve(pp, target, 0f, 0f, stat, diff);
-                Vector3 landing = pp + st.direction * (dist * (1f + st.speedErrorPct * 0.01f));
+                Vector3 landing = pp + st.direction * (dist * weight * (1f + st.speedErrorPct * 0.01f));
                 ball.Loft(pp, landing, PassPlanner.LoftApex(dist, rules));
                 MarkFlight(landing);
             }
             else
             {
-                float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel);
+                float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel) * weight;
                 st = BallModel.Resolve(pp, target, 0f, v0, stat, diff);
                 ball.Release(st.direction, st.speed);
-                MarkFlight(target);
+
+                // A soft one stops short of where it was meant for: mark where it stops.
+                float stops = v0 * v0 / (2f * Mathf.Max(ball.rollDecel, 0.01f));
+                Vector3 flat = new Vector3(pp.x, 0f, pp.z);
+                MarkFlight(stops < dist ? flat + (target - flat).normalized * stops : target);
             }
 
             lastAimErr = st.aimErrorM;
@@ -917,8 +996,8 @@ namespace Prototype
             incomingForHuman = false;
 
             float spread = BallModel.AimSpread(stat, dist, diff);
-            Flash(string.Format("{0} {1:0.0}m · 오차 ±{2:0.0}m (실제 {3:+0.0;-0.0}m)",
-                                lastStrike, dist, spread, st.aimErrorM));
+            Flash(string.Format("{0} {1:0.0}m · 세기 {2:0}% · 오차 ±{3:0.0}m (실제 {4:+0.0;-0.0}m)",
+                                lastStrike, dist, power * 100f, spread, st.aimErrorM));
         }
 
         /// <summary>
@@ -962,27 +1041,45 @@ namespace Prototype
         /// a miss.
         ///
         /// So there is no verdict here. The ball flies, and whatever it actually does is
-        /// the answer: crosses between the posts is a goal, crosses outside them is out,
-        /// hits a body on the way is blocked (OffThePitch, DefenceTookIt). A prediction
-        /// that has to agree with the physics is a prediction that can disagree with it.
+        /// the answer: crosses between the posts and under the bar is a goal, anywhere
+        /// else is out, hits a body on the way is blocked (OffThePitch, DefendingSideWonIt).
+        /// A prediction that has to agree with the physics is a prediction that can
+        /// disagree with it.
+        ///
+        /// The gauge sets the pace - from shotPowerMin of his full shot up to all of it -
+        /// and how high it climbs, with the square of the gauge so that only the top of the
+        /// gauge lifts it much (shotApexFull). A lifted shot is the long ball's flight
+        /// (Ball.Loft): its horizontal pace is the shot's, and it lands where that pace
+        /// carries it in the time it hangs.
         /// </summary>
-        void Shoot(bool firstTime)
+        void Shoot(bool firstTime, float power)
         {
             Vector3 pp = player.transform.position;
+            power = Mathf.Clamp01(power);
             var sh = BallModel.Resolve(pp, ShotTarget(), BallModel.Base.Shot, 0f,
                                        Today(playerShooting),
                                        BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
             lastAimErr = sh.aimErrorM; lastSpeedErr = sh.speedErrorPct;
             lastStrike = firstTime ? "첫 터치 슛" : "슛";
-            ball.Release(sh.direction, sh.speed);
+
+            float speed = sh.speed * Mathf.Lerp(shotPowerMin, 1f, power);
+            float apex = shotApexFull * power * power;
+            if (apex >= MinLoft)
+                ball.Loft(pp, pp + sh.direction * (speed * Ball.HangTime(apex, ball.gravity)), apex);
+            else
+                ball.Release(sh.direction, speed);
 
             humanCollectAt = Time.time + selfPassLock;
             awaitingHumanPass = false;
             player.EndReceive();
             player.TrackBall = true;
 
-            Flash(string.Format("{0} — 오차 {1:+0.00;-0.00}m", lastStrike, sh.aimErrorM));
+            Flash(string.Format("{0} — 세기 {1:0}% · {2:0.0} m/s · 높이 {3:0.0}m · 오차 {4:+0.00;-0.00}m",
+                                lastStrike, power * 100f, speed, apex >= MinLoft ? apex : 0f, sh.aimErrorM));
         }
+
+        /// <summary>Ball.Loft lifts nothing lower than this; a shot below it goes along the floor.</summary>
+        const float MinLoft = 0.5f;
 
         void Cross(bool firstTime)
         {
@@ -1259,13 +1356,14 @@ namespace Prototype
                     player.scanAngle, player.ScanClamped ? "  [라인 제한]" : ""), sSmall);
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(new Rect(w - 316, 14, 302, 292), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(w - 316, 14, 302, 314), GUI.skin.box);
             GUILayout.Label("WASD / 좌스틱     이동", sSmall);
             GUILayout.Label("마우스 / 우스틱   시선 · 조준", sSmall);
             GUILayout.Label("좌클릭 / E / A    짧은 패스 · 레이오프", sSmall);
             GUILayout.Label("마우스4 / F / Y   스루패스", sSmall);
             GUILayout.Label("마우스5           로빙", sSmall);
-            GUILayout.Label("R / B (○)         슛", sSmall);
+            GUILayout.Label("우클릭+좌클릭 / R 슛", sSmall);
+            GUILayout.Label("길게 누를수록 세게 — 떼면 찬다", sSmall);
             GUILayout.Label("C / X (□)         크로스", sSmall);
             GUILayout.Label("Q                 어깨 너머 확인", sSmall);
             GUILayout.Label("Shift / RB        스프린트", sSmall);
@@ -1280,7 +1378,7 @@ namespace Prototype
             {
                 prompt = ball.Exposure > 0.9f
                     ? "터치가 깁니다 — 속도를 줄이거나 몸을 넣으세요 (Space)"
-                    : "드리블 중 — 커서로 겨냥하고 좌클릭 패스 · 마우스4 스루 · 마우스5 로빙 · R 슛";
+                    : "드리블 중 — 커서로 겨냥하고 좌클릭 패스 · 마우스4 스루 · 마우스5 로빙 · 우클릭+좌클릭 슛";
             }
             else if (incomingForHuman && ball != null && ball.InFlight)
             {
@@ -1310,6 +1408,34 @@ namespace Prototype
                 GUI.Label(new Rect(w * 0.5f - 320, h - 176, 640, 100), body, sMid);
                 GUI.color = Color.white;
             }
+
+            DrawGauge(h);
+        }
+
+        /// <summary>
+        /// The power gauge: one small bar under his feet while a strike button is held
+        /// (2026-10-20 - the one new thing allowed on screen besides the cursor, where the
+        /// ball goes and who is where). The tick is half a gauge - the ball the cursor asks for.
+        /// </summary>
+        void DrawGauge(int h)
+        {
+            if (player == null || player.Charging == FootballerController.Strike.None) return;
+            Camera c = Camera.main;
+            if (c == null) return;
+            Vector3 sp = c.WorldToScreenPoint(player.transform.position);
+            if (sp.z < 0f) return;
+
+            const float bw = 64f, bh = 7f;
+            Rect back = new Rect(sp.x - bw * 0.5f, h - sp.y + 16f, bw, bh);
+            Color was = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.6f);
+            GUI.DrawTexture(new Rect(back.x - 1f, back.y - 1f, back.width + 2f, back.height + 2f), Texture2D.whiteTexture);
+            GUI.color = player.Charging == FootballerController.Strike.Shoot ? new Color(1f, 0.55f, 0.35f, 0.95f)
+                                                                           : new Color(1f, 1f, 1f, 0.95f);
+            GUI.DrawTexture(new Rect(back.x, back.y, back.width * player.Gauge, back.height), Texture2D.whiteTexture);
+            GUI.color = new Color(1f, 1f, 1f, 0.6f);
+            GUI.DrawTexture(new Rect(back.x + back.width * 0.5f - 0.5f, back.y - 2f, 1f, back.height + 4f), Texture2D.whiteTexture);
+            GUI.color = was;
         }
     }
 }

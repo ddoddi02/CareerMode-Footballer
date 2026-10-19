@@ -97,6 +97,35 @@ namespace Prototype
         public float LastCrossPress { get; private set; }
         public float LastLobPress { get; private set; }
         public float LastShootPress { get; private set; }
+
+        /// <summary>A strike that charges while its button is held and goes on release.</summary>
+        public enum Strike { None, Pass, Through, Lob, Shoot }
+
+        [Header("Power - hold to strike harder")]
+        [Tooltip("Seconds a strike button has to be held for a full gauge. The strike goes on release (2026-10-20).")]
+        public float chargeSeconds = 1f;
+
+        /// <summary>The strike whose button is down right now.</summary>
+        public Strike Charging { get; private set; }
+        /// <summary>0..1 - how full the gauge of the strike being held is.</summary>
+        public float Gauge { get { return Charging == Strike.None ? 0f : Mathf.Clamp01((Time.time - chargeStart) / Mathf.Max(chargeSeconds, 0.01f)); } }
+        /// <summary>When that strike's button was last let go, and how full the gauge was.</summary>
+        public float ReleasedAt(Strike s) { return releasedAt[(int)s]; }
+        public float ReleasePower(Strike s) { return releasePower[(int)s]; }
+
+        /// <summary>The held strike has been used already - its release does nothing.</summary>
+        public void CancelCharge()
+        {
+            Charging = Strike.None;
+            chargeSource = -1;
+        }
+
+        float chargeStart;
+        int chargeSource = -1;
+        readonly bool[] wasHeld = new bool[5];
+        readonly float[] releasedAt = { -99f, -99f, -99f, -99f, -99f };
+        readonly float[] releasePower = new float[5];
+
         public float BodyAngle { get; private set; }
         public float HeadAngle { get; private set; }
         public bool TrackBall { get; set; }
@@ -178,6 +207,8 @@ namespace Prototype
             LastCrossPress = -99f;
             LastLobPress = -99f;
             LastShootPress = -99f;
+            CancelCharge();
+            for (int i = 0; i < releasedAt.Length; i++) releasedAt[i] = -99f;
             CallDir = new Vector2(0f, 1f);
             EndReceive();
             ResetScan();
@@ -192,6 +223,35 @@ namespace Prototype
             scanHeld = false;
             scanEpoch = Time.time;
             ScanReason = "-";
+        }
+
+        /// <summary>
+        /// One strike button. Down: that strike starts charging (and counts as pressed -
+        /// a call for the ball goes on the press). Up: it is let go with whatever the
+        /// gauge reached. One charge at a time - a new button takes over from the old.
+        /// </summary>
+        void PollStrike(int source, bool held, Strike kind)
+        {
+            if (held && !wasHeld[source])
+            {
+                Charging = kind;
+                chargeSource = source;
+                chargeStart = Time.time;
+                switch (kind)
+                {
+                    case Strike.Pass: LastPassPress = Time.time; break;
+                    case Strike.Through: LastThroughPress = Time.time; break;
+                    case Strike.Lob: LastLobPress = Time.time; break;
+                    case Strike.Shoot: LastShootPress = Time.time; break;
+                }
+            }
+            else if (!held && wasHeld[source] && source == chargeSource && Charging != Strike.None)
+            {
+                releasePower[(int)Charging] = Gauge;
+                releasedAt[(int)Charging] = Time.time;
+                CancelCharge();
+            }
+            wasHeld[source] = held;
         }
 
         // -------------------------------------------------------- receiving ----
@@ -235,11 +295,13 @@ namespace Prototype
             Holding = ProtoInput.HoldHeld();
             Sprinting = ProtoInput.SprintHeld();
             Shielding = ProtoInput.ShieldHeld();
-            if (ProtoInput.PassPressed()) LastPassPress = Time.time;
-            if (ProtoInput.ThroughPassPressed()) LastThroughPress = Time.time;
+            // Left click is a short pass, or a shot if the right button is already down.
+            PollStrike(0, ProtoInput.LeftHeld(), ProtoInput.RightHeld() ? Strike.Shoot : Strike.Pass);
+            PollStrike(1, ProtoInput.PassKeyHeld(), Strike.Pass);
+            PollStrike(2, ProtoInput.ThroughHeld(), Strike.Through);
+            PollStrike(3, ProtoInput.LobHeld(), Strike.Lob);
+            PollStrike(4, ProtoInput.ShootKeyHeld(), Strike.Shoot);
             if (ProtoInput.CrossPressed()) LastCrossPress = Time.time;
-            if (ProtoInput.LobPressed()) LastLobPress = Time.time;
-            if (ProtoInput.ShootPressed()) LastShootPress = Time.time;
 
             UpdateAim();
 

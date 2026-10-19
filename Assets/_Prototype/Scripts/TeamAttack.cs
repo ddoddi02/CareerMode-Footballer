@@ -598,7 +598,7 @@ namespace Prototype
                 Heading(new Vector3(goal.x - TacticalPitch.GoalHalfW, 0f, goal.z) - from),
                 Heading(new Vector3(goal.x + TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
             best.keeper = gk != null ? Flat(gk.transform.position) : goal;
-            best.keeping = gk != null ? gk.keeping01 : -1f;
+            best.keeping = gk != null ? gk.Params.keeping01 : -1f;     // with his form, as he plays it
             best.clear = ShotClear(from, best.aim, stat);
             return best;
         }
