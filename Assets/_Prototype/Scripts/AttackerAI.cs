@@ -17,7 +17,7 @@ namespace Prototype
     /// else here: the coordinator chooses, the player executes.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public class AttackerAI : MonoBehaviour, IBallCarrier
+    public class AttackerAI : MonoBehaviour, IBallCarrier, IForm
     {
         [Header("Who he is")]
         public Role role = Role.ST;
@@ -61,6 +61,10 @@ namespace Prototype
 
         /// <summary>How well he finishes, 0..1. From his slot (Formation.ShootingFor).</summary>
         public float Shooting { get { return Formation.ShootingFor(role); } }
+
+        [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
+        [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;
+        public int FormPercent { get { return form; } }
 
         [Tooltip("How long after playing a pass he will not collect the ball again. Without it he takes his own pass back off the receiver.")]
         public float passCooldown = 0.8f;

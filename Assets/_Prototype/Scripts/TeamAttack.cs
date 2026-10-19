@@ -519,7 +519,7 @@ namespace Prototype
             if (off > alignAngle && !rushed) return;
 
             float diff = BallModel.Difficulty(Pressure(from), off, rushed, false);
-            BallModel.Strike st = BallModel.Resolve(from, shot.aim, BallModel.Base.Shot, 0f, who.Shooting, diff);
+            BallModel.Strike st = BallModel.Resolve(from, shot.aim, BallModel.Base.Shot, 0f, ShootingToday(who), diff);
             ballBody.Launch(from, st.direction, st.speed);
 
             who.ReleaseBall();
@@ -549,6 +549,12 @@ namespace Prototype
         /// goals are, and a wide one is pulled toward the middle because a corner aimed at
         /// with a two-metre spread is half a miss.
         /// </summary>
+        /// <summary>His finishing as it plays today (Form) - the kick and the decision to take it read the same number.</summary>
+        float ShootingToday(AttackerAI who)
+        {
+            return Form.Stat01(who.Shooting, who.transform, mates);
+        }
+
         Shot BestShot(AttackerAI who, Vector3 from)
         {
             Shot best = new Shot();
@@ -556,7 +562,7 @@ namespace Prototype
             if (Flat(goal - from).magnitude > shotRange) return best;
 
             GoalkeeperAI gk = TheirKeeper();
-            float stat = who.Shooting;
+            float stat = ShootingToday(who);
             float press = Pressure(from);
             float speed = BallModel.Speed(BallModel.Base.Shot, stat);
             float decel = ballBody != null ? ballBody.rollDecel : 5f;
@@ -675,7 +681,7 @@ namespace Prototype
             shotOpen = true;
             shotAt = Time.time;
             shotRole = who.role.ToString();
-            shotStat = who.Shooting;
+            shotStat = ShootingToday(who);
             GoalkeeperAI gk = TheirKeeper();
             keeperReportsAtShot = gk != null ? gk.Reports : 0;
         }
@@ -1067,7 +1073,8 @@ namespace Prototype
                 // it is folded into how far up the line the aim point sits; the strike
                 // speed it returns is unused, because Loft solves that from the distance
                 // and the apex.
-                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, 0f, who.LongPassing, diff);
+                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, 0f,
+                                                        Form.Stat01(who.LongPassing, who.transform, mates), diff);
                 float over = 1f + st.speedErrorPct * 0.01f;
                 Vector3 landing = from + st.direction * (pending.distance * over);
                 ballBody.Loft(from, landing, PassPlanner.LoftApex(pending.distance, pass));
@@ -1077,7 +1084,8 @@ namespace Prototype
             else
             {
                 float v0 = Ball.SpeedToReach(pending.distance, pass.arrivePace, ballBody.rollDecel);
-                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, v0, who.passing, diff);
+                BallModel.Strike st = BallModel.Resolve(from, pending.target, 0f, v0,
+                                                        Form.Stat01(who.passing, who.transform, mates), diff);
                 ballBody.Launch(from, st.direction, st.speed);
                 lastPlan = pending;
             }

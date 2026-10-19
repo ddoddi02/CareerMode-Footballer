@@ -18,7 +18,7 @@ namespace Prototype
     /// is chosen for you by where the pitch actually is - see ChooseScanSide.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public class FootballerController : MonoBehaviour, IBallCarrier
+    public class FootballerController : MonoBehaviour, IBallCarrier, IForm
     {
         /// <summary>How the receiver is allowed to move while a pass is live.</summary>
         public enum Receive
@@ -75,6 +75,10 @@ namespace Prototype
         public float passing { get { return Career.StatScale.To01(shortPassing); } }
         /// <summary>Long passing, 0..1.</summary>
         public float LongPassing { get { return Career.StatScale.To01(longPassing); } }
+
+        [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
+        [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;
+        public int FormPercent { get { return form; } }
 
         [Header("Refs")]
         public Camera cam;

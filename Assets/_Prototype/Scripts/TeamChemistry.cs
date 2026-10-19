@@ -12,11 +12,12 @@ namespace Prototype
     /// The values are the career side's to fill - they are built up off the pitch. Until
     /// then every pair is `baseline`, and `pairs` holds any that differ. 50 is the match
     /// exactly as it played before this existed, except the call for the ball, which is
-    /// new and is refused sometimes at 50 too. Every number here is a placeholder
+    /// new and is refused one time in five at 50. The side's average also sets its team
+    /// form (Form.TeamBonus). The call table is the user's; the rest is a placeholder
     /// (PROJECT.md 3.17d).
     ///
     /// No TeamChemistry in the scene means no chemistry at all: every call is answered,
-    /// no pass is any better or worse, nobody leans either way.
+    /// no pass is any better or worse, nobody leans either way, no team form.
     /// </summary>
     public class TeamChemistry : MonoBehaviour
     {
@@ -33,10 +34,25 @@ namespace Prototype
         [Tooltip("Pairs that differ from the baseline. Order does not matter.")]
         public List<Pair> pairs = new List<Pair>();
 
+        [System.Serializable]
+        public struct Step
+        {
+            [Tooltip("Chemistry this step starts at.")]
+            public float from;
+            [Range(0f, 1f)] public float chance;
+        }
+
         [Header("What it does")]
-        [Tooltip("Chance a bot plays it to the human when he calls for it - at chemistry 0, and at 100. A straight line in between: 0.65 at 50.")]
-        [Range(0f, 1f)] public float acceptAt0 = 0.3f;
-        [Range(0f, 1f)] public float acceptAt100 = 1f;
+        [Tooltip("Chance a bot plays it to the human when he calls for it, by their chemistry - the highest step whose `from` it reaches. The user's table (2026-10-20): 100 always, 80+ 90 %, 31..79 80 %, 21..30 50 %, 11..20 30 %, 0..10 15 %.")]
+        public Step[] accept =
+        {
+            new Step { from = 100f, chance = 1f },
+            new Step { from = 80f, chance = 0.9f },
+            new Step { from = 31f, chance = 0.8f },
+            new Step { from = 21f, chance = 0.5f },
+            new Step { from = 11f, chance = 0.3f },
+            new Step { from = 0f, chance = 0.15f },
+        };
         [Tooltip("Multiplies the difficulty of a pass between the two - both the sideways miss and the weight. 1 at 50.")]
         public float errorAt0 = 1.3f;
         public float errorAt100 = 0.85f;
@@ -80,7 +96,14 @@ namespace Prototype
         public static float AcceptChance(Transform caller, Transform carrier)
         {
             if (Active == null) return 1f;
-            return Mathf.Lerp(Active.acceptAt0, Active.acceptAt100, Active.Between(caller, carrier) / 100f);
+            float c = Active.Between(caller, carrier);
+            float best = float.NegativeInfinity, chance = 1f;
+            for (int i = 0; i < Active.accept.Length; i++)
+            {
+                Step s = Active.accept[i];
+                if (c >= s.from && s.from > best) { best = s.from; chance = s.chance; }
+            }
+            return chance;
         }
 
         /// <summary>What a pass from one to the other does to the strike's difficulty. 1 at 50.</summary>
@@ -92,13 +115,11 @@ namespace Prototype
                            : Mathf.Lerp(1f, Active.errorAt100, (c - 50f) / 50f);
         }
 
-        /// <summary>
-        /// Which way a side leans with the ball: +1 run with it, 0 as it was, -1 pass.
-        /// From the average over every pair in it.
-        /// </summary>
-        public static float DribbleLean(IList<Transform> side)
+        /// <summary>A side's average over every pair in it. 50 with no chemistry.</summary>
+        public static float Mean(IList<Transform> side)
         {
-            if (Active == null || side == null) return 0f;
+            if (Active == null) return 50f;
+            if (side == null) return Active.baseline;
             float sum = 0f;
             int n = 0;
             for (int i = 0; i < side.Count; i++)
@@ -108,8 +129,14 @@ namespace Prototype
                     sum += Active.Between(side[i], side[j]);
                     n++;
                 }
-            float mean = n > 0 ? sum / n : Active.baseline;
-            return Mathf.Clamp((50f - mean) / 50f, -1f, 1f) * Active.leanStrength;
+            return n > 0 ? sum / n : Active.baseline;
+        }
+
+        /// <summary>Which way a side leans with the ball: +1 run with it, 0 as it was, -1 pass.</summary>
+        public static float DribbleLean(IList<Transform> side)
+        {
+            if (Active == null || side == null) return 0f;
+            return Mathf.Clamp((50f - Mean(side)) / 50f, -1f, 1f) * Active.leanStrength;
         }
     }
 }

@@ -696,7 +696,7 @@ namespace Prototype
             // Moving or actively shielding counts. Standing still does not.
             ti.attackerResisting = player.InputDir.sqrMagnitude > 0.09f || player.Shielding;
             ti.tackling01 = d.tackling01;
-            ti.strength01 = playerStrength;
+            ti.strength01 = Today(playerStrength);
             ti.reach = Tackle.Reach;
 
             string why;
@@ -734,6 +734,12 @@ namespace Prototype
         }
 
         // ------------------------------------------------------------ strikes ---
+
+        /// <summary>One of his 0..1 attributes as it plays today: his form and his side's (Form).</summary>
+        float Today(float stat01)
+        {
+            return Form.Stat01(stat01, player.transform, attack != null ? attack.mates : null);
+        }
 
         float PressureOf(float gap)
         {
@@ -857,7 +863,7 @@ namespace Prototype
             {
                 receiver = ShortPassReceiver();
                 target = ShortPassTarget();
-                stat = player.passing;
+                stat = Today(player.passing);
                 diff *= TeamChemistry.ErrorScale(player.transform, receiver);
             }
             else if (type == PassType.Through)
@@ -868,12 +874,12 @@ namespace Prototype
                 if (attack != null)
                     target = Offside.KeepOnside(target, attack.OffsideLine,
                                                 attack.attacksPositiveZ, rules.maxLead * 0.25f);
-                stat = player.LongPassing;
+                stat = Today(player.LongPassing);
             }
             else
             {
                 target = AimTarget(lobRange);
-                stat = player.LongPassing;
+                stat = Today(player.LongPassing);
             }
             target.y = 0f;
 
@@ -964,7 +970,7 @@ namespace Prototype
         {
             Vector3 pp = player.transform.position;
             var sh = BallModel.Resolve(pp, ShotTarget(), BallModel.Base.Shot, 0f,
-                                       playerShooting,
+                                       Today(playerShooting),
                                        BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
             lastAimErr = sh.aimErrorM; lastSpeedErr = sh.speedErrorPct;
             lastStrike = firstTime ? "첫 터치 슛" : "슛";
@@ -984,7 +990,7 @@ namespace Prototype
             float side = Mathf.Abs(pp.x) < 0.1f ? 1f : Mathf.Sign(pp.x);
             Vector3 farPost = new Vector3(-side * 5.5f, 0f, goalZ - 3.5f);
             var cr = BallModel.Resolve(pp, farPost, BallModel.Base.Cross, 0f,
-                                       playerCrossing,
+                                       Today(playerCrossing),
                                        BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
             lastAimErr = cr.aimErrorM; lastSpeedErr = cr.speedErrorPct; lastStrike = "크로스";
 
