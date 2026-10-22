@@ -93,6 +93,8 @@ namespace Prototype
         public bool Scanning { get; private set; }
         /// <summary>Q is held - he is looking over his shoulder.</summary>
         public bool CheckingShoulder { get { return scanHeld; } }
+        /// <summary>The right mouse button is held: a left click now is a shot, and the camera pulls back.</summary>
+        public bool AimingShot { get; private set; }
         public bool Shielding { get; private set; }
         public float LastPassPress { get; private set; }
         public float LastThroughPress { get; private set; }
@@ -298,7 +300,8 @@ namespace Prototype
             Sprinting = ProtoInput.SprintHeld();
             Shielding = ProtoInput.ShieldHeld();
             // Left click is a short pass, or a shot if the right button is already down.
-            PollStrike(0, ProtoInput.LeftHeld(), ProtoInput.RightHeld() ? Strike.Shoot : Strike.Pass);
+            AimingShot = ProtoInput.RightHeld();
+            PollStrike(0, ProtoInput.LeftHeld(), AimingShot ? Strike.Shoot : Strike.Pass);
             PollStrike(1, ProtoInput.PassKeyHeld(), Strike.Pass);
             PollStrike(2, ProtoInput.ThroughHeld(), Strike.Through);
             PollStrike(3, ProtoInput.LobHeld(), Strike.Lob);

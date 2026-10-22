@@ -12,6 +12,10 @@ namespace Prototype
     /// cursor does not swing the pitch about, and a shoulder check (Q) does not drag it
     /// round behind him - it keeps the way he was looking, shortened. However the lead
     /// lags, he is never let closer to the edge than edgeMargin.
+    ///
+    /// Holding the right button - the shot's first half - pulls the camera back
+    /// (zoomOutSize) and letting go brings it in again. The lead and the margin are
+    /// worked out on the size the screen has right now, so they scale with it.
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public class PitchCamera : MonoBehaviour
@@ -24,16 +28,20 @@ namespace Prototype
         public float distance = 90f;
         [Tooltip("Half the screen height, in metres of the camera's view. Smaller is closer.")]
         public float orthoSize = 13.6f;
+        [Tooltip("The same while the right button is held - pulled back, to see more while lining up a shot.")]
+        public float zoomOutSize = 18f;
+        [Tooltip("How quickly the camera pulls back and comes in again, per second.")]
+        public float zoomSmooth = 6f;
 
         [Header("Framing - lead the picture toward where he is looking")]
-        [Tooltip("How far ahead of him the picture is centred, along his gaze, as a fraction of half the screen height. 0.4: he stands 40% of the way from the centre to the edge behind him.")]
-        [Range(0f, 0.8f)] public float lookAheadShare = 0.4f;
+        [Tooltip("How far ahead of him the picture is centred, along his gaze, as a fraction of half the screen height. 0.65: he stands 65% of the way from the centre to the edge behind him.")]
+        [Range(0f, 0.85f)] public float lookAheadShare = 0.65f;
         [Tooltip("How quickly the lead turns with his gaze, per second. Low enough that sweeping the cursor round does not swing the pitch.")]
         public float lookSmooth = 3f;
         [Tooltip("While he checks over his shoulder (Q) the lead keeps the way he was looking before, at this fraction - the picture does not whip round to look behind him.")]
         [Range(0f, 1f)] public float checkKeep = 0.5f;
         [Tooltip("He is never closer to the edge of the screen than this, as a fraction of half the screen.")]
-        [Range(0f, 0.5f)] public float edgeMargin = 0.2f;
+        [Range(0f, 0.5f)] public float edgeMargin = 0.12f;
         [Tooltip("How quickly the picture follows him, per second.")]
         public float smooth = 9f;
 
@@ -41,6 +49,7 @@ namespace Prototype
         Vector3 focus;
         Vector2 lead;          // where the picture leads him, screen-space, 1 = lookAheadShare of half the height
         Vector2 lastGaze;      // which way he was looking before a shoulder check
+        float size;            // the orthographic size right now, on its way to orthoSize or zoomOutSize
         bool inited;
 
         void Awake()
@@ -57,8 +66,12 @@ namespace Prototype
             Vector3 at = target.position;
             at.y = 0f;
 
-            float halfH = orthoSize;
-            float halfW = orthoSize * cam.aspect;
+            float wantSize = controller != null && controller.AimingShot ? zoomOutSize : orthoSize;
+            if (!inited) size = wantSize;
+            size = Mathf.Lerp(size, wantSize, 1f - Mathf.Exp(-zoomSmooth * dt));
+
+            float halfH = size;
+            float halfW = size * cam.aspect;
             // A metre of pitch toward the top of the screen shows as sin(tilt) of a metre.
             float sinT = Mathf.Max(Mathf.Sin(tilt * Mathf.Deg2Rad), 0.1f);
 
@@ -90,7 +103,7 @@ namespace Prototype
             transform.position = focus - rot * Vector3.forward * distance;
 
             cam.orthographic = true;
-            cam.orthographicSize = orthoSize;
+            cam.orthographicSize = size;
         }
     }
 }

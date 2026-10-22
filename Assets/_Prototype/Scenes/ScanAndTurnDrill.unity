@@ -6261,7 +6261,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 7.6, y: 1, z: 11.3}
+  m_LocalScale: {x: 16, y: 1, z: 18}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1429520261}
@@ -7414,10 +7414,12 @@ MonoBehaviour:
   tilt: 58
   distance: 90
   orthoSize: 13.6
-  lookAheadShare: 0.4
+  zoomOutSize: 18
+  zoomSmooth: 6
+  lookAheadShare: 0.65
   lookSmooth: 3
   checkKeep: 0.5
-  edgeMargin: 0.2
+  edgeMargin: 0.12
   smooth: 9
 --- !u!81 &1084102713
 AudioListener:
