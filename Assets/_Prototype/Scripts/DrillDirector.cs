@@ -1341,10 +1341,7 @@ namespace Prototype
             GUILayout.Label(string.Format("{0}  오차 {1:+0.00;-0.00}m  ·  강약 {2:+0.0;-0.0}%",
                             lastStrike, lastAimErr, lastSpeedErr), sSmall);
             if (player != null)
-                GUILayout.Label(string.Format("스캔 #{0}  {1}  각도 {2:0}°{3}",
-                    player.ScanCount,
-                    player.ScanPitchSide > 0 ? "오른쪽" : (player.ScanPitchSide < 0 ? "왼쪽" : "-"),
-                    player.scanAngle, player.ScanClamped ? "  [라인 제한]" : ""), sSmall);
+                GUILayout.Label(string.Format("어깨 너머 확인(Q) #{0}", player.ScanCount), sSmall);
             GUILayout.EndArea();
 
             GUILayout.BeginArea(new Rect(w - 316, 14, 302, 450), GUI.skin.box);

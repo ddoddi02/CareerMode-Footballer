@@ -13,9 +13,9 @@ namespace Prototype
     /// because pointing somewhere and playing it somewhere else was never a real
     /// distinction - you pass where you are looking.
     ///
-    /// The SHOULDER CHECK on Q survives all of it, and outranks the cursor while held:
-    /// your head snaps round, and releasing brings it back. Which shoulder you turn over
-    /// is chosen for you by where the pitch actually is - see ChooseScanSide.
+    /// The SHOULDER CHECK on Q no longer turns the head by itself (user, 2026-10-22): while
+    /// it is held he looks where the mouse is, as always. It is counted (ScanCount) and
+    /// counts as looking away (Scanning), and that is all.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class FootballerController : MonoBehaviour, IBallCarrier, IForm
@@ -37,19 +37,6 @@ namespace Prototype
         [Header("Turning (deg/sec)")]
         public float bodyTurn = 640f;
         public float headTurn = 760f;
-
-        [Header("Shoulder check (Q)")]
-        [Tooltip("How far round your head goes while Q is held.")]
-        public float scanAngle = 140f;
-
-        [Header("Pitch (for scan side selection)")]
-        public float pitchHalfX = 34f;    // 68 m wide
-        public float pitchHalfZ = 52.5f;  // 105 m long
-        public float goalX = 0f;
-        [Tooltip("Inside this distance from a touchline you always look infield, and your gaze never crosses the line.")]
-        public float sidelineMargin = 5f;
-        [Tooltip("The opponent whose last known side biases later shoulder checks.")]
-        public Perceivable threat;
 
         [Header("Receiving")]
         [Tooltip("Lateral pull that keeps you glued to the ball's line, m/s per metre of error.")]
@@ -137,14 +124,8 @@ namespace Prototype
         public bool TrackBall { get; set; }
         public Receive Mode { get; private set; }
 
-        // -- scan telemetry, for the HUD -----------------------------------------
+        /// <summary>Shoulder checks (Q) this situation, for the HUD.</summary>
         public int ScanCount { get; private set; }
-        public int ScanPitchSide { get; private set; }   // +1 = looked toward +x, -1 = toward -x
-        public bool NearSideline { get; private set; }
-        public float AreaLeft { get; private set; }
-        public float AreaRight { get; private set; }
-        public string ScanReason { get; private set; }
-        public bool ScanClamped { get; private set; }
 
         /// <summary>Where on the grass the cursor is, and the direction to it.</summary>
         public Vector3 AimPoint { get; private set; }
@@ -173,11 +154,7 @@ namespace Prototype
         CharacterController cc;
         Vector3 vel;
 
-        // scan state
-        bool scanHeld;
-        int scanShoulder = 1;
-        int lastPitchSide;
-        float scanEpoch;
+        bool scanHeld;          // Q is down
 
         // receive state
         Vector3 rcvBallPos;
@@ -197,7 +174,6 @@ namespace Prototype
             CallDir = new Vector2(0f, 1f);
             TrackBall = true;
             Mode = Receive.Free;
-            ScanReason = "-";
         }
 
         public void Teleport(Vector3 pos, float bodyAngle)
@@ -221,14 +197,11 @@ namespace Prototype
             transform.rotation = Quaternion.Euler(0f, BodyAngle, 0f);
         }
 
-        /// <summary>New situation: forget which way you have already looked.</summary>
+        /// <summary>New situation: start counting shoulder checks again.</summary>
         public void ResetScan()
         {
             ScanCount = 0;
-            lastPitchSide = 0;
             scanHeld = false;
-            scanEpoch = Time.time;
-            ScanReason = "-";
         }
 
         /// <summary>
@@ -357,121 +330,6 @@ namespace Prototype
             return Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
         }
 
-        // ------------------------------------------------------ shoulder check --
-
-        static float PolyArea(Vector2[] v)
-        {
-            float a = 0f;
-            for (int i = 0; i < v.Length; i++)
-            {
-                Vector2 c = v[i], n = v[(i + 1) % v.Length];
-                a += c.x * n.y - n.x * c.y;
-            }
-            return Mathf.Abs(a) * 0.5f;
-        }
-
-        /// <summary>
-        /// Draw a line from where you stand to each goal. That polyline cuts the
-        /// pitch in two; the bigger piece is the side worth looking at first,
-        /// because that is where the play can actually come from.
-        /// </summary>
-        void ComputeAreas()
-        {
-            Vector3 p = transform.position;
-            Vector2 P = new Vector2(p.x, p.z);
-            Vector2 G1 = new Vector2(goalX, pitchHalfZ);
-            Vector2 G2 = new Vector2(goalX, -pitchHalfZ);
-
-            AreaRight = PolyArea(new Vector2[] {
-                P, G1, new Vector2(pitchHalfX, pitchHalfZ), new Vector2(pitchHalfX, -pitchHalfZ), G2 });
-            AreaLeft = PolyArea(new Vector2[] {
-                P, G1, new Vector2(-pitchHalfX, pitchHalfZ), new Vector2(-pitchHalfX, -pitchHalfZ), G2 });
-        }
-
-        /// <summary>Which pitch side the opponent was last actually seen on, 0 if unknown.</summary>
-        int KnownThreatSide()
-        {
-            if (threat == null) return 0;
-            if (threat.LastSeenTime <= scanEpoch) return 0;   // nothing seen this situation
-            float dx = threat.LastSeenPos.x - transform.position.x;
-            if (Mathf.Abs(dx) < 0.5f) return 0;               // dead astern: no clear side
-            return dx > 0f ? 1 : -1;
-        }
-
-        /// <summary>
-        /// Turning by +angle sweeps the head through the body's right vector, whose
-        /// world x-component is cos(bodyYaw). So pick the shoulder whose sweep
-        /// actually travels toward the pitch side we want.
-        /// </summary>
-        int ShoulderFor(int pitchSide)
-        {
-            float c = Mathf.Cos(BodyAngle * Mathf.Deg2Rad);
-            if (Mathf.Abs(c) < 0.15f) return scanShoulder;    // facing along x: degenerate
-            return (c * pitchSide > 0f) ? 1 : -1;
-        }
-
-        void ChooseScanSide()
-        {
-            ComputeAreas();
-            int wide = AreaRight > AreaLeft ? 1 : -1;
-            NearSideline = (pitchHalfX - Mathf.Abs(transform.position.x)) <= sidelineMargin;
-
-            int side;
-            if (NearSideline)
-            {
-                side = wide;                       // a winger never looks at the advertising boards
-                ScanReason = "터치라인 — 항상 넓은 쪽";
-            }
-            else if (ScanCount <= 1)
-            {
-                side = wide;
-                ScanReason = "첫 확인 — 넓은 쪽";
-            }
-            else if (ScanCount == 2)
-            {
-                side = -wide;
-                ScanReason = "두 번째 — 반대쪽";
-            }
-            else
-            {
-                int known = KnownThreatSide();
-                if (known != 0)
-                {
-                    side = known;
-                    ScanReason = "상대를 본 쪽";
-                }
-                else
-                {
-                    side = lastPitchSide != 0 ? -lastPitchSide : wide;
-                    ScanReason = "미확인 — 계속 번갈아";
-                }
-            }
-
-            lastPitchSide = side;
-            ScanPitchSide = side;
-            scanShoulder = ShoulderFor(side);
-        }
-
-        /// <summary>
-        /// Near a touchline your gaze is not allowed past it - there is nothing out
-        /// there to see. Clamp to whichever direction along the line is closer.
-        /// </summary>
-        float ClampScanToPitch(float yaw)
-        {
-            ScanClamped = false;
-            float px = transform.position.x;
-            if ((pitchHalfX - Mathf.Abs(px)) > sidelineMargin) return yaw;
-
-            float outward = Mathf.Sign(px);
-            float s = Mathf.Sin(yaw * Mathf.Deg2Rad);
-            if (s * outward <= 0f) return yaw;              // already inward or parallel
-
-            ScanClamped = true;
-            float toZero = Mathf.Abs(Mathf.DeltaAngle(yaw, 0f));
-            float to180 = Mathf.Abs(Mathf.DeltaAngle(yaw, 180f));
-            return toZero < to180 ? 0f : 180f;
-        }
-
         void UpdateFacing(float dt, Vector2 mv)
         {
             // --- torso: follows where you are actually going ----------------------
@@ -485,26 +343,22 @@ namespace Prototype
 
             BodyAngle = Mathf.MoveTowardsAngle(BodyAngle, bodyTarget, bodyTurn * dt);
 
-            // --- shoulder check: hold to look, release to snap back ---------------
+            // --- shoulder check (Q): counted, and that is all ---------------------
+            // It used to pick a direction itself - an angle over a shoulder chosen by
+            // pitch area, touchline and where an opponent was last seen. All of that went
+            // (user, 2026-10-22): while Q is held he looks where the mouse is, like any
+            // other moment. It still counts as a check, and as looking away (Scanning).
             bool q = ProtoInput.ScanHeld();
-            if (q && !scanHeld)
-            {
-                scanHeld = true;
-                ScanCount++;
-                ChooseScanSide();   // side rules still apply, see ChooseScanSide
-            }
-            else if (!q && scanHeld)
-            {
-                scanHeld = false;
-            }
+            if (q && !scanHeld) ScanCount++;
+            scanHeld = q;
 
             // --- head -------------------------------------------------------------
             float headTarget;
             Vector2 rs = ProtoInput.RightStick();
 
-            if (scanHeld)
+            if (scanHeld && HasAim)
             {
-                headTarget = ClampScanToPitch(BodyAngle + scanAngle * scanShoulder);
+                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
                 Scanning = true;
             }
             else if (rs.sqrMagnitude > 0.16f)
@@ -522,8 +376,7 @@ namespace Prototype
             }
             else
             {
-                Scanning = false;
-                ScanClamped = false;
+                Scanning = scanHeld;
                 headTarget = (TrackBall && lookTarget != null) ? AngleTo(lookTarget.position) : BodyAngle;
             }
 

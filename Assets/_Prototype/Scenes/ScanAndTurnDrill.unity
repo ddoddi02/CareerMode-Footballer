@@ -5617,12 +5617,6 @@ MonoBehaviour:
   scanSpeedMul: 0.9
   bodyTurn: 640
   headTurn: 760
-  scanAngle: 140
-  pitchHalfX: 34
-  pitchHalfZ: 52.5
-  goalX: 0
-  sidelineMargin: 5
-  threat: {fileID: 1862150837}
   lineStick: 3.5
   maxLineCorrection: 2.5
   onLineEnter: 2.4
