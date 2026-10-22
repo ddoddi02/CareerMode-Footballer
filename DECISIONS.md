@@ -448,5 +448,5 @@
 - **[사용자]** 뜬 슛에서 골키퍼가 굴러가는 공으로 도착 시각·높이를 계산하던 것을 고친다. 크로스바 위 공은 막을 필요 없다. 높은 구석의 닿는 높이는 키 기반 임시값으로 정한다. (매니저 세션 전달)
 - **[어시스턴트]** 뜬 공은 비행 그대로(`GoalkeeperAI.Air`, `Ball.Predict`와 같은 식)로 도착 시각과 높이를 낸다. `Judge`·`GoalChance`에 `Air`를 받는 판을 더했고, 땅볼 판은 그대로다.
 - **[어시스턴트]** 골라인에서 공 중심이 2.44m(`TacticalPitch.GoalHeight`) 이상이면 `overBar` — 그는 가지 않는다.
-- **[어시스턴트]** 닿는 곳은 타원: 바닥 `MaxReach`, 위로 키 × 1.5(`highReachPerHeight`, 190cm → 2.85m). `reachHeight` 2.5m 필드는 지웠다(이름 재사용 함정 때문에 새 이름).
+- **[어시스턴트 → 사용자 확인]** 닿는 곳은 타원: 바닥 `MaxReach`, 위로 키 × 1.5(`highReachPerHeight`, 190cm → 2.85m). `reachHeight` 2.5m 필드는 지웠다(이름 재사용 함정 때문에 새 이름).
 - **[어시스턴트]** `Ball.Climb`(수직 속도, 읽기 전용)을 더했다. 차기 전에 묻는 쪽은 `GoalkeeperAI.Lofted(ball, 정점)` 또는 `keeper.GoalChance(…, 정점, out …)`.
