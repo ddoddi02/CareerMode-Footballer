@@ -11373,7 +11373,6 @@ MonoBehaviour:
   lobRange: 50
   rollPassing: 1
   passingRoll: {x: 70, y: 85}
-  passPower: {x: 0.9, y: 1.4}
   shotPowerMin: 0.45
   shotApexFull: 2.9
   requestHold: 4

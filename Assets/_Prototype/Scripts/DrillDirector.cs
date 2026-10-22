@@ -79,9 +79,7 @@ namespace Prototype
         [Tooltip("Inclusive range of the roll, 1..100 (Career.StatScale).")]
         public Vector2Int passingRoll = new Vector2Int(70, 85);
 
-        [Header("Power - hold the button to strike harder (FootballerController.chargeSeconds)")]
-        [Tooltip("A pass's pace as a multiple of the ball the cursor asks for, at an empty gauge and a full one. Half a gauge is always exactly the cursor's ball (1) - two straight lines meet there: less falls short, more runs on and is harder to take. 0.9: the softest pass is 50% quicker than the first 0.6 (user, 2026-10-22).")]
-        public Vector2 passPower = new Vector2(0.9f, 1.4f);
+        [Header("Shot power - hold the shot to strike harder (FootballerController.chargeSeconds). Passes have no gauge.")]
         [Tooltip("A shot's pace at an empty gauge, as a fraction of his full shot. A full gauge is his full shot.")]
         [Range(0f, 1f)] public float shotPowerMin = 0.45f;
         [Tooltip("How high a full-gauge shot climbs, m. It rises with the square of the gauge, so most of the gauge keeps it low (under 0.5 m of apex it is struck along the floor). At 2.9 a full one from 13 to 29 m out goes over the bar.")]
@@ -407,11 +405,11 @@ namespace Prototype
         }
 
         /// <summary>
-        /// The strike he let go of last within passBuffer, if any, and the gauge it went at -
-        /// strikes go on release (FootballerController.PollStrike); the cross still goes on
-        /// the press. The latest wins, so a pass let go after a shot is the pass. The press
-        /// that called for the ball is not a pass - a short ball can arrive inside the
-        /// buffer, and he asked to have it.
+        /// The strike he played last within passBuffer, if any, and the gauge it went at -
+        /// the shot goes on release, the passes and the cross on the press
+        /// (FootballerController.PollStrike). The latest wins, so a pass after a shot is the
+        /// pass. The press that called for the ball is not a pass - a short ball can arrive
+        /// inside the buffer, and he asked to have it.
         /// </summary>
         Act Buffered(out float power)
         {
@@ -479,9 +477,9 @@ namespace Prototype
             {
                 case Act.Shoot: Shoot(firstTime, power); return true;
                 case Act.Cross: Cross(firstTime); return true;
-                case Act.Pass: PlayIt(PassType.ToFeet, firstTime, power); return true;
-                case Act.Through: PlayIt(PassType.Through, firstTime, power); return true;
-                case Act.Lob: PlayIt(PassType.Lob, firstTime, power); return true;
+                case Act.Pass: PlayIt(PassType.ToFeet, firstTime); return true;
+                case Act.Through: PlayIt(PassType.Through, firstTime); return true;
+                case Act.Lob: PlayIt(PassType.Lob, firstTime); return true;
             }
             return false;
         }
@@ -921,13 +919,9 @@ namespace Prototype
         /// How near the ball gets to where he wanted it is his problem: the spread grows
         /// with distance (3.9), so a ball asked to travel further is asked to be luckier.
         /// </summary>
-        void PlayIt(PassType type, bool firstTime, float power)
+        void PlayIt(PassType type, bool firstTime)
         {
             Vector3 pp = player.transform.position;
-            // Half a gauge is the ball the cursor asked for; less falls short, more runs on.
-            power = Mathf.Clamp01(power);
-            float weight = power < 0.5f ? Mathf.Lerp(passPower.x, 1f, power * 2f)
-                                        : Mathf.Lerp(1f, passPower.y, power * 2f - 1f);
             PassRules rules = attack != null ? attack.pass : new PassRules();
             float diff = BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false);
 
@@ -965,22 +959,18 @@ namespace Prototype
                 // The same as the bots' ball over the top (TeamAttack.PlayPass): Resolve gives
                 // the sprayed direction, and the weight error becomes a LENGTH error, because
                 // Loft solves the strike from the distance and the apex.
-                // The apex is the cursor's ball's, so a harder lob is a faster, longer one.
                 st = BallModel.Resolve(pp, target, 0f, 0f, stat, diff);
-                Vector3 landing = pp + st.direction * (dist * weight * (1f + st.speedErrorPct * 0.01f));
+                Vector3 landing = pp + st.direction * (dist * (1f + st.speedErrorPct * 0.01f));
                 ball.Loft(pp, landing, PassPlanner.LoftApex(dist, rules));
                 MarkFlight(landing);
             }
             else
             {
-                float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel) * weight;
+                // The pace is the distance's: struck so it still arrives at arrivePace.
+                float v0 = Ball.SpeedToReach(dist, rules.arrivePace, ball.rollDecel);
                 st = BallModel.Resolve(pp, target, 0f, v0, stat, diff);
                 ball.Release(st.direction, st.speed);
-
-                // A soft one stops short of where it was meant for: mark where it stops.
-                float stops = v0 * v0 / (2f * Mathf.Max(ball.rollDecel, 0.01f));
-                Vector3 flat = new Vector3(pp.x, 0f, pp.z);
-                MarkFlight(stops < dist ? flat + (target - flat).normalized * stops : target);
+                MarkFlight(target);
             }
 
             lastAimErr = st.aimErrorM;
@@ -997,8 +987,8 @@ namespace Prototype
             incomingForHuman = false;
 
             float spread = BallModel.AimSpread(stat, dist, diff);
-            Flash(string.Format("{0} {1:0.0}m · 세기 {2:0}% · 오차 ±{3:0.0}m (실제 {4:+0.0;-0.0}m)",
-                                lastStrike, dist, power * 100f, spread, st.aimErrorM));
+            Flash(string.Format("{0} {1:0.0}m · 오차 ±{2:0.0}m (실제 {3:+0.0;-0.0}m)",
+                                lastStrike, dist, spread, st.aimErrorM));
         }
 
         /// <summary>
@@ -1364,7 +1354,7 @@ namespace Prototype
             GUILayout.Label("마우스4 / F / Y   스루패스", sSmall);
             GUILayout.Label("마우스5           로빙", sSmall);
             GUILayout.Label("우클릭+좌클릭 / R 슛", sSmall);
-            GUILayout.Label("길게 누를수록 세게 — 떼면 찬다", sSmall);
+            GUILayout.Label("슛은 길게 누를수록 세게 — 떼면 찬다", sSmall);
             GUILayout.Label("C / X (□)         크로스", sSmall);
             GUILayout.Label("Q                 어깨 너머 확인", sSmall);
             GUILayout.Label("Shift / RB        스프린트", sSmall);
@@ -1414,9 +1404,9 @@ namespace Prototype
         }
 
         /// <summary>
-        /// The power gauge: one small bar under his feet while a strike button is held
+        /// The shot's power gauge: one small bar under his feet while the shot is held
         /// (2026-10-20 - the one new thing allowed on screen besides the cursor, where the
-        /// ball goes and who is where). The tick is half a gauge - the ball the cursor asks for.
+        /// ball goes and who is where). Passes have no gauge since 2026-10-22. The tick is half.
         /// </summary>
         void DrawGauge(int h)
         {

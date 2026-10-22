@@ -60,10 +60,10 @@ namespace Prototype
     ///   move    WASD        / left stick
     ///   look    mouse       / right stick      <- always live, no button. also what you can SEE
     ///   aim     mouse       / right stick      <- the same cursor: you pass where you are looking
-    ///   pass    left click, E          / A (south)    } held: the longer, the harder -
-    ///   shoot   right + left click, R  / B (east)     } struck on release
-    ///   through mouse 4, F             / Y (north)    }
-    ///   lob     mouse 5                               }
+    ///   pass    left click, E          / A (south)    played on the press, paced by its length
+    ///   shoot   right + left click, R  / B (east)     held: the longer, the harder - struck on release
+    ///   through mouse 4, F             / Y (north)    played on the press
+    ///   lob     mouse 5                               played on the press
     ///   cross   C           / X (west)
     ///   scan    Q                              <- the short look behind (unchanged)
     ///   sprint  LeftShift   / RB
@@ -121,8 +121,9 @@ namespace Prototype
 #endif
         }
 
-        // The strike buttons are read HELD, not pressed: a strike charges while the button
-        // is down and goes on release (FootballerController.PollStrike, 2026-10-20).
+        // The strike buttons are read HELD, not pressed: FootballerController.PollStrike
+        // finds the press and the release itself - a pass goes on the press, the shot
+        // charges while the button is down and goes on release.
 
         /// <summary>Left mouse button. A short pass - or, with the right button held, a shot.</summary>
         public static bool LeftHeld()

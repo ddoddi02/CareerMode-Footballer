@@ -102,18 +102,22 @@ namespace Prototype
         public float LastLobPress { get; private set; }
         public float LastShootPress { get; private set; }
 
-        /// <summary>A strike that charges while its button is held and goes on release.</summary>
+        /// <summary>
+        /// A strike button. The passes go the moment they are pressed, at the pace the
+        /// distance calls for; only the shot charges while held and goes on release
+        /// (2026-10-22 - the passes had a gauge for two days).
+        /// </summary>
         public enum Strike { None, Pass, Through, Lob, Shoot }
 
-        [Header("Power - hold to strike harder")]
-        [Tooltip("Seconds a strike button has to be held for a full gauge. The strike goes on release (2026-10-20).")]
+        [Header("Shot power - hold to strike harder")]
+        [Tooltip("Seconds the shot has to be held for a full gauge. The shot goes on release (2026-10-20). Passes have no gauge.")]
         public float chargeSeconds = 1f;
 
-        /// <summary>The strike whose button is down right now.</summary>
+        /// <summary>The shot whose button is down right now, if any.</summary>
         public Strike Charging { get; private set; }
-        /// <summary>0..1 - how full the gauge of the strike being held is.</summary>
+        /// <summary>0..1 - how full the shot's gauge is.</summary>
         public float Gauge { get { return Charging == Strike.None ? 0f : Mathf.Clamp01((Time.time - chargeStart) / Mathf.Max(chargeSeconds, 0.01f)); } }
-        /// <summary>When that strike's button was last let go, and how full the gauge was.</summary>
+        /// <summary>When that strike was last let go - for a pass, when it was pressed - and the shot's gauge then.</summary>
         public float ReleasedAt(Strike s) { return releasedAt[(int)s]; }
         public float ReleasePower(Strike s) { return releasePower[(int)s]; }
 
@@ -230,23 +234,32 @@ namespace Prototype
         }
 
         /// <summary>
-        /// One strike button. Down: that strike starts charging (and counts as pressed -
-        /// a call for the ball goes on the press). Up: it is let go with whatever the
-        /// gauge reached. One charge at a time - a new button takes over from the old.
+        /// One strike button. Down: it counts as pressed (a call for the ball goes on the
+        /// press), a pass is let go there and then, and the shot starts charging. Up: the
+        /// shot is let go with whatever the gauge reached. One charge at a time - a new
+        /// shot button takes over from the old.
         /// </summary>
         void PollStrike(int source, bool held, Strike kind)
         {
             if (held && !wasHeld[source])
             {
-                Charging = kind;
-                chargeSource = source;
-                chargeStart = Time.time;
                 switch (kind)
                 {
                     case Strike.Pass: LastPassPress = Time.time; break;
                     case Strike.Through: LastThroughPress = Time.time; break;
                     case Strike.Lob: LastLobPress = Time.time; break;
                     case Strike.Shoot: LastShootPress = Time.time; break;
+                }
+                if (kind == Strike.Shoot)
+                {
+                    Charging = kind;
+                    chargeSource = source;
+                    chargeStart = Time.time;
+                }
+                else
+                {
+                    releasedAt[(int)kind] = Time.time;
+                    releasePower[(int)kind] = 0f;
                 }
             }
             else if (!held && wasHeld[source] && source == chargeSource && Charging != Strike.None)
