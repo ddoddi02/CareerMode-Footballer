@@ -4,9 +4,14 @@ namespace Prototype
 {
     /// <summary>
     /// Fixed-yaw orthographic follow camera. The world never rotates, so the player
-    /// keeps their spatial bearings; only the vision cone turns. The focus point is
-    /// pushed toward where the player is LOOKING, so a shoulder check actually
-    /// reveals screen space instead of pointing the cone off the edge.
+    /// keeps their spatial bearings; only the vision cone turns.
+    ///
+    /// The picture is centred AHEAD of him, along where he is looking (2026-10-22, the
+    /// user's call): he stands toward the edge behind him and the cone he can see fills
+    /// the rest of the screen. The lead turns slowly with his gaze so sweeping the
+    /// cursor does not swing the pitch about, and a shoulder check (Q) does not drag it
+    /// round behind him - it keeps the way he was looking, shortened. However the lead
+    /// lags, he is never let closer to the edge than edgeMargin.
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public class PitchCamera : MonoBehaviour
@@ -17,14 +22,25 @@ namespace Prototype
         [Header("Rig")]
         public float tilt = 58f;
         public float distance = 90f;
-        public float orthoSize = 16f;
+        [Tooltip("Half the screen height, in metres of the camera's view. Smaller is closer.")]
+        public float orthoSize = 13.6f;
 
-        [Header("Framing")]
-        public float lookAhead = 3.4f;
+        [Header("Framing - lead the picture toward where he is looking")]
+        [Tooltip("How far ahead of him the picture is centred, along his gaze, as a fraction of half the screen height. 0.4: he stands 40% of the way from the centre to the edge behind him.")]
+        [Range(0f, 0.8f)] public float lookAheadShare = 0.4f;
+        [Tooltip("How quickly the lead turns with his gaze, per second. Low enough that sweeping the cursor round does not swing the pitch.")]
+        public float lookSmooth = 3f;
+        [Tooltip("While he checks over his shoulder (Q) the lead keeps the way he was looking before, at this fraction - the picture does not whip round to look behind him.")]
+        [Range(0f, 1f)] public float checkKeep = 0.5f;
+        [Tooltip("He is never closer to the edge of the screen than this, as a fraction of half the screen.")]
+        [Range(0f, 0.5f)] public float edgeMargin = 0.2f;
+        [Tooltip("How quickly the picture follows him, per second.")]
         public float smooth = 9f;
 
         Camera cam;
         Vector3 focus;
+        Vector2 lead;          // where the picture leads him, screen-space, 1 = lookAheadShare of half the height
+        Vector2 lastGaze;      // which way he was looking before a shoulder check
         bool inited;
 
         void Awake()
@@ -36,18 +52,38 @@ namespace Prototype
         void LateUpdate()
         {
             if (target == null) return;
+            float dt = Time.deltaTime;
 
-            Vector3 want = target.position;
-            want.y = 0f;
+            Vector3 at = target.position;
+            at.y = 0f;
 
+            float halfH = orthoSize;
+            float halfW = orthoSize * cam.aspect;
+            // A metre of pitch toward the top of the screen shows as sin(tilt) of a metre.
+            float sinT = Mathf.Max(Mathf.Sin(tilt * Mathf.Deg2Rad), 0.1f);
+
+            Vector2 wantLead = Vector2.zero;
             if (controller != null)
             {
-                Vector2 hf = controller.HeadForward;
-                want += new Vector3(hf.x, 0f, hf.y) * lookAhead;
+                Vector2 gaze = controller.HeadForward;
+                if (controller.CheckingShoulder) wantLead = lastGaze * checkKeep;
+                else { lastGaze = gaze; wantLead = gaze; }
             }
+            lead = Vector2.Lerp(lead, wantLead, 1f - Mathf.Exp(-lookSmooth * dt));
+
+            float ahead = lookAheadShare * halfH;
+            Vector3 want = at + new Vector3(lead.x * ahead, 0f, lead.y * ahead / sinT);
 
             if (!inited) { focus = want; inited = true; }
-            focus = Vector3.Lerp(focus, want, 1f - Mathf.Exp(-smooth * Time.deltaTime));
+            focus = Vector3.Lerp(focus, want, 1f - Mathf.Exp(-smooth * dt));
+
+            // Never let him near the edge, however far behind the lead is.
+            float limX = halfW * (1f - edgeMargin);
+            float limY = halfH * (1f - edgeMargin);
+            float sx = at.x - focus.x;
+            float sy = (at.z - focus.z) * sinT;
+            if (Mathf.Abs(sx) > limX) focus.x = at.x - Mathf.Sign(sx) * limX;
+            if (Mathf.Abs(sy) > limY) focus.z = at.z - Mathf.Sign(sy) * limY / sinT;
 
             Quaternion rot = Quaternion.Euler(tilt, 0f, 0f);
             transform.rotation = rot;

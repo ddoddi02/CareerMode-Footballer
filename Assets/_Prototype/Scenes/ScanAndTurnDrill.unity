@@ -7362,7 +7362,7 @@ Camera:
   far clip plane: 400
   field of view: 60
   orthographic: 1
-  orthographic size: 16
+  orthographic size: 13.6
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
@@ -7413,8 +7413,11 @@ MonoBehaviour:
   controller: {fileID: 690981260}
   tilt: 58
   distance: 90
-  orthoSize: 16
-  lookAhead: 3.4
+  orthoSize: 13.6
+  lookAheadShare: 0.4
+  lookSmooth: 3
+  checkKeep: 0.5
+  edgeMargin: 0.2
   smooth: 9
 --- !u!81 &1084102713
 AudioListener:
@@ -13700,7 +13703,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0.35000002}
-  m_LocalScale: {x: 60.30222, y: 33.92, z: 1}
+  m_LocalScale: {x: 51.256886, y: 28.831999, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1084102714}

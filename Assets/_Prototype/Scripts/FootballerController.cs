@@ -91,6 +91,8 @@ namespace Prototype
         public bool Holding { get; private set; }
         public bool Sprinting { get; private set; }
         public bool Scanning { get; private set; }
+        /// <summary>Q is held - he is looking over his shoulder.</summary>
+        public bool CheckingShoulder { get { return scanHeld; } }
         public bool Shielding { get; private set; }
         public float LastPassPress { get; private set; }
         public float LastThroughPress { get; private set; }
