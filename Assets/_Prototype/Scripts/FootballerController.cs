@@ -3,19 +3,16 @@ using UnityEngine;
 namespace Prototype
 {
     /// <summary>
-    /// Mouse and keyboard. WASD runs, the cursor looks, and the two are independent -
-    /// which is the point, because on a pad they are not.
+    /// Mouse and keyboard. WASD runs, the cursor aims.
     ///
-    /// The head follows the cursor, and the head is what the player can SEE (PROJECT.md
-    /// 3.3). So the vision mechanic stops being something the game does to you and
-    /// becomes something you are steering: look at the man you are thinking of passing
-    /// to and you cannot see the one closing you down. The same cursor is the pass aim,
-    /// because pointing somewhere and playing it somewhere else was never a real
-    /// distinction - you pass where you are looking.
+    /// The head is what the player can SEE (PROJECT.md 3.3), and it points where his
+    /// body does - the way he is running (user, 2026-10-22). To see anything else he
+    /// checks over his shoulder: while Q is held the head turns to the mouse. So seeing
+    /// round you is something you have to do, and pay for - a check is counted
+    /// (ScanCount) and slows the run (Scanning).
     ///
-    /// The SHOULDER CHECK on Q no longer turns the head by itself (user, 2026-10-22): while
-    /// it is held he looks where the mouse is, as always. It is counted (ScanCount) and
-    /// counts as looking away (Scanning), and that is all.
+    /// The cursor is the aim all the time, Q or not: passes, shots and the short pass's
+    /// search for a team-mate go where it points.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class FootballerController : MonoBehaviour, IBallCarrier, IForm
@@ -343,42 +340,22 @@ namespace Prototype
 
             BodyAngle = Mathf.MoveTowardsAngle(BodyAngle, bodyTarget, bodyTurn * dt);
 
-            // --- shoulder check (Q): counted, and that is all ---------------------
-            // It used to pick a direction itself - an angle over a shoulder chosen by
-            // pitch area, touchline and where an opponent was last seen. All of that went
-            // (user, 2026-10-22): while Q is held he looks where the mouse is, like any
-            // other moment. It still counts as a check, and as looking away (Scanning).
+            // --- head: the way his body points, unless he checks over his shoulder ----
+            // (user, 2026-10-22) He looks where he is going. Only while Q is held does he
+            // look away - toward the mouse - and that counts as a check and as looking away
+            // (Scanning, a slower run). The cursor stays the aim either way (UpdateAim).
             bool q = ProtoInput.ScanHeld();
             if (q && !scanHeld) ScanCount++;
             scanHeld = q;
 
-            // --- head -------------------------------------------------------------
-            float headTarget;
-            Vector2 rs = ProtoInput.RightStick();
-
-            if (scanHeld && HasAim)
+            float headTarget = BodyAngle;
+            if (scanHeld)
             {
-                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
-                Scanning = true;
+                Vector2 rs = ProtoInput.RightStick();
+                if (HasAim) headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
+                else if (rs.sqrMagnitude > 0.16f) headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
             }
-            else if (rs.sqrMagnitude > 0.16f)
-            {
-                headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
-                Scanning = true;
-            }
-            else if (HasAim)
-            {
-                // The cursor IS the head. Past 70 degrees off his run he counts as
-                // scanning - he is looking away from where he is going, and the cost of
-                // that is exactly what this prototype measures.
-                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
-                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
-            }
-            else
-            {
-                Scanning = scanHeld;
-                headTarget = (TrackBall && lookTarget != null) ? AngleTo(lookTarget.position) : BodyAngle;
-            }
+            Scanning = scanHeld;
 
             HeadAngle = Mathf.MoveTowardsAngle(HeadAngle, headTarget, headTurn * dt);
 
