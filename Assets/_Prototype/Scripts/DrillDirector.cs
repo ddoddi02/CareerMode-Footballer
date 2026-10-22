@@ -86,8 +86,6 @@ namespace Prototype
         [Range(0f, 1f)] public float shotPowerMin = 0.45f;
         [Tooltip("How high a full-gauge shot climbs, m. It rises with the square of the gauge, so most of the gauge keeps it low (under 0.5 m of apex it is struck along the floor). At 2.9 a full one from 13 to 29 m out goes over the bar.")]
         public float shotApexFull = 2.9f;
-        [Tooltip("Crossbar height. A ball crossing the goal line above it is out, not a goal.")]
-        public float crossbarHeight = 2.44f;
 
         [Header("Calling for it - his buttons while a team-mate has the ball")]
         [Tooltip("How long a call for the ball stands, and how long a shot, through ball or lob pressed without the ball is kept as his first touch. Ends sooner if he touches the ball or the other side wins it.")]
@@ -647,8 +645,9 @@ namespace Prototype
             Vector3 p = ball.transform.position;
             if (Mathf.Abs(p.z) <= pitchHalfZ && Mathf.Abs(p.x) <= pitchHalfX) return false;
 
-            // Between the posts AND under the bar - a lifted shot can clear it (Shoot).
-            bool inMouth = Mathf.Abs(p.x) < goalHalfWidth && p.y < crossbarHeight;
+            // Between the posts AND under the bar - a lifted shot can clear it (Shoot). The
+            // keeper reads the same bar (TacticalPitch.GoalHeight).
+            bool inMouth = Mathf.Abs(p.x) < goalHalfWidth && p.y < TacticalPitch.GoalHeight;
             bool homeGoal = p.z > pitchHalfZ && inMouth;      // home attacks +Z
             bool awayGoal = p.z < -pitchHalfZ && inMouth;     // away attacks -Z
 
@@ -1356,7 +1355,7 @@ namespace Prototype
                     player.scanAngle, player.ScanClamped ? "  [라인 제한]" : ""), sSmall);
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(new Rect(w - 316, 14, 302, 314), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(w - 316, 14, 302, 450), GUI.skin.box);
             GUILayout.Label("WASD / 좌스틱     이동", sSmall);
             GUILayout.Label("마우스 / 우스틱   시선 · 조준", sSmall);
             GUILayout.Label("좌클릭 / E / A    짧은 패스 · 레이오프", sSmall);

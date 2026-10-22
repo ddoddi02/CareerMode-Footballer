@@ -433,7 +433,6 @@ namespace Prototype
 
         public static float focusAngle = 26f;
         public static float peripheralAngle = 55f;
-        public static float maxDistance = 30f;
         public static float memorySeconds = 4.5f;
         public static float freeRadius = 2.0f;
         public static bool xrayDebug = false;
@@ -457,8 +456,9 @@ namespace Prototype
             float dist = d.magnitude;
 
             if (dist <= freeRadius) return SightState.Clear;
-            if (dist > maxDistance) return SightState.Unknown;
 
+            // No range: anything inside the angle is seen, however far (user, 2026-10-22 -
+            // the cone used to stop at 30 m).
             float ang = Vector2.Angle(fwd, d / dist);
             if (ang <= focusAngle) return SightState.Clear;
             if (ang <= peripheralAngle) return SightState.Peripheral;

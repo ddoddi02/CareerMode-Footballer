@@ -10,7 +10,6 @@ Shader "Prototype/VisionOverlay"
         _PeriphSoft ("Peripheral Soft (deg)", Range(1,40)) = 12
         _EdgeSoft ("Edge Soft (deg)", Range(1,40)) = 12
         _ViewSoft ("View Edge Soft (deg)", Range(0.5,20)) = 3
-        _RangeSoft ("View Range Soft (m)", Range(0.1,10)) = 1.5
     }
 
     SubShader
@@ -39,7 +38,6 @@ Shader "Prototype/VisionOverlay"
                 float _PeriphSoft;
                 float _EdgeSoft;
                 float _ViewSoft;
-                float _RangeSoft;
             CBUFFER_END
 
             float4 _ViewerPos;
@@ -78,19 +76,15 @@ Shader "Prototype/VisionOverlay"
                 float c = clamp(dot(dn, _ViewerFwd.xy), -1.0, 1.0);
                 float ang = degrees(acos(c));
 
-                float focus  = _ConeParams.x;
                 float periph = _ConeParams.y;
-                float maxD   = _ConeParams.w;
                 float freeR  = _ConeParams2.x;
 
                 // One zone, one brightness (user, 2026-10-18): everything inside the
-                // peripheral angle and the range is shown the same, everything outside is
-                // dark. The focus and edge bands - and the fade with distance - went: they
-                // drew distinctions the player was asked not to see any more. The judgement
-                // still has them (PerceptionSystem.Evaluate); this only draws.
-                float dimA = smoothstep(periph, periph + _ViewSoft, ang);
-                float dimR = smoothstep(maxD - _RangeSoft, maxD, dist);
-                float dim = max(dimA, dimR) * _BlindDim;
+                // peripheral angle is shown the same, everything outside is dark - and the
+                // angle is the only limit, however far it reaches (user, 2026-10-22: the
+                // cone used to stop at 30 m). The focus band is the judgement's alone
+                // (PerceptionSystem.Evaluate); this only draws.
+                float dim = smoothstep(periph, periph + _ViewSoft, ang) * _BlindDim;
 
                 // You always know what is at your own feet - out to freeRadius, the same
                 // radius the judgement uses, so nothing lit here is a body left undrawn.

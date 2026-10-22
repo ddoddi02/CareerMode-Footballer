@@ -25,8 +25,7 @@ namespace Prototype
         [Tooltip("The edge of sight - drawn on screen and judged the same (PerceptionSystem).")]
         public float peripheralAngle = 55f;
 
-        [Header("Range")]
-        public float maxDistance = 30f;
+        [Header("Range - none past the angle; this is only the circle at his feet")]
         public float freeRadius = 2.0f;
         public float memorySeconds = 4.5f;
 
@@ -48,7 +47,6 @@ namespace Prototype
 
             PerceptionSystem.focusAngle = focusAngle;
             PerceptionSystem.peripheralAngle = peripheralAngle;
-            PerceptionSystem.maxDistance = maxDistance;
             PerceptionSystem.freeRadius = freeRadius;
             PerceptionSystem.memorySeconds = memorySeconds;
 
@@ -58,7 +56,7 @@ namespace Prototype
             Shader.SetGlobalVector(ID_ViewerPos, new Vector4(eye.x, eye.y, eye.z, 0f));
             Shader.SetGlobalVector(ID_ViewerFwd, new Vector4(fwd.x, fwd.y, 0f, 0f));
             Shader.SetGlobalVector(ID_CamFwd, cam.transform.forward);
-            Shader.SetGlobalVector(ID_Cone, new Vector4(focusAngle, peripheralAngle, 0f, maxDistance));
+            Shader.SetGlobalVector(ID_Cone, new Vector4(focusAngle, peripheralAngle, 0f, 0f));
             Shader.SetGlobalVector(ID_Cone2,
                 new Vector4(freeRadius, 3f, PerceptionSystem.xrayDebug ? 1f : 0f, 0f));
 

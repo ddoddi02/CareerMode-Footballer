@@ -244,6 +244,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -1247,6 +1248,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -2019,6 +2021,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -2177,6 +2180,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -2578,6 +2582,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -2661,6 +2666,7 @@ MonoBehaviour:
   defendsPositiveZ: 0
   homeSlot: {x: 0, y: 0, z: -47.5}
   keeping: 65
+  form: 100
   ball: {fileID: 0}
   possession: {fileID: 0}
   director: {fileID: 0}
@@ -2684,7 +2690,7 @@ MonoBehaviour:
   diveSpeed: 6
   heightCm: 190
   diveLengthPerHeight: 1.75
-  reachHeight: 2.5
+  highReachPerHeight: 1.5
   alwaysLive: 0
   lieAngle: 80
   drawnLength: 1.8
@@ -3209,6 +3215,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -4082,6 +4089,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -4403,6 +4411,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -4821,6 +4830,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -5621,9 +5631,11 @@ MonoBehaviour:
   role: 5
   shortPassing: 78
   longPassing: 78
+  form: 100
   cam: {fileID: 1084102710}
   headMarker: {fileID: 93816430}
   lookTarget: {fileID: 659658387}
+  chargeSeconds: 1
 --- !u!143 &690981261
 CharacterController:
   m_ObjectHideFlags: 0
@@ -5826,6 +5838,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -6419,6 +6432,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -7169,6 +7183,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -7380,7 +7395,6 @@ MonoBehaviour:
   quad: {fileID: 2094189081}
   focusAngle: 26
   peripheralAngle: 55
-  maxDistance: 30
   freeRadius: 2
   memorySeconds: 4.5
 --- !u!114 &1084102712
@@ -7784,6 +7798,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -7867,6 +7882,7 @@ MonoBehaviour:
   defendsPositiveZ: 1
   homeSlot: {x: 0, y: 0, z: 47.5}
   keeping: 65
+  form: 100
   ball: {fileID: 0}
   possession: {fileID: 0}
   director: {fileID: 0}
@@ -7890,7 +7906,7 @@ MonoBehaviour:
   diveSpeed: 6
   heightCm: 190
   diveLengthPerHeight: 1.75
-  reachHeight: 2.5
+  highReachPerHeight: 1.5
   alwaysLive: 0
   lieAngle: 80
   drawnLength: 1.8
@@ -9419,6 +9435,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -10679,6 +10696,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -11144,6 +11162,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -11349,6 +11368,10 @@ MonoBehaviour:
   lobRange: 50
   rollPassing: 1
   passingRoll: {x: 70, y: 85}
+  passPower: {x: 0.6, y: 1.4}
+  shotPowerMin: 0.45
+  shotApexFull: 2.9
+  requestHold: 4
   tightGap: 1.5
   mediumGap: 3.2
   freshInfoSeconds: 1.6
@@ -11613,6 +11636,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -12863,6 +12887,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99
@@ -13575,6 +13600,7 @@ MonoBehaviour:
   unstickPeriod: 1.4
   shortPassing: 78
   longPassing: 78
+  form: 100
   passCooldown: 0.8
   nextRunAt: -1
   runUntil: -99

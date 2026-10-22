@@ -36,8 +36,9 @@ Unity 6 이름을 쓴다: `linearVelocity`, `linearDamping`, `angularDamping`, `
 
 #### 보이는 범위 = 봤다 (2026-10-18, 사용자)
 
-- 범위: 시선 55°(`peripheralAngle`)·30m 안, 또는 발밑 2m. 화면은 한 밝기(경계 3°·1.5m — `_ViewSoft`, `_RangeSoft`),
+- 범위: 시선 55°(`peripheralAngle`) 안이면 거리와 상관없이, 또는 발밑 2m. 화면은 한 밝기(각도 경계 3° — `_ViewSoft`),
   판정(`PerceptionSystem.Evaluate`)도 같은 범위. 55° 밖은 움직여도 안 보인다.
+- 거리 제한은 없다(2026-10-22, 사용자 — 전엔 30m에서 끊겼다). 확인: 47.7m 골키퍼를 정면으로 보면 Clear, 60° 비키면 Unknown.
 - 판정은 26° 안 Clear / 55° 안 Peripheral, 화면은 같게 그림. 안 보이는 선수의 라벨(`RoleLabels`)은 안 그림.
 - §1 확인/블라인드는 `Perceivable.LastSeenTime`(`InfoAge` < 1.6초)이라 화면을 그대로 따른다. AI는 안 읽는다.
 
@@ -416,7 +417,7 @@ A_left  = 2·hz·(hx + gx) + hz·(px - gx)
   세면 받기 어렵다. 로빙은 높이는 그대로, 거리가 0.6~1.4배.
 - 슛 세기 = 그 선수 최대 슛의 `shotPowerMin` 45%~100%. 높이 = `shotApexFull` 2.9m × 게이지² — 0.5m 아래는 땅볼
   (게이지 약 40%까지), 가득이면 13~29m에서 크로스바를 넘는다. 뜬 슛은 롱패스와 같은 비행(`Ball.Loft`).
-- 크로스바(`crossbarHeight` 2.44m) 위로 골라인을 넘으면 골이 아니라 아웃이다(`OffThePitch`).
+- 크로스바(`TacticalPitch.GoalHeight` 2.44m, 골키퍼와 같은 값) 위로 골라인을 넘으면 골이 아니라 아웃이다(`OffThePitch`).
 - 공이 닿을 때 누르고 있던 버튼은 그때 게이지로 첫 터치한다. 단 공을 요청한 패스 버튼은 받기만 한다.
 - 화면: 누르는 동안 발밑에 작은 막대(가운데 눈금 = 절반, 슛은 주황, `DrawGauge`). 마우스 그림에 우클릭 = 슛.
 - 확인(10-20): 게이지 탭 0.02 · 0.5초 0.50 · 1.4초 1.00. 땅볼 패스·스루 속도 0.6/1.0/1.4배, 20m 슛 탭은 12.5 m/s 땅볼로 못
@@ -866,8 +867,8 @@ WASD는 뛰는 곳, 커서는 보는 곳, 보는 곳이 곧 보이는 것.
 | 이동 / 스프린트 / 어깨 확인 각도 | 5.6 / 7.9 m/s / 140° | FootballerController |
 | 봇 가속 / 제동 / 횡가속 | 10 / 16 / 12 m/s² (회전 반경 5.2m @7.9) | MotionModel |
 | 지배 격자 칸 / 판정 기준 시간 | 2m (34×53) / 0.9초 | PitchControl |
-| 시야 중심/주변 · 최대 거리 · 잔상 | 26° / 55° (밖은 안 보임) · 30m · 4.5초 | ProtoCore |
-| 시야 표시 (화면) | 55° · 30m 안 한 밝기, 경계 3° / 1.5m | VisionOverlay.shader |
+| 시야 중심/주변 · 거리 · 잔상 | 26° / 55° (밖은 안 보임) · 제한 없음 · 4.5초 | ProtoCore |
+| 시야 표시 (화면) | 55° 안 한 밝기, 경계 3° | VisionOverlay.shader |
 | 구름 감속 / 터치 거리 근·원·곡선 | 5 m/s² / 0.40 · 1.45 · 2.5 | Ball |
 | **패스 도착 페이스** / 위험항 포화 | **9 m/s** (속도 knob) / 2.4초 (페이스에 종속) | PassRules |
 | 레인 반폭 / 땅볼 한계 / 롱패스 정점 / 리드 계수·상한 | 2m / 30m / 거리 × 0.16 (3~9m) / 0.55·4m | PassRules |
@@ -903,7 +904,7 @@ WASD는 뛰는 곳, 커서는 보는 곳, 보는 곳이 곧 보이는 것.
 
 ### 시야 암전 (`Materials/VisionOverlay.mat`)
 
-DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3° · RangeSoft 1.5m. 나머지 속성(PeripheralDim 등)은 안 쓴다(§3.3).
+DarkColor (0,0,0) · BlindDim 0.972 · ViewSoft 3°. 나머지 속성(PeripheralDim 등)은 안 쓴다(§3.3).
 
 ---
 
