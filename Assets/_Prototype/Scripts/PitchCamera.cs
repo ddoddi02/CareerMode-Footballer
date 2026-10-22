@@ -9,9 +9,10 @@ namespace Prototype
     /// The picture is centred AHEAD of him, along where he is looking (2026-10-22, the
     /// user's call): he stands toward the edge behind him and the cone he can see fills
     /// the rest of the screen. The lead turns slowly with his gaze so sweeping the
-    /// cursor does not swing the pitch about, and a shoulder check (Q) does not drag it
-    /// round behind him - it keeps the way he was looking, shortened. However the lead
-    /// lags, he is never let closer to the edge than edgeMargin.
+    /// cursor does not swing the pitch about. A shoulder check (Q) is a gaze like any
+    /// other: the picture follows it round behind him at the same pace (user, 2026-10-22
+    /// - it used to hold the way he had been looking, and the user expected it to move).
+    /// However the lead lags, he is never let closer to the edge than edgeMargin.
     ///
     /// Holding the right button - the shot's first half - pulls the camera back
     /// (zoomOutSize) and letting go brings it in again. The lead and the margin are
@@ -38,8 +39,6 @@ namespace Prototype
         [Range(0f, 0.85f)] public float lookAheadShare = 0.65f;
         [Tooltip("How quickly the lead turns with his gaze, per second. Low enough that sweeping the cursor round does not swing the pitch.")]
         public float lookSmooth = 3f;
-        [Tooltip("While he checks over his shoulder (Q) the lead keeps the way he was looking before, at this fraction - the picture does not whip round to look behind him.")]
-        [Range(0f, 1f)] public float checkKeep = 0.5f;
         [Tooltip("He is never closer to the edge of the screen than this, as a fraction of half the screen.")]
         [Range(0f, 0.5f)] public float edgeMargin = 0.12f;
         [Tooltip("How quickly the picture follows him, per second.")]
@@ -48,7 +47,6 @@ namespace Prototype
         Camera cam;
         Vector3 focus;
         Vector2 lead;          // where the picture leads him, screen-space, 1 = lookAheadShare of half the height
-        Vector2 lastGaze;      // which way he was looking before a shoulder check
         float size;            // the orthographic size right now, on its way to orthoSize or zoomOutSize
         bool inited;
 
@@ -75,13 +73,8 @@ namespace Prototype
             // A metre of pitch toward the top of the screen shows as sin(tilt) of a metre.
             float sinT = Mathf.Max(Mathf.Sin(tilt * Mathf.Deg2Rad), 0.1f);
 
-            Vector2 wantLead = Vector2.zero;
-            if (controller != null)
-            {
-                Vector2 gaze = controller.HeadForward;
-                if (controller.CheckingShoulder) wantLead = lastGaze * checkKeep;
-                else { lastGaze = gaze; wantLead = gaze; }
-            }
+            // Wherever his head points - the cursor, or behind him on a shoulder check.
+            Vector2 wantLead = controller != null ? controller.HeadForward : Vector2.zero;
             lead = Vector2.Lerp(lead, wantLead, 1f - Mathf.Exp(-lookSmooth * dt));
 
             float ahead = lookAheadShare * halfH;

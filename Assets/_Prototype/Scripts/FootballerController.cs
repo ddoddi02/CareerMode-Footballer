@@ -91,8 +91,6 @@ namespace Prototype
         public bool Holding { get; private set; }
         public bool Sprinting { get; private set; }
         public bool Scanning { get; private set; }
-        /// <summary>Q is held - he is looking over his shoulder.</summary>
-        public bool CheckingShoulder { get { return scanHeld; } }
         /// <summary>The right mouse button is held: a left click now is a shot, and the camera pulls back.</summary>
         public bool AimingShot { get; private set; }
         public bool Shielding { get; private set; }
