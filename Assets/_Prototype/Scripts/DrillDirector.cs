@@ -80,8 +80,8 @@ namespace Prototype
         public Vector2Int passingRoll = new Vector2Int(70, 85);
 
         [Header("Power - hold the button to strike harder (FootballerController.chargeSeconds)")]
-        [Tooltip("A pass's pace as a multiple of the ball the cursor asks for, at an empty gauge and a full one. Half a gauge is exactly the cursor's ball: less falls short, more runs on and is harder to take.")]
-        public Vector2 passPower = new Vector2(0.6f, 1.4f);
+        [Tooltip("A pass's pace as a multiple of the ball the cursor asks for, at an empty gauge and a full one. Half a gauge is always exactly the cursor's ball (1) - two straight lines meet there: less falls short, more runs on and is harder to take. 0.9: the softest pass is 50% quicker than the first 0.6 (user, 2026-10-22).")]
+        public Vector2 passPower = new Vector2(0.9f, 1.4f);
         [Tooltip("A shot's pace at an empty gauge, as a fraction of his full shot. A full gauge is his full shot.")]
         [Range(0f, 1f)] public float shotPowerMin = 0.45f;
         [Tooltip("How high a full-gauge shot climbs, m. It rises with the square of the gauge, so most of the gauge keeps it low (under 0.5 m of apex it is struck along the floor). At 2.9 a full one from 13 to 29 m out goes over the bar.")]
@@ -925,7 +925,9 @@ namespace Prototype
         {
             Vector3 pp = player.transform.position;
             // Half a gauge is the ball the cursor asked for; less falls short, more runs on.
-            float weight = Mathf.Lerp(passPower.x, passPower.y, Mathf.Clamp01(power));
+            power = Mathf.Clamp01(power);
+            float weight = power < 0.5f ? Mathf.Lerp(passPower.x, 1f, power * 2f)
+                                        : Mathf.Lerp(1f, passPower.y, power * 2f - 1f);
             PassRules rules = attack != null ? attack.pass : new PassRules();
             float diff = BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false);
 
