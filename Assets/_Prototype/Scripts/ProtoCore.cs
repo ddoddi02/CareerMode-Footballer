@@ -53,13 +53,14 @@ namespace Prototype
     /// to relearn anything. It was dropped because this game is not trying to be one:
     /// the thing being built is a player who can only see where he is looking, and on a
     /// pad the direction you look, the direction you run and the direction you pass all
-    /// come out of the same two sticks. They fight each other. Here WASD is where you
-    /// RUN - and so where you look - and the cursor is where you AIM. To look anywhere
-    /// else you check over your shoulder: hold Q and you look at the cursor (2026-10-22).
+    /// come out of the same two sticks. They fight each other. A mouse separates them -
+    /// WASD is where you RUN, the cursor is where you LOOK and AIM, and where you look is
+    /// what you can see, which is the whole game. There is no shoulder-check key: the
+    /// mouse is the check (2026-10-22).
     ///
-    ///   move    WASD        / left stick       <- also where you look, unless Q is held
-    ///   aim     mouse       / right stick      <- passes and shots go where it points
-    ///   look    Q + mouse   (Q + right stick)  <- the shoulder check: held, you look at the cursor
+    ///   move    WASD        / left stick
+    ///   look    mouse       / right stick      <- always live, no button. also what you can SEE
+    ///   aim     mouse       / right stick      <- the same cursor: you pass where you are looking
     ///   pass    left click, E          / A (south)    played on the press, paced by its length
     ///   shoot   right + left click, R  / B (east)     held: the longer, the harder - struck on release
     ///   through mouse 4, F             / Y (north)    played on the press
@@ -237,20 +238,6 @@ namespace Prototype
             return false;
 #elif ENABLE_LEGACY_INPUT_MANAGER
             return Input.GetKey(KeyCode.Space);
-#else
-            return false;
-#endif
-        }
-
-        /// <summary>Hold to turn your head. Never affects the torso or the ball.</summary>
-        public static bool ScanHeld()
-        {
-#if ENABLE_INPUT_SYSTEM
-            var kb = Keyboard.current;
-            if (kb != null && kb.qKey.isPressed) return true;
-            return false;
-#elif ENABLE_LEGACY_INPUT_MANAGER
-            return Input.GetKey(KeyCode.Q);
 #else
             return false;
 #endif

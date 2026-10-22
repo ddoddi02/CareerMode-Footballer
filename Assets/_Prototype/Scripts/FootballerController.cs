@@ -3,16 +3,14 @@ using UnityEngine;
 namespace Prototype
 {
     /// <summary>
-    /// Mouse and keyboard. WASD runs, the cursor aims.
+    /// Mouse and keyboard. WASD runs, the cursor looks, and the two are independent -
+    /// which is the point, because on a pad they are not.
     ///
-    /// The head is what the player can SEE (PROJECT.md 3.3), and it points where his
-    /// body does - the way he is running (user, 2026-10-22). To see anything else he
-    /// checks over his shoulder: while Q is held the head turns to the mouse. So seeing
-    /// round you is something you have to do, and pay for - a check is counted
-    /// (ScanCount) and slows the run (Scanning).
-    ///
-    /// The cursor is the aim all the time, Q or not: passes, shots and the short pass's
-    /// search for a team-mate go where it points.
+    /// The head follows the cursor, and the head is what the player can SEE (PROJECT.md
+    /// 3.3). So the vision mechanic is something you steer: look at the man you are
+    /// thinking of passing to and you cannot see the one closing you down. The same
+    /// cursor is the aim, because you pass where you are looking. There is no separate
+    /// shoulder check - the mouse is the check (user, 2026-10-22: Q is gone).
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class FootballerController : MonoBehaviour, IBallCarrier, IForm
@@ -29,6 +27,7 @@ namespace Prototype
         public float walkSpeed = 5.6f;
         public float sprintSpeed = 7.9f;
         public float accel = 40f;
+        [Tooltip("Running speed while looking more than 70 degrees off the way he is going.")]
         public float scanSpeedMul = 0.9f;
 
         [Header("Turning (deg/sec)")]
@@ -74,6 +73,7 @@ namespace Prototype
         public Vector2 CallDir { get; private set; }
         public bool Holding { get; private set; }
         public bool Sprinting { get; private set; }
+        /// <summary>Looking more than 70 degrees off the way he is going - it slows him (scanSpeedMul).</summary>
         public bool Scanning { get; private set; }
         /// <summary>The right mouse button is held: a left click now is a shot, and the camera pulls back.</summary>
         public bool AimingShot { get; private set; }
@@ -121,8 +121,6 @@ namespace Prototype
         public bool TrackBall { get; set; }
         public Receive Mode { get; private set; }
 
-        /// <summary>Shoulder checks (Q) this situation, for the HUD.</summary>
-        public int ScanCount { get; private set; }
 
         /// <summary>Where on the grass the cursor is, and the direction to it.</summary>
         public Vector3 AimPoint { get; private set; }
@@ -151,7 +149,6 @@ namespace Prototype
         CharacterController cc;
         Vector3 vel;
 
-        bool scanHeld;          // Q is down
 
         // receive state
         Vector3 rcvBallPos;
@@ -190,15 +187,7 @@ namespace Prototype
             for (int i = 0; i < releasedAt.Length; i++) releasedAt[i] = -99f;
             CallDir = new Vector2(0f, 1f);
             EndReceive();
-            ResetScan();
             transform.rotation = Quaternion.Euler(0f, BodyAngle, 0f);
-        }
-
-        /// <summary>New situation: start counting shoulder checks again.</summary>
-        public void ResetScan()
-        {
-            ScanCount = 0;
-            scanHeld = false;
         }
 
         /// <summary>
@@ -340,22 +329,28 @@ namespace Prototype
 
             BodyAngle = Mathf.MoveTowardsAngle(BodyAngle, bodyTarget, bodyTurn * dt);
 
-            // --- head: the way his body points, unless he checks over his shoulder ----
-            // (user, 2026-10-22) He looks where he is going. Only while Q is held does he
-            // look away - toward the mouse - and that counts as a check and as looking away
-            // (Scanning, a slower run). The cursor stays the aim either way (UpdateAim).
-            bool q = ProtoInput.ScanHeld();
-            if (q && !scanHeld) ScanCount++;
-            scanHeld = q;
+            // --- head: the cursor (user, 2026-10-22 - no shoulder-check key) -------
+            float headTarget;
+            Vector2 rs = ProtoInput.RightStick();
 
-            float headTarget = BodyAngle;
-            if (scanHeld)
+            if (rs.sqrMagnitude > 0.16f)
             {
-                Vector2 rs = ProtoInput.RightStick();
-                if (HasAim) headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
-                else if (rs.sqrMagnitude > 0.16f) headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
+                headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
+                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
             }
-            Scanning = scanHeld;
+            else if (HasAim)
+            {
+                // The cursor IS the head. Past 70 degrees off his run he counts as
+                // looking away - and the cost of that is exactly what this prototype
+                // measures.
+                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
+                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
+            }
+            else
+            {
+                Scanning = false;
+                headTarget = (TrackBall && lookTarget != null) ? AngleTo(lookTarget.position) : BodyAngle;
+            }
 
             HeadAngle = Mathf.MoveTowardsAngle(HeadAngle, headTarget, headTurn * dt);
 

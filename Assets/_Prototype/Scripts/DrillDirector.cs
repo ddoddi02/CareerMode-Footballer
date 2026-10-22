@@ -1340,8 +1340,6 @@ namespace Prototype
 
             GUILayout.Label(string.Format("{0}  오차 {1:+0.00;-0.00}m  ·  강약 {2:+0.0;-0.0}%",
                             lastStrike, lastAimErr, lastSpeedErr), sSmall);
-            if (player != null)
-                GUILayout.Label(string.Format("어깨 너머 확인(Q) #{0}", player.ScanCount), sSmall);
             GUILayout.EndArea();
 
             GUILayout.BeginArea(new Rect(w - 316, 14, 302, 450), GUI.skin.box);
@@ -1353,7 +1351,6 @@ namespace Prototype
             GUILayout.Label("우클릭+좌클릭 / R 슛", sSmall);
             GUILayout.Label("슛은 길게 누를수록 세게 — 떼면 찬다", sSmall);
             GUILayout.Label("C / X (□)         크로스", sSmall);
-            GUILayout.Label("Q                 어깨 너머 확인", sSmall);
             GUILayout.Label("Shift / RB        스프린트", sSmall);
             GUILayout.Label("Space / LT        몸으로 지키기", sSmall);
             GUILayout.Label("G                 수비 범위 · 패스 레인 표시", sSmall);
