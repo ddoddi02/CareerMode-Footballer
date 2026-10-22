@@ -27,8 +27,6 @@ namespace Prototype
         public float walkSpeed = 5.6f;
         public float sprintSpeed = 7.9f;
         public float accel = 40f;
-        [Tooltip("Running speed while looking more than 70 degrees off the way he is going.")]
-        public float scanSpeedMul = 0.9f;
 
         [Header("Turning (deg/sec)")]
         public float bodyTurn = 640f;
@@ -73,8 +71,6 @@ namespace Prototype
         public Vector2 CallDir { get; private set; }
         public bool Holding { get; private set; }
         public bool Sprinting { get; private set; }
-        /// <summary>Looking more than 70 degrees off the way he is going - it slows him (scanSpeedMul).</summary>
-        public bool Scanning { get; private set; }
         /// <summary>The right mouse button is held: a left click now is a shot, and the camera pulls back.</summary>
         public bool AimingShot { get; private set; }
         public bool Shielding { get; private set; }
@@ -333,24 +329,13 @@ namespace Prototype
             float headTarget;
             Vector2 rs = ProtoInput.RightStick();
 
+            // Where he looks costs him nothing on the run (user, 2026-10-22).
             if (rs.sqrMagnitude > 0.16f)
-            {
                 headTarget = Mathf.Atan2(rs.x, rs.y) * Mathf.Rad2Deg;
-                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
-            }
             else if (HasAim)
-            {
-                // The cursor IS the head. Past 70 degrees off his run he counts as
-                // looking away - and the cost of that is exactly what this prototype
-                // measures.
-                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;
-                Scanning = Mathf.Abs(Mathf.DeltaAngle(BodyAngle, headTarget)) > 70f;
-            }
+                headTarget = Mathf.Atan2(AimDir.x, AimDir.y) * Mathf.Rad2Deg;   // the cursor IS the head
             else
-            {
-                Scanning = false;
                 headTarget = (TrackBall && lookTarget != null) ? AngleTo(lookTarget.position) : BodyAngle;
-            }
 
             HeadAngle = Mathf.MoveTowardsAngle(HeadAngle, headTarget, headTurn * dt);
 
@@ -362,7 +347,6 @@ namespace Prototype
         void UpdateMovement(float dt, Vector2 mv)
         {
             float top = Sprinting ? sprintSpeed : walkSpeed;
-            if (Scanning) top *= scanSpeedMul;
             if (Shielding) top *= 0.65f;
 
             Vector3 want = new Vector3(mv.x, 0f, mv.y) * top;
