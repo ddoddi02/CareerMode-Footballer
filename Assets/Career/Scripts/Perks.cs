@@ -5,7 +5,7 @@ namespace Career
     /// <summary>How far a perk's effect reaches today (PROJECT.md 10.6).</summary>
     public enum PerkLink
     {
-        /// <summary>Changes something the shot drill already plays: shot power, flexibility, finishing.</summary>
+        /// <summary>Changes something already played: shot power, flexibility, finishing (shot drill), morning recovery (daily map).</summary>
         Live,
         /// <summary>Changes a BodyModifiers multiplier the match has not been wired to yet.</summary>
         MultiplierOnly,
@@ -32,6 +32,8 @@ namespace Career
         /// <summary>Shot power points on top of the 100 cap (ShotPower.TraitPoints's slot).</summary>
         public float shotPowerPoints;
         public float staminaMul = 1f, injuryMul = 1f;
+        /// <summary>Scales the energy won back each morning (DailyLife.MorningRecovery).</summary>
+        public float recoveryMul = 1f;
         /// <summary>For placeholders: what it will scale once its system exists.</summary>
         public float futureMul = 1f;
 
@@ -61,8 +63,8 @@ namespace Career
                        effect = "체력 ×1.10", staminaMul = 1.10f, excludes = new[] { "tires_easily" } },
             new Perk { id = "builds_muscle", name = "근육이 잘 붙는 체질", cost = 4, link = PerkLink.Placeholder,
                        effect = "근육 성장 ×1.5 (훈련이 생기면)", futureMul = 1.5f },
-            new Perk { id = "quick_recovery", name = "빠른 회복", cost = 3, link = PerkLink.Placeholder,
-                       effect = "피로 회복 ×1.5 (피로의 역할은 미정)", futureMul = 1.5f },
+            new Perk { id = "quick_recovery", name = "빠른 회복", cost = 3, link = PerkLink.Live,
+                       effect = "아침 체력 회복 ×1.5", recoveryMul = 1.5f },
 
             // ---- bad -----------------------------------------------------------------
             new Perk { id = "weak_kick", name = "약한 킥", cost = -5, link = PerkLink.Live,
@@ -113,6 +115,14 @@ namespace Career
             if (perks == null) return s;
             foreach (string id in perks) { Perk p = Get(id); if (p != null) s += p.shotPowerPoints; }
             return s;
+        }
+
+        public static float RecoveryMultiplier(IEnumerable<string> perks)
+        {
+            float m = 1f;
+            if (perks == null) return m;
+            foreach (string id in perks) { Perk p = Get(id); if (p != null) m *= p.recoveryMul; }
+            return m;
         }
 
         public static void Multipliers(IEnumerable<string> perks, out float stamina, out float injury)

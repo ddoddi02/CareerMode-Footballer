@@ -149,6 +149,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Career.DailyMapScreen
   day: 1
+  energyAfterMatch: 40
+  daysToMatch: 6
 --- !u!4 &1039041013
 Transform:
   m_ObjectHideFlags: 0

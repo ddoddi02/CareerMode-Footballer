@@ -10,15 +10,16 @@ namespace Career
     /// Time and action points (user, 2026-10-25). Everything done costs points, one for every
     /// 30 minutes it takes. Each part of the day has its own points; once they are spent the
     /// clock moves to the start of the next part and they fill again. The night ends at 06:00
-    /// and a new day begins. How many points a part has depends on stamina (PROJECT.md 10.11).
+    /// and a new day begins. How many points a part has is the energy left when it starts
+    /// (<see cref="PointsFor"/>, PROJECT.md 10.11).
     /// </summary>
     [Serializable]
     public class DayClock
     {
         public const int MinutesPerPoint = 30;
         public const int PartMinutes = 6 * 60;
-        /// <summary>Points a part gets at stamina 1 and at 100. 12 is the whole six hours, so the clock never runs past the part.</summary>
-        public const int MinPoints = 6, MaxPoints = PartMinutes / MinutesPerPoint;
+        /// <summary>Points a part gets at full energy - the whole six hours, so the clock never runs past the part.</summary>
+        public const int MaxPoints = PartMinutes / MinutesPerPoint;
 
         public int day = 1;
         public DayPart part = DayPart.Morning;
@@ -29,15 +30,14 @@ namespace Career
         /// <summary>Points this part started with.</summary>
         public int partPoints;
 
-        /// <summary>Points a part gives at this stamina - the stamina as it plays, body points added.</summary>
-        public static int PointsFor(int stamina)
+        /// <summary>
+        /// Points a part gives with this much energy left, 0..100% (user): 12 x energy, rounded up -
+        /// 80% gives 9.6, so 10.
+        /// </summary>
+        public static int PointsFor(float energyPercent)
         {
-            return Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(MinPoints, MaxPoints, StatScale.To01(stamina))), MinPoints, MaxPoints);
-        }
-
-        public static int PointsFor(PlayerProfile p)
-        {
-            return PointsFor(BodyModel.WithBody(p.stamina, BodyModel.Points(p).stamina));
+            // the small take-off keeps 50% at exactly 6, not 7 from a float a hair over
+            return Mathf.Clamp(Mathf.CeilToInt(MaxPoints * energyPercent / 100f - 1e-4f), 0, MaxPoints);
         }
 
         public static int StartHour(DayPart part)
