@@ -106,5 +106,13 @@ namespace Career
             Begin(perPart);
             return newDay;
         }
+
+        /// <summary>Straight to 06:00 the next morning, from whatever part - going to bed after the evening skips the night.</summary>
+        public void NextDay()
+        {
+            day++;
+            part = DayPart.Morning;
+            Begin(0);
+        }
     }
 }

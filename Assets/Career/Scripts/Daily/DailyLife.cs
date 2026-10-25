@@ -28,6 +28,7 @@ namespace Career
         public float energyAfter;   // energy when they are done
         public int[] costs;         // per item; done items 0
         public bool[] fits;         // per item; false = cut for want of points
+        public bool skipped;        // the night, when he goes to bed after the evening
     }
 
     /// <summary>
@@ -39,7 +40,11 @@ namespace Career
     /// Actions go on a list first, not straight through: the list for the part may use as
     /// many points as it has or fewer, shows the energy it will leave, and is spent in order
     /// on confirm. A day's lists can be saved as a routine and laid over a later day, cut from
-    /// the back where the points do not reach. Numbers are PROVISIONAL (PROJECT.md 10.11).
+    /// the back where the points do not reach.
+    ///
+    /// When the evening's points run out, he either goes to bed - the night is skipped, and
+    /// the morning gives back a little more - or goes on into the night (user). The routine
+    /// keeps that choice too. Numbers are PROVISIONAL (PROJECT.md 10.11).
     /// </summary>
     public class DailyLife
     {
@@ -49,6 +54,8 @@ namespace Career
         public const float RecoveryAtLowStamina = 0.7f, RecoveryAtHighStamina = 1.3f;
         /// <summary>What the growth path (육성 방향) will do to recovery. There is no growth path yet.</summary>
         public const float GrowthPathRecovery = 1f;
+        /// <summary>Extra recovery the next morning for going to bed early - straight after the evening, or sleeping early at home.</summary>
+        public const float SleepNowBonus = 10f;
 
         public readonly PlayerProfile player;
         public readonly Squad squad;
@@ -56,10 +63,18 @@ namespace Career
         public readonly PartPlan[] today = NewDay();
         /// <summary>The saved routine, a list per part; null until one is saved.</summary>
         public PartPlan[] routine;
+        /// <summary>What the routine does when the evening ends: true = bed, false = on into the night, null = ask.</summary>
+        public bool? routineSleepsAfterEvening;
         /// <summary>The day the next match is played. Daily life ends the night before.</summary>
         public readonly int matchDay;
 
-        float morningBonus;     // from sleeping early, at the next 06:00
+        /// <summary>The evening is over and he has not said yet whether he goes to bed (<see cref="ChooseNight"/>).</summary>
+        public bool AwaitingNightChoice { get; private set; }
+        /// <summary>Today's choice once made, or the one a routine fill planned.</summary>
+        public bool? SleepsAfterEvening { get; private set; }
+
+        float morningBonus;     // from going to bed early, at the next 06:00
+        bool sleptThisPart;     // this part's list ended in sleeping early
 
         /// <summary>
         /// Starts the morning after a match: energy as the match left it, then the first
@@ -109,7 +124,7 @@ namespace Career
 
         public bool CanAdd(PlaceAction a)
         {
-            if (IsMatchDay) return false;
+            if (IsMatchDay || AwaitingNightChoice) return false;
             int free = FreePoints;
             int cost = a.Cost(free);
             return cost > 0 && cost <= free;
@@ -168,6 +183,11 @@ namespace Career
             int points = clock.points;
             for (int p = (int)clock.part; p < 4; p++)
             {
+                if (p == (int)DayPart.Night && clock.part != DayPart.Night && SleepsAfterEvening == true)
+                {
+                    r[p] = new PartForecast { skipped = true, costs = new int[0], fits = new bool[0], energyAfter = e };
+                    break;
+                }
                 r[p] = Forecast(p, points, e);
                 e = r[p].energyAfter;
                 points = DayClock.PointsFor(e);
@@ -181,6 +201,7 @@ namespace Career
         /// </summary>
         public string Confirm()
         {
+            if (AwaitingNightChoice) return "먼저 잘지, 새벽으로 넘어갈지 고른다.";
             var done = new List<string>();
             foreach (PlanItem it in Current.items)
             {
@@ -191,6 +212,7 @@ namespace Career
                 if (!clock.Spend(cost)) break;
                 Energy += a.energy;
                 morningBonus += a.morningBonus;
+                if (a.TakesRestOfPart) sleptThisPart = true;
                 it.done = true;
                 done.Add(it.action);
             }
@@ -204,6 +226,7 @@ namespace Career
         /// <summary>Leaves whatever points are left and starts the next part.</summary>
         public string SkipPart()
         {
+            if (AwaitingNightChoice || IsMatchDay) return "";
             int left = clock.points;
             today[(int)clock.part].items.RemoveAll(it => !it.done);
             return "남은 " + left + "P를 버렸다.  " + Advance();
@@ -211,24 +234,68 @@ namespace Career
 
         string Advance()
         {
-            if (clock.part != DayPart.Night)
+            if (clock.part == DayPart.Evening) return EveningEnds();
+            if (clock.part == DayPart.Night) return NewDayStarts("");
+            return StartNextPart();
+        }
+
+        string StartNextPart()
+        {
+            clock.NextPart(DayClock.PointsFor(Energy));
+            sleptThisPart = false;
+            Trim();
+            return DayClock.PartName(clock.part) + " " + clock.Time + " 시작: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
+        }
+
+        /// <summary>The evening is spent: to bed, or on into the night - asked, unless already settled.</summary>
+        string EveningEnds()
+        {
+            if (sleptThisPart)          // he slept early at home: that is bed already, its bonus counted
             {
-                clock.NextPart(DayClock.PointsFor(Energy));
-                Trim();
-                return DayClock.PartName(clock.part) + " " + clock.Time + " 시작: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
+                SleepsAfterEvening = true;
+                return NewDayStarts("일찍 잤다.  ");
             }
-            // the night is over: a new day, energy comes back, the squad's day ends
+            if (SleepsAfterEvening.HasValue)    // the routine says
+                return (SleepsAfterEvening.Value ? "루틴대로 바로 잤다.  " : "루틴대로 새벽으로 넘어갔다.  ") + Night(SleepsAfterEvening.Value);
+            AwaitingNightChoice = true;
+            return "저녁이 끝났다. 바로 잘까, 새벽으로 넘어갈까?";
+        }
+
+        /// <summary>
+        /// The answer at the end of the evening (user): straight to bed - the night is skipped and
+        /// tomorrow's recovery gets <see cref="SleepNowBonus"/> - or on into the night with no bonus.
+        /// </summary>
+        public string ChooseNight(bool sleepNow)
+        {
+            if (!AwaitingNightChoice) return "";
+            AwaitingNightChoice = false;
+            SleepsAfterEvening = sleepNow;
+            return (sleepNow ? "바로 잤다.  " : "새벽으로 넘어갔다.  ") + Night(sleepNow);
+        }
+
+        string Night(bool sleepNow)
+        {
+            if (!sleepNow) return StartNextPart();
+            morningBonus += SleepNowBonus;
+            return NewDayStarts("");
+        }
+
+        /// <summary>The night is over, or skipped: a new day, energy comes back, the squad's day ends.</summary>
+        string NewDayStarts(string lead)
+        {
             squad.EndDay();
-            clock.NextPart(0);
+            clock.NextDay();
             Recover();
             for (int i = 0; i < 4; i++) today[i] = new PartPlan();
+            SleepsAfterEvening = null;
+            sleptThisPart = false;
             if (IsMatchDay)
             {
                 clock.Begin(0);
-                return clock.day + "일째 — 경기 날이다. (경기 연결은 아직 없다.)";
+                return lead + clock.day + "일째 — 경기 날이다. (경기 연결은 아직 없다.)";
             }
             clock.Begin(DayClock.PointsFor(Energy));
-            return clock.day + "일째 아침: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
+            return lead + clock.day + "일째 아침: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
         }
 
         void Recover()
@@ -253,13 +320,14 @@ namespace Career
 
         // ------------------------------------------------------------ routine --
 
-        /// <summary>Saves today's lists, done and still to do, as the routine.</summary>
+        /// <summary>Saves today's lists, done and still to do, as the routine - and the end-of-evening choice, if made.</summary>
         public void SaveRoutine()
         {
             routine = NewDay();
             for (int p = 0; p < 4; p++)
                 foreach (PlanItem it in today[p].items)
                     routine[p].items.Add(new PlanItem { place = it.place, action = it.action });
+            routineSleepsAfterEvening = SleepsAfterEvening;
         }
 
         /// <summary>
@@ -269,7 +337,8 @@ namespace Career
         /// </summary>
         public bool FillFromRoutine()
         {
-            if (routine == null || IsMatchDay) return false;
+            if (routine == null || IsMatchDay || AwaitingNightChoice) return false;
+            if (clock.part != DayPart.Night) SleepsAfterEvening = routineSleepsAfterEvening;
             for (int p = (int)clock.part; p < 4; p++)
             {
                 List<PlanItem> items = today[p].items;

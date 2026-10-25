@@ -60,32 +60,52 @@ namespace Career
         public const string TrainTogether = "같이 훈련", MealTogether = "같이 식사·여가";
         public const string SleepEarly = "일찍 자기";
 
+        /// <summary>
+        /// Energy back for every 30 minutes of leisure (user: everything but training is recovery),
+        /// and of resting at home or being treated. PROVISIONAL.
+        /// </summary>
+        public const float LeisurePerHalfHour = 2f, RestPerHalfHour = 3f;
+
+        static PlaceAction Leisure(string name, int minutes, bool chemistry = false)
+        {
+            return new PlaceAction(name, minutes, LeisurePerHalfHour * minutes / DayClock.MinutesPerPoint, chemistry);
+        }
+
+        static PlaceAction Rest(string name, int minutes)
+        {
+            return new PlaceAction(name, minutes, RestPerHalfHour * minutes / DayClock.MinutesPerPoint);
+        }
+
         public static readonly Place[] All =
         {
             new Place { id = "training_ground", name = "훈련장", icon = "훈", mapPos = new Vector2(0.12f, 0.78f),
                 color = new Color(0.30f, 0.62f, 0.36f), blurb = "팀 훈련과 개인 훈련을 하는 곳.",
                 actions = new[] { new PlaceAction("개인 훈련", 120, -15f), new PlaceAction(TrainTogether, 120, -15f, true), new PlaceAction("회복 훈련", 60, -3f) } },
-            new Place { id = "club", name = "클럽", icon = "클", mapPos = new Vector2(0.24f, 0.58f),
+            new Place { id = "clubhouse", name = "구단 클럽하우스", icon = "구", mapPos = new Vector2(0.24f, 0.58f),
                 color = new Color(0.25f, 0.45f, 0.75f), blurb = "구단 사무실과 라커룸, 의무실.",
-                actions = new[] { new PlaceAction("감독 면담", 60, -2f), new PlaceAction("전술 미팅", 60, -2f), new PlaceAction("치료", 60, -2f) } },
+                actions = new[] { new PlaceAction("감독 면담", 60, -2f), new PlaceAction("전술 미팅", 60, -2f), Rest("치료", 60) } },
             new Place { id = "home", name = "자택", icon = "집", mapPos = new Vector2(0.84f, 0.22f),
                 color = new Color(0.80f, 0.62f, 0.35f), blurb = "쉬고 자는 곳.",
-                actions = new[] { new PlaceAction("휴식", 60, 5f), new PlaceAction(SleepEarly, PlaceAction.RestOfPart, 0f, false, 10f), new PlaceAction("집밥", 60, 3f) } },
+                actions = new[] { Rest("휴식", 60), new PlaceAction(SleepEarly, PlaceAction.RestOfPart, 0f, false, DailyLife.SleepNowBonus), Leisure("집밥", 60) } },
             new Place { id = "cafe", name = "카페", icon = "카", mapPos = new Vector2(0.42f, 0.76f),
                 color = new Color(0.62f, 0.42f, 0.30f), blurb = "커피 한 잔, 가벼운 만남.",
-                actions = new[] { new PlaceAction("혼자 커피", 30, -3f), new PlaceAction(MealTogether, 90, -5f, true) } },
+                actions = new[] { Leisure("혼자 커피", 30), Leisure(MealTogether, 90, true) } },
             new Place { id = "restaurant", name = "식당", icon = "식", mapPos = new Vector2(0.56f, 0.60f),
                 color = new Color(0.85f, 0.40f, 0.30f), blurb = "든든한 한 끼.",
-                actions = new[] { new PlaceAction("혼자 식사", 60, -3f), new PlaceAction(MealTogether, 90, -5f, true) } },
+                actions = new[] { Leisure("혼자 식사", 60), Leisure(MealTogether, 90, true) } },
             new Place { id = "plaza", name = "광장", icon = "광", mapPos = new Vector2(0.49f, 0.24f),
                 color = new Color(0.55f, 0.55f, 0.60f), blurb = "사람이 모이는 도심 한가운데.",
-                actions = new[] { new PlaceAction("산책", 60, -3f), new PlaceAction("팬 만나기", 60, -5f) } },
+                actions = new[] { Leisure("산책", 60), Leisure("팬 만나기", 60) } },
             new Place { id = "department_store", name = "백화점", icon = "백", mapPos = new Vector2(0.77f, 0.62f),
                 color = new Color(0.70f, 0.40f, 0.70f), blurb = "옷과 물건을 사는 곳.",
-                actions = new[] { new PlaceAction("쇼핑", 120, -5f) } },
+                actions = new[] { Leisure("쇼핑", 120) } },
             new Place { id = "car_showroom", name = "자동차 전시장", icon = "차", mapPos = new Vector2(0.90f, 0.84f),
                 color = new Color(0.35f, 0.65f, 0.75f), blurb = "새 차를 구경하는 곳.",
-                actions = new[] { new PlaceAction("차 구경", 60, -3f) } },
+                actions = new[] { Leisure("차 구경", 60) } },
+            // the club for a night out, not the team's (user). No drinks: he starts at 15.
+            new Place { id = "nightclub", name = "나이트클럽", icon = "나", mapPos = new Vector2(0.77f, 0.87f),
+                color = new Color(0.55f, 0.30f, 0.80f), blurb = "음악과 춤이 있는 밤의 클럽.",
+                actions = new[] { Leisure("파티", 120), Leisure("춤", 60) } },
         };
 
         public static Place Get(string id)
