@@ -10,7 +10,8 @@ namespace Career
     /// The daily scene (user, 2026-10-25): a map of the town with the places to go - training
     /// ground, club, home, cafe, restaurant, plaza, department store, car showroom
     /// (<see cref="PlaceCatalog"/>). A place opens a small panel with what can be done there.
-    /// The actions are names only: no effects, no time passing, no money (PROJECT.md 10.10).
+    /// Every action takes time and costs action points (<see cref="DayClock"/>, PROJECT.md 10.11);
+    /// what it does is not built, nor money (PROJECT.md 10.10).
     ///
     /// uGUI built in code when the scene starts, like the creation screen; the scene holds the
     /// camera, the event system and this component. Placeholder art: coloured blocks for the
@@ -18,14 +19,20 @@ namespace Career
     /// </summary>
     public class DailyMapScreen : MonoBehaviour
     {
-        [Tooltip("Day shown on the top bar - a placeholder until there is a calendar.")]
+        [Tooltip("Day the clock starts on - a placeholder until there is a calendar and a save.")]
         public int day = 1;
+
+        readonly DayClock clock = new DayClock();
+        PlayerProfile player;
+        bool savedPlayer;
+        Squad squad;
 
         Font font;
         RectTransform panel;
-        Text panelName, panelBlurb, statusText;
+        Text panelName, panelBlurb, statusText, dateText, clockText, pointsText;
         RectTransform actionList;
         readonly Dictionary<string, Image> frames = new Dictionary<string, Image>();
+        readonly List<KeyValuePair<Button, PlaceAction>> actionButtons = new List<KeyValuePair<Button, PlaceAction>>();
         Place selected;
 
         static readonly Color Bar = new Color(0.09f, 0.11f, 0.14f, 0.96f);
@@ -35,14 +42,21 @@ namespace Career
         static readonly string[] Weekdays = { "월", "화", "수", "목", "금", "토", "일" };
 
         public Place Selected { get { return selected; } }
+        public DayClock Clock { get { return clock; } }
 
         void Start()
         {
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (FindAnyObjectByType<EventSystem>() == null)
                 new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            savedPlayer = CharacterStore.TryLoad(out player);
+            if (!savedPlayer) player = new PlayerProfile();
+            squad = Squad.Provisional(player.displayName);
+            clock.day = Mathf.Max(1, day);
+            clock.Begin(DayClock.PointsFor(player));
             BuildUi();
             Close();
+            RefreshClock();
         }
 
         /// <summary>Opens the panel for a place (what a click on its marker does).</summary>
@@ -61,29 +75,85 @@ namespace Career
             panelName.text = p.name;
             panelBlurb.text = p.blurb;
             for (int i = actionList.childCount - 1; i >= 0; i--) Destroy(actionList.GetChild(i).gameObject);
+            actionButtons.Clear();
             foreach (PlaceAction a in p.actions)
             {
                 PlaceAction act = a;
-                string label = act.chemistry ? act.name + "  <size=14><color=#9fd7a8>친밀도</color></size>" : act.name;
-                Button b = Btn(actionList, label, 20, () => Do(act));
+                Button b = Btn(actionList, "", 20, () => Do(act));
                 b.name = "Action_" + act.name;
                 b.gameObject.AddComponent<LayoutElement>().minHeight = 48f;
+                actionButtons.Add(new KeyValuePair<Button, PlaceAction>(b, act));
             }
             foreach (KeyValuePair<string, Image> f in frames) f.Value.enabled = f.Key == p.id;
             statusText.text = "";
+            RefreshActions();
         }
 
         public void Close()
         {
             selected = null;
             panel.gameObject.SetActive(false);
+            actionButtons.Clear();
             foreach (Image f in frames.Values) f.enabled = false;
             statusText.text = "장소를 누르면 할 수 있는 일이 나온다.";
         }
 
+        /// <summary>Does an action: its points go, the clock moves, and a part with none left gives way to the next.</summary>
         void Do(PlaceAction a)
         {
-            statusText.text = selected.name + " · " + a.name + " — 효과는 아직 없다" + (a.chemistry ? " (친밀도 후보, §10.9)" : "") + ".";
+            int cost = a.Cost(clock);
+            if (!clock.CanAfford(cost)) return;
+            string at = clock.Time;
+            clock.Spend(cost);
+            string msg = at + " " + selected.name + " · " + a.name + " (" + cost + "P) — 효과는 아직 없다" + (a.chemistry ? " (친밀도 후보, §10.9)" : "") + ".";
+            if (clock.points == 0) msg += "  행동력을 다 써서 " + Advance();
+            statusText.text = msg;
+            RefreshClock();
+        }
+
+        /// <summary>The button on the top bar: whatever points are left go, and the next part of the day starts.</summary>
+        public void SkipPart()
+        {
+            int left = clock.points;
+            statusText.text = "남은 행동력 " + left + "P를 버리고 " + Advance();
+            RefreshClock();
+        }
+
+        /// <summary>On to the next part; at the end of the night a new day, and the squad's day ends with it.</summary>
+        string Advance()
+        {
+            bool newDay = clock.NextPart(DayClock.PointsFor(player));
+            if (newDay) squad.EndDay();
+            return (newDay ? clock.day + "일째 " : "") + DayClock.PartName(clock.part) + " " + clock.Time + " 시작, 행동력 " + clock.points + "P.";
+        }
+
+        void RefreshClock()
+        {
+            dateText.text = "시즌 1 · " + clock.day + "일째 (" + Weekdays[(clock.day - 1) % 7] + "요일)";
+            clockText.text = clock.Time + "  " + DayClock.PartName(clock.part);
+            pointsText.text = "행동력 " + clock.points + " / " + clock.partPoints;
+            RefreshActions();
+        }
+
+        /// <summary>Each action with its time and cost; the ones the points left cannot pay for go grey.</summary>
+        void RefreshActions()
+        {
+            foreach (KeyValuePair<Button, PlaceAction> ab in actionButtons)
+            {
+                PlaceAction a = ab.Value;
+                int cost = a.Cost(clock);
+                string time = a.TakesRestOfPart ? "남은 시간 전부" : Duration(a.minutes);
+                ab.Key.GetComponentInChildren<Text>().text = a.name + "  <size=15><color=#b8c0cc>" + time + " · " + cost + "P</color></size>"
+                    + (a.chemistry ? "  <size=14><color=#9fd7a8>친밀도</color></size>" : "");
+                ab.Key.interactable = clock.CanAfford(cost);
+            }
+        }
+
+        static string Duration(int minutes)
+        {
+            int h = minutes / 60, m = minutes % 60;
+            if (h == 0) return m + "분";
+            return m == 0 ? h + "시간" : h + "시간 " + m + "분";
         }
 
         // ------------------------------------------------------------ layout --
@@ -100,10 +170,16 @@ namespace Career
 
             // top bar: where, when, who
             RectTransform top = Box(root, "TopBar", new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -96f), new Vector2(-20f, -16f), Bar);
-            Label(top, "일상", 30, Color.white, TextAnchor.MiddleLeft, Vector2.zero, new Vector2(0.2f, 1f), new Vector2(24f, 0f), Vector2.zero);
-            Label(top, "시즌 1 · " + day + "일째 (" + Weekdays[(Mathf.Max(1, day) - 1) % 7] + "요일)", 26, Color.white,
-                  TextAnchor.MiddleCenter, new Vector2(0.3f, 0f), new Vector2(0.7f, 1f), Vector2.zero, Vector2.zero);
-            Label(top, PlayerLine(), 22, Dim, TextAnchor.MiddleRight, new Vector2(0.7f, 0f), Vector2.one, Vector2.zero, new Vector2(-24f, 0f));
+            Label(top, "일상", 30, Color.white, TextAnchor.MiddleLeft, Vector2.zero, new Vector2(0.08f, 1f), new Vector2(24f, 0f), Vector2.zero);
+            dateText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.08f, 0f), new Vector2(0.30f, 1f), Vector2.zero, Vector2.zero);
+            clockText = Label(top, "", 26, Gold, TextAnchor.MiddleCenter, new Vector2(0.30f, 0f), new Vector2(0.44f, 1f), Vector2.zero, Vector2.zero);
+            pointsText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.44f, 0f), new Vector2(0.58f, 1f), Vector2.zero, Vector2.zero);
+            Button skip = Btn(top, "다음 시간대로", 20, SkipPart);
+            skip.name = "NextPart";
+            RectTransform srt = skip.GetComponent<RectTransform>();
+            srt.anchorMin = new Vector2(0.59f, 0.18f); srt.anchorMax = new Vector2(0.71f, 0.82f);
+            srt.offsetMin = srt.offsetMax = Vector2.zero;
+            Label(top, PlayerLine(), 20, Dim, TextAnchor.MiddleRight, new Vector2(0.72f, 0f), Vector2.one, Vector2.zero, new Vector2(-24f, 0f));
 
             statusText = Label(root, "", 18, Dim, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(1f, 0f), new Vector2(20f, 8f), new Vector2(-20f, 48f));
 
@@ -134,7 +210,7 @@ namespace Career
             var av = actionList.gameObject.AddComponent<VerticalLayoutGroup>();
             av.spacing = 8f;
             av.childControlWidth = true; av.childControlHeight = true; av.childForceExpandHeight = false;
-            Note(panel, "효과·시간·돈은 아직 없다. 이름만 있는 자리다.");
+            Note(panel, "30분에 1P. 효과와 돈은 아직 없다.");
             var spacer = new GameObject("Spacer", typeof(RectTransform)).AddComponent<LayoutElement>();
             spacer.transform.SetParent(panel, false);
             spacer.flexibleHeight = 1f;
@@ -143,11 +219,10 @@ namespace Career
             close.gameObject.AddComponent<LayoutElement>().minHeight = 48f;
         }
 
-        static string PlayerLine()
+        string PlayerLine()
         {
-            PlayerProfile p;
-            if (!CharacterStore.TryLoad(out p)) return "신인 · 저장된 선수 없음";
-            return p.displayName + " · " + TalentCatalog.Get(p.talent).name + " · " + p.age + "세";
+            if (!savedPlayer) return "신인 · 저장된 선수 없음";
+            return player.displayName + " · " + TalentCatalog.Get(player.talent).name + " · " + player.age + "세";
         }
 
         void Zone(RectTransform map, string label, Vector2 aMin, Vector2 aMax, Color c)
@@ -234,6 +309,7 @@ namespace Career
             ColorBlock cb = b.colors;
             cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
             cb.pressedColor = new Color(0.85f, 0.85f, 0.85f);
+            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.45f);
             b.colors = cb;
             b.onClick.AddListener(onClick);
             Text t = Label(go.transform, label, size, Color.white, TextAnchor.MiddleCenter);
