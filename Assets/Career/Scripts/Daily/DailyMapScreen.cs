@@ -199,6 +199,7 @@ namespace Career
             CareerSession.savedPlayer = savedPlayer;
             CareerSession.pendingFixture = f;
             MatchHandoff.Request(season.ClubName(f.Other(ClubPool.PlayerId)), Competitions.Name(f.comp), f.home == ClubPool.PlayerId, ReturnScene);
+            MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
             CareerSession.Open(MatchScene);
         }
 

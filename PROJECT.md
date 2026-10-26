@@ -741,6 +741,40 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 - 적분은 킥과 같은 분포: 횡오차 `BallModel.AimSpread × Bell()`을 `BallModel.Resolve`처럼 각도로, 가중치
   `BallModel.BellCdf`(Irwin–Hall n=3), [-1, 1] 24구간 중점 적분. 속도 오차는 뺀다(도착 시각만 몇 백분의 1초 달라진다).
 
+### 3.28 스탯 반영 지도 — 커리어 값이 경기의 무엇에 닿는가 (2026-10-26, 코드는 안 바꿨다)
+
+현재 **커리어 값을 읽는 경기 코드는 없다**(`Career.StatScale`만 씀). 경기 쪽 수신구는 대부분 인스펙터 고정값이고, 직접 플레이 경기
+(`MatchHandoff`)는 점수와 상대 이름만 주고받는다. 수신구 열은 "넣을 곳"이다.
+
+| 커리어 값 | 경기의 수신구 | 상태 |
+|---|---|---|
+| 짧은 패스·긴 패스 (1~100) | `FootballerController.shortPassing`/`longPassing` | **척도·이름 같음, 값 안 감.** 경기 시작마다 70~85로 덮어쓴다(`rollPassing`) |
+| 마무리 | `DrillDirector.playerShooting` (0~1, 고정 0.70) | 안 이어짐. 변환(직선 / 60→0.70)은 §10.4 질문 |
+| 슛 파워 (기본 + 근육·유연성 보너스) | `BallModel` 슛 속도 ±15% 띠 | 안 이어짐. 식(`ShotPower.ProvisionalSpeed`)은 슛 드릴만 쓴다. 이으면 §3.8 속도 폭을 슛에 한해 넓히는 것 |
+| 크로스 | `DrillDirector.playerCrossing` (고정 0.70) | 안 이어짐 |
+| 몸싸움 (+몸 보너스) | `DrillDirector.playerStrength` (고정 0.60, 실드 경합) | 안 이어짐 |
+| 태클 | `DefenderAI.tackling01` (봇, 고정 0.60) | 사람은 태클 버튼이 없어 받을 곳 없음 |
+| 최고속도 / 가속도 / 민첩성 | `FootballerController.sprintSpeed` 7.9 · `accel` 40 · 사람 몸엔 회전 반경 없음 | 안 이어짐. 속도 폭을 어디까지 열지 미정(§3.8과 같은 이유) |
+| 체력 | 없음 | 경기에 체력 소모가 없다. 남은 체력(일상)도 경기에 안 간다 |
+| 드리블 | 없음 | 터치 거리는 속도만의 함수(§3.10) |
+| 볼 컨트롤 · 개인기 | 없음 | 리시브(`CanTouch`)·첫 터치에 스탯이 안 들어간다 |
+| 커브 | 없음 | 회전은 "옆으로 휘는 m"(§3.7)로 모델은 있으나 입력·조작이 없다 |
+| 점프 · 공중볼 | 없음 | 공중볼 경합 자체가 없다(§8-5) |
+| 위치선정 | 없음 | 사람은 직접 움직이고 봇 위치는 AI(역할) 몫 |
+| 정신력 | 없음 | §1의 "Composure → 압박 시 시야 축소"가 미구현(§8-4) |
+| 유연성 | 간접만 | 민첩·슛 파워 보너스로만(위 줄들) |
+| 몸 보너스 (`BodyModel.Points`) | 스탯에 더해진 뒤 위 수신구로 | 스탯이 안 이어져 함께 안 감 |
+| 개인 폼 (`personalForm` 0.6~1.2) | `form` 정수 60~120 (`IForm`, 몸마다 인스펙터 100) | 안 이어짐. 형식만 다르다(배수 ↔ %) |
+| 팀 폼 (`Squad.TeamForm`) | `Form.TeamBonus` (경기 친밀도 평균에서 계산) | **계단 같음**(−10/−5/0/+3/+5). 값 공급만 없음 |
+| 친밀도 짝 (`Chemistry`, 슬롯 이름이 id) | `TeamChemistry` 짝별 값 (없으면 50) | 안 이어짐. 슬롯 이름은 `Formation`과 같게 맞춰 두었다 |
+| 경기 → 커리어 (공 요청 수락 ±1, 골 합작 +2, 점수) | — | 점수만 간다. 친밀도 변화·골 기록은 안 간다 |
+| 상대 구단 수준 | 봇 능력치 (고정) | 상대가 약하든 강하든 같은 봇이다 |
+
+- 이미 닿은 것은 둘뿐이다: 척도 변환(`StatScale`)과 팀 폼 계단.
+- **물을 것(연결 방안):** (1) 한 번에 다 이을지, 패스→마무리→몸싸움 순으로 하나씩 이을지 (2) 사람 외 팀원·상대 봇은 구단 수준 하나로
+  뭉뚱그려 줄지(예: 구단 수준 ± 역할 편차) (3) 신체 능력치(속도·가속·민첩)가 경기 속도에 닿는 폭 — 스탯 100과 1의 속도 차를 몇 %로 할지
+  (4) 개인 폼의 원인(피로·정신력·최근 경기)을 언제 켤지 (5) `rollPassing` 70~85를 커리어 값으로 대체해도 되는지.
+
 ---
 
 ## 4. 파일 구조
@@ -780,6 +814,7 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 | `Scripts/TeamChemistry.cs` | 짝별 친밀도 0~100과 그 효과(요청 수락·패스 난이도·드리블 기울기, §3.17d). `DrillDirector`가 시작할 때 붙인다 |
 | `Scripts/Form.cs` | 폼 — 능력치 × 개인 폼 × (1 + 팀 폼) (`Form.Stat`/`Stat01`, 개인 폼은 `IForm`, §3.17d) |
 | `Scripts/Stadium.cs` | **경기장 꾸미기** — 벤치·테크니컬 에어리어·관중석. 장식뿐, 판정에 안 들어간다 (아래). 스스로 생긴다 |
+| `Scripts/MatchSession.cs`, `Scripts/MatchHandoff.cs` | 커리어가 부른 경기: 시계(`matchSeconds` 임시 360초 = 실제 6분)·한 줄 점수판(상대·대회·홈/원정)·Esc 확인 후 끝내기·종료 3초 배너·`returnToCaller`. `MatchHandoff.requested`일 때만 `DrillDirector`가 붙인다 — 아니면 드릴 그대로. 점수는 `DrillDirector.HomeGoals/AwayGoals`(사람 쪽 = 홈 = 우리) |
 | `Scenes/ScanAndTurnDrill.unity` | **경기 씬 — 진실 공급원** (아래) |
 
 ### 씬이 진실 공급원 (2026-10-18, 사용자)
@@ -1665,8 +1700,8 @@ UI는 플레이를 시작할 때 코드가 만든다. 씬에는 카메라, 이�
     결과가 없으면(`finished`가 꺼져 있으면) 그대로 경기 날이다.
   - 씬이 바뀌어도 시즌과 일상은 `CareerSession`(정적)이 들고 있다.
 - **`MatchHandoff`**(`_Prototype/Scripts/MatchHandoff.cs`, 데이터만): `requested`, `opponentName`, `competition`, `isHome`,
-  `returnScene`(커리어가 쓴다), `clubGoals`, `opponentGoals`, `finished`(경기 씬이 쓴다; 골은 우리 구단 쪽 기준). `Request`로 채우고
-  `Clear`로 비운다. 돌아갈 때는 `Career.CareerSession.Open(MatchHandoff.returnScene)`으로 씬을 연다(에디터에서는 빌드 설정 밖의 씬도
+  `returnScene`·`returnToCaller`(커리어가 쓴다), `clubGoals`, `opponentGoals`, `finished`(경기 씬이 쓴다; 골은 우리 구단 쪽 기준). `Request`로 채우고
+  `Clear`로 비운다. 돌아갈 때는 `MatchHandoff.returnToCaller`를 부른다(커리어가 `Request` 때 `CareerSession.Open(ReturnScene)`을 넣는다 — 경기 쪽은 커리어를 직접 안 부른다)(에디터에서는 빌드 설정 밖의 씬도
   연다. 빌드 설정은 건드리지 않았다).
 - **확인**(10-26, 플레이 모드, 스크린샷 2장):
   - 재능별 선택 가능한 구단 수: 최고 20, 월드클래스 17(4위부터), 1부리거 12(9위부터), 둔재 6(15위부터). 둔재는 14위가 안 되고 17위는

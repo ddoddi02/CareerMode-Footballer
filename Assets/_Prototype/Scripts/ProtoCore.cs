@@ -258,6 +258,18 @@ namespace Prototype
 #endif
         }
 
+        public static bool EscapePressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            return kb != null && kb.escapeKey.wasPressedThisFrame;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetKeyDown(KeyCode.Escape);
+#else
+            return false;
+#endif
+        }
+
         public static bool XrayPressed()
         {
 #if ENABLE_INPUT_SYSTEM

@@ -24,6 +24,12 @@ namespace Prototype
         /// <summary>The match is over and the goals above are its result.</summary>
         public static bool finished;
 
+        /// <summary>
+        /// How the match scene goes back: the caller puts it in at <see cref="Request"/> so the
+        /// match side never calls the career code. Null = nowhere to go (the scene was opened by hand).
+        /// </summary>
+        public static System.Action returnToCaller;
+
         /// <summary>A new request: nothing finished, no goals.</summary>
         public static void Request(string opponent, string competitionName, bool home, string returnTo)
         {
@@ -34,11 +40,13 @@ namespace Prototype
             returnScene = returnTo;
             clubGoals = opponentGoals = 0;
             finished = false;
+            returnToCaller = null;
         }
 
         public static void Clear()
         {
             requested = finished = false;
+            returnToCaller = null;
             opponentName = competition = returnScene = null;
             clubGoals = opponentGoals = 0;
             isHome = false;

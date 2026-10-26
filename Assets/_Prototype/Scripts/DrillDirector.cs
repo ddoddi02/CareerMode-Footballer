@@ -143,6 +143,10 @@ namespace Prototype
         int rounds, kept, tackled, fouls;
         int homeGoals, awayGoals;
         Side kickOff = Side.Home;       // who restarts the next round
+
+        /// <summary>The match's score - home is the human's side (MatchSession reads it).</summary>
+        public int HomeGoals { get { return homeGoals; } }
+        public int AwayGoals { get { return awayGoals; } }
         int seenTurnovers;
         float homeHeldSince;            // when home last came into possession
         int freshTry, freshOk, staleTry, staleOk;
@@ -169,6 +173,7 @@ namespace Prototype
             RollPassing();
             if (GetComponent<MouseLegend>() == null) gameObject.AddComponent<MouseLegend>();
             if (TeamChemistry.Active == null) gameObject.AddComponent<TeamChemistry>();
+            if (MatchHandoff.requested && GetComponent<MatchSession>() == null) gameObject.AddComponent<MatchSession>();
 
             phase = Phase.Setup;
             phaseT = 0f;
