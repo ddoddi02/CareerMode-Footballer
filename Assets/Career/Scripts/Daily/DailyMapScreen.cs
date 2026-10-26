@@ -201,7 +201,6 @@ namespace Career
             MatchHandoff.Request(season.ClubName(f.Other(ClubPool.PlayerId)), Competitions.Name(f.comp), f.home == ClubPool.PlayerId, ReturnScene);
             // the match side goes back through this, so it never calls the career code (Request clears it)
             MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
-            MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
             CareerSession.Open(MatchScene);
         }
 
