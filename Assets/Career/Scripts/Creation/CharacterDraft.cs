@@ -171,6 +171,8 @@ namespace Career
         public float weightKg = CreationRules.DefaultWeight;
         public float musclePercent = CreationRules.DefaultMuscle;
         public Appearance appearance = Appearance.Default;
+        /// <summary>The club, as its place in last season's table: any from the talent's best place down (<see cref="TalentDef.bestClubRank"/>).</summary>
+        public int clubRank = TalentCatalog.Get(TalentTier.TopFlight).bestClubRank;
         public readonly int[] stats;
         public readonly List<string> perks = new List<string>();
 
@@ -197,6 +199,15 @@ namespace Career
             int shift = TalentCatalog.Get(t).startOverall - Ordinary;
             talent = t;
             for (int i = 0; i < stats.Length; i++) stats[i] = Mathf.Clamp(stats[i] + shift, StatScale.Min, StatScale.Max);
+            clubRank = Mathf.Max(clubRank, TalentCatalog.Get(t).bestClubRank);
+        }
+
+        /// <summary>Picks a club by its place last season. False if the talent does not reach it.</summary>
+        public bool SetClub(int rank)
+        {
+            if (rank < TalentCatalog.Get(talent).bestClubRank || rank > ClubPool.LeagueSize) return false;
+            clubRank = rank;
+            return true;
         }
 
         public int StartingPoints { get { return CreationRules.PerkPoints; } }
@@ -315,6 +326,7 @@ namespace Career
             var p = new PlayerProfile();
             p.displayName = string.IsNullOrEmpty(displayName) ? "신인" : displayName;
             p.talent = talent;
+            p.clubRank = clubRank;
             p.age = CreationRules.StartAge;
             p.heightCm = heightCm;
             p.peakHeightCm = peakHeightCm;

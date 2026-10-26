@@ -99,6 +99,9 @@ namespace Career
         [Tooltip("Personal form, 0.6..1.2 (60%..120%): how much of his attributes he gets out in a match, on top of team form (FormModel.Apply). What moves it is not decided.")]
         [Range(FormModel.PersonalMin, FormModel.PersonalMax)] public float personalForm = FormModel.PersonalNeutral;
 
+        [Tooltip("The club he plays for, as its place in last season's league table (1 = champion), picked at character creation from the places his talent allows (TalentDef.bestClubRank).")]
+        [Range(1, ClubPool.LeagueSize)] public int clubRank = 9;
+
         [Tooltip("Fame (명성), 0..100: how likely the press is to catch him out (DailyEvents). PROVISIONAL - nothing raises it yet.")]
         [Range(FameMin, FameMax)] public int fame = FameMin;
 

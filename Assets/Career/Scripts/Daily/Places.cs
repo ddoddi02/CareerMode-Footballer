@@ -54,7 +54,8 @@ namespace Career
     {
         /// <summary>Names the chemistry candidates use (PROJECT.md 10.9).</summary>
         public const string TrainTogether = "같이 훈련", MealTogether = "같이 식사·여가";
-        public const string SleepEarly = "일찍 자기";
+        /// <summary>Going to bed: "일찍 자기" in the evening, "잠들기" in the night (user: different names).</summary>
+        public const string SleepEarly = "일찍 자기", SleepNight = "잠들기";
         /// <summary>What recovery training adds to the next morning's recovery, %p (user: costs more now, gives more back at 06:00). PROVISIONAL.</summary>
         public const float RecoveryTrainingBonus = 10f;
 
@@ -84,7 +85,7 @@ namespace Career
                 actions = new[] { new PlaceAction("감독 면담", 60, -2f), new PlaceAction("전술 미팅", 60, -2f), Rest("치료", 60) } },
             new Place { id = "home", name = "자택", icon = "집", mapPos = new Vector2(0.84f, 0.22f),
                 color = new Color(0.80f, 0.62f, 0.35f), blurb = "쉬고 자는 곳.",
-                actions = new[] { Rest("휴식", 60), new PlaceAction(SleepEarly, 0, 0f, false, 0f, true), Leisure("집밥", 60) } },
+                actions = new[] { Rest("휴식", 60), new PlaceAction(SleepEarly, 0, 0f, false, 0f, true), Leisure("집밥", 60), new PlaceAction(SleepNight, 0, 0f, false, 0f, true) } },
             new Place { id = "cafe", name = "카페", icon = "카", mapPos = new Vector2(0.42f, 0.76f),
                 color = new Color(0.62f, 0.42f, 0.30f), blurb = "커피 한 잔, 가벼운 만남.",
                 actions = new[] { Leisure("혼자 커피", 30), Leisure(MealTogether, 90, true) } },

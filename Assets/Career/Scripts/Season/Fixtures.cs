@@ -4,8 +4,8 @@ using UnityEngine;
 
 namespace Career
 {
-    /// <summary>The competitions of a season (user, 2026-10-26): La Liga, the domestic cup and super cup, and the three continental ones.</summary>
-    public enum CompetitionId { League, Cup, SuperCup, Champions, Europa, Conference }
+    /// <summary>The competitions of a season (user, 2026-10-26): the league, the domestic cup and super cup, and three continental ones. Generic names, no real ones.</summary>
+    public enum CompetitionId { League, Cup, SuperCup, Continental1, Continental2, Continental3 }
 
     public static class Competitions
     {
@@ -13,18 +13,18 @@ namespace Career
         {
             switch (c)
             {
-                case CompetitionId.League: return "라 리가";
-                case CompetitionId.Cup: return "국내 컵";
+                case CompetitionId.League: return "리그";
+                case CompetitionId.Cup: return "컵 대회";
                 case CompetitionId.SuperCup: return "슈퍼컵";
-                case CompetitionId.Champions: return "챔피언스리그";
-                case CompetitionId.Europa: return "유로파리그";
-                default: return "컨퍼런스리그";
+                case CompetitionId.Continental1: return "대륙 간 컵 대회 1부";
+                case CompetitionId.Continental2: return "대륙 간 컵 대회 2부";
+                default: return "대륙 간 컵 대회 3부";
             }
         }
 
         public static bool IsContinental(CompetitionId c)
         {
-            return c == CompetitionId.Champions || c == CompetitionId.Europa || c == CompetitionId.Conference;
+            return c == CompetitionId.Continental1 || c == CompetitionId.Continental2 || c == CompetitionId.Continental3;
         }
     }
 
@@ -78,11 +78,11 @@ namespace Career
     public static class MatchSim
     {
         /// <summary>Goals expected when the sides are level (home a little more), and how fast strength moves them.</summary>
-        public const double HomeGoals = 1.35, AwayGoals = 1.10, PerStrengthPoint = 0.016, HomeEdge = 0.10;
+        public const double HomeGoals = 1.35, AwayGoals = 1.10, PerStrengthPoint = 0.02, HomeEdge = 0.10;
 
         public static void Play(Fixture f, Club home, Club away, System.Random rng)
         {
-            double diff = home.strength - away.strength;
+            double diff = home.Strength - away.Strength;
             double lh = HomeGoals * Math.Exp(PerStrengthPoint * diff + (f.neutral ? 0.0 : HomeEdge));
             double la = AwayGoals * Math.Exp(-PerStrengthPoint * diff);
             f.homeGoals = Poisson(Math.Min(4.0, Math.Max(0.2, lh)), rng);
@@ -93,7 +93,7 @@ namespace Career
         /// <summary>Who goes through a level tie: a toss weighted a little by strength.</summary>
         public static bool FirstWinsPenalties(Club a, Club b, System.Random rng)
         {
-            double p = Math.Min(0.75, Math.Max(0.25, 0.5 + (a.strength - b.strength) / 400.0));
+            double p = Math.Min(0.75, Math.Max(0.25, 0.5 + (a.Strength - b.Strength) / 400.0));
             return rng.NextDouble() < p;
         }
 

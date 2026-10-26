@@ -124,11 +124,11 @@ namespace Career
             return DailyEvents.IsBlocked(player, place, a.name) ? new PlaceAction(a.name, DailyEvents.BlockedMinutes, 0f) : a;
         }
 
-        /// <summary>Whether it can be done now: not on a match day or in the question at the evening's end, enough points, and bed only at evening or night.</summary>
+        /// <summary>Whether it can be done now: not on a match day or in the question at the evening's end, enough points, and bed only in its own part (early to bed in the evening, falling asleep in the night).</summary>
         public bool CanDo(string place, PlaceAction a)
         {
             if (IsMatchDay || AwaitingNightChoice) return false;
-            if (a.sleeps) return clock.part == DayPart.Evening || clock.part == DayPart.Night;
+            if (a.sleeps) return a.name == PlaceCatalog.SleepNight ? clock.part == DayPart.Night : clock.part == DayPart.Evening;
             int cost = Effective(place, a).Cost;
             return cost > 0 && cost <= clock.points;
         }
@@ -142,7 +142,7 @@ namespace Career
             LastEvent = null;
             PlaceAction a;
             if (!PlaceCatalog.TryAction(place, action, out a) || !CanDo(place, a)) return "";
-            if (a.sleeps) return "일찍 잤다.  " + GoToBed();
+            if (a.sleeps) return (a.name == PlaceCatalog.SleepNight ? "잠들었다.  " : "일찍 잤다.  ") + GoToBed();
 
             PlaceAction eff = Effective(place, a);
             int part = (int)clock.part;
@@ -228,7 +228,7 @@ namespace Career
             if (IsMatchDay)
             {
                 clock.Begin(0);
-                return lead + clock.day + "일째 — 경기 날이다. (경기 연결은 아직 없다.)";
+                return lead + clock.day + "일째 — 경기 날이다.";
             }
             clock.Begin(DayClock.PointsFor(Energy));
             return lead + clock.day + "일째 아침: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";

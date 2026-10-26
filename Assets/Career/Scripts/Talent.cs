@@ -38,6 +38,13 @@ namespace Career
         /// </summary>
         public int startOverall;
 
+        /// <summary>
+        /// The best place in last season's league table among the clubs he may start at (user,
+        /// 2026-10-26: the easier the talent, the better the clubs on offer). He may choose any
+        /// from this place down to the last (<see cref="ClubPool"/>). PROVISIONAL, PROJECT.md 10.14.
+        /// </summary>
+        public int bestClubRank;
+
         /// <summary>All experience that turns into stats, against an ordinary pro (1).</summary>
         public float growthXp;
         /// <summary>The odds of picking up a good trait during the career, against an ordinary pro (1).</summary>
@@ -93,19 +100,19 @@ namespace Career
         public static readonly TalentDef[] All =
         {
             new TalentDef { tier = TalentTier.GreatestEver, name = "인류 역사상 최고", difficulty = "매우 쉬움",
-                startOverall = 75, heightDownsides = false, heightEvents = HeightEvents.None, muscleGrowth = 1.6f, youthAccelPenalty = 0.1f, minHeightGrowth = 0.9f,
+                startOverall = 75, bestClubRank = 1, heightDownsides = false, heightEvents = HeightEvents.None, muscleGrowth = 1.6f, youthAccelPenalty = 0.1f, minHeightGrowth = 0.9f,
                 growthXp = 2.0f, goodTraitChance = 2.0f, ageDecline = 0.4f, idleDecline = 0f, matchXpShare = 1.0f,
                 blurb = "축구를 위해 태어난 몸. 무엇을 해도 빨리 늘고, 경기만 뛰어도 실력이 오른다. 훈련을 쉬어도 녹슬지 않고, 나이가 들어도 오래 버틴다. 좋은 특성이 쉽게 붙는다." },
             new TalentDef { tier = TalentTier.WorldClass, name = "월드클래스", difficulty = "쉬움",
-                startOverall = 65, heightDownsides = false, heightEvents = HeightEvents.None, muscleGrowth = 1.3f, youthAccelPenalty = 0.4f, minHeightGrowth = 0.5f,
+                startOverall = 65, bestClubRank = 4, heightDownsides = false, heightEvents = HeightEvents.None, muscleGrowth = 1.3f, youthAccelPenalty = 0.4f, minHeightGrowth = 0.5f,
                 growthXp = 1.5f, goodTraitChance = 1.5f, ageDecline = 0.7f, idleDecline = 0.3f, matchXpShare = 0.6f,
                 blurb = "세계 무대에 설 그릇. 남들보다 빨리 늘고, 경기에서도 많이 배운다. 며칠 쉬어도 크게 떨어지지 않고, 나이에도 강하다." },
             new TalentDef { tier = TalentTier.TopFlight, name = "1부리거", difficulty = "보통",
-                startOverall = 55, heightDownsides = true, heightEvents = HeightEvents.Sometimes, muscleGrowth = 1.0f, youthAccelPenalty = 0.7f, minHeightGrowth = 0.5f,
+                startOverall = 55, bestClubRank = 9, heightDownsides = true, heightEvents = HeightEvents.Sometimes, muscleGrowth = 1.0f, youthAccelPenalty = 0.7f, minHeightGrowth = 0.5f,
                 growthXp = 1.0f, goodTraitChance = 1.0f, ageDecline = 1.0f, idleDecline = 1.0f, matchXpShare = 0.3f,
                 blurb = "1부 리그에서 뛸 만한 재능. 훈련한 만큼 늘고, 쉬면 그만큼 떨어진다. 경기에서도 배우지만 기본은 훈련이다." },
             new TalentDef { tier = TalentTier.Dullard, name = "둔재", difficulty = "어려움",
-                startOverall = 45, heightDownsides = true, heightEvents = HeightEvents.Always, muscleGrowth = 0.7f, youthAccelPenalty = 1.0f, minHeightGrowth = 0.5f,
+                startOverall = 45, bestClubRank = 15, heightDownsides = true, heightEvents = HeightEvents.Always, muscleGrowth = 0.7f, youthAccelPenalty = 1.0f, minHeightGrowth = 0.5f,
                 growthXp = 0.6f, goodTraitChance = 0.4f, ageDecline = 1.3f, idleDecline = 2.0f, matchXpShare = 0.05f,
                 blurb = "타고난 것은 없다. 남는 것은 노력뿐이다. 모든 일정을 훈련으로 채워야 겨우 오르고, 경기만으로는 거의 늘지 않는다. 쉬면 금세 떨어지고, 좋은 특성은 좀처럼 붙지 않는다." },
         };

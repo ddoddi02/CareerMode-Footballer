@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Prototype;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -15,8 +16,9 @@ namespace Career
     /// what the night's sleep would give. What actions do besides energy, and money, are not
     /// built (PROJECT.md 10.10 - 10.12). Days come from the season's calendar (<see cref="Season"/>):
     /// the next match - date, rival, competition - is shown under the top bar, with a panel for
-    /// the coming matches and the league table; on match day a stand-in button plays it
-    /// (the result is drawn, the match itself is not connected, PROJECT.md 10.13).
+    /// the coming matches and the league table. On match day there are two buttons: simulate it
+    /// (a result drawn from the clubs' strength) or play it by hand - that opens the match
+    /// scene and takes the result back (<see cref="MatchHandoff"/>, PROJECT.md 10.13, 10.14).
     ///
     /// uGUI built in code when the scene starts, like the creation screen; the scene holds the
     /// camera, the event system and this component. Placeholder art: coloured blocks for the
@@ -28,13 +30,13 @@ namespace Career
         public int day = 1;
         [Tooltip("Energy a match leaves, %. The match is not connected - a placeholder (PROJECT.md 10.11).")]
         [Range(0f, 100f)] public float energyAfterMatch = 40f;
-        [Tooltip("Where the club finished last season, 1..20 - sets its continental places this season (PROJECT.md 10.13).")]
-        [Range(1, 20)] public int lastSeasonRank = 3;
+        [Tooltip("Place in last season's table of the club to start at, when there is no saved character (a saved one picked its club at creation, PROJECT.md 10.14).")]
+        [Range(1, 20)] public int lastSeasonRank = 9;
         [Tooltip("Seed of the draws and drawn results, so a run can be repeated.")]
         public int seasonSeed = 2026;
 
-        const string ClubName = "카스티야 FC";
-        const float ClubStrength = 80f;
+        const string MatchScene = "Assets/_Prototype/Scenes/ScanAndTurnDrill.unity";
+        const string ReturnScene = "Assets/Career/Scenes/DailyMap.unity";
 
         DailyLife life;
         Season season;
@@ -42,8 +44,8 @@ namespace Career
         bool savedPlayer;
 
         Font font;
-        RectTransform panel, partsBox, nightChoice, eventPanel, schedulePanel, scheduleBody;
-        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightNowLabel, nightOnLabel, sleepText, eventTitle, eventBody, nextMatchText, nextButtonLabel, scheduleHead;
+        RectTransform panel, partsBox, nightChoice, eventPanel, schedulePanel, scheduleBody, matchBox;
+        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightNowLabel, nightOnLabel, sleepText, eventTitle, eventBody, nextMatchText, scheduleHead;
         Button skipButton, standingsTab, fixturesTab;
         RectTransform actionList;
         readonly Dictionary<string, Image> frames = new Dictionary<string, Image>();
@@ -68,19 +70,56 @@ namespace Career
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (FindAnyObjectByType<EventSystem>() == null)
                 new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
-            PlayerProfile player;
-            savedPlayer = CharacterStore.TryLoad(out player);
-            if (!savedPlayer) player = new PlayerProfile();
-            season = Season.First(ClubName, ClubStrength, lastSeasonRank, seasonSeed);
-            // the game opens the day after the club's first match, whose result is drawn
-            int start = day > 1 ? day : season.NextFixture(ClubPool.PlayerId, 1).day + 1;
-            season.AdvanceTo(start - 1);
-            Fixture next = season.NextFixture(ClubPool.PlayerId, start);
-            life = new DailyLife(player, Squad.Provisional(player.displayName), energyAfterMatch, next.day - start, start);
+            if (!CareerSession.Active) NewCareer();
+            life = CareerSession.life;
+            season = CareerSession.season;
+            savedPlayer = CareerSession.savedPlayer;
             BuildUi();
             Close();
-            statusText.text = "경기 끝 체력 " + Mathf.RoundToInt(energyAfterMatch) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%, 행동력 " + life.clock.points + "P. 장소를 눌러 할 일을 고른다.";
+            string back = ReturnFromMatch();
+            statusText.text = back.Length > 0 ? back
+                : "경기 끝 체력 " + Mathf.RoundToInt(energyAfterMatch) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%, 행동력 " + life.clock.points + "P. 장소를 눌러 할 일을 고른다.";
             Refresh();
+        }
+
+        /// <summary>The first start: the saved character (or a new one) at the club it picked, a season, daily life from the day after its first match.</summary>
+        void NewCareer()
+        {
+            PlayerProfile player;
+            bool saved = CharacterStore.TryLoad(out player);
+            if (!saved) { player = new PlayerProfile(); player.clubRank = lastSeasonRank; }
+            Squad squad = Squad.Provisional(player.displayName);
+            Season first = Season.First(player.clubRank, seasonSeed);
+            first.SetPlayerClub(CreationRules.Overall(player), squad.TeamChemistry);
+            // the game opens the day after the club's first match, whose result is drawn
+            int start = day > 1 ? day : first.NextFixture(ClubPool.PlayerId, 1).day + 1;
+            first.AdvanceTo(start - 1);
+            Fixture next = first.NextFixture(ClubPool.PlayerId, start);
+            CareerSession.season = first;
+            CareerSession.life = new DailyLife(player, squad, energyAfterMatch, next.day - start, start);
+            CareerSession.savedPlayer = saved;
+        }
+
+        /// <summary>Team strength is the squad's overall plus its chemistry, read fresh before any result is drawn (user, 2026-10-26).</summary>
+        void SyncStrength()
+        {
+            season.SetPlayerClub(CreationRules.Overall(life.player), life.squad.TeamChemistry);
+        }
+
+        /// <summary>Back from the match scene with a result: it goes into the season, and daily life goes on from the next day.</summary>
+        string ReturnFromMatch()
+        {
+            Fixture f = CareerSession.pendingFixture;
+            if (f == null || !MatchHandoff.finished) return "";
+            CareerSession.pendingFixture = null;
+            bool home = f.home == ClubPool.PlayerId;
+            int homeGoals = home ? MatchHandoff.clubGoals : MatchHandoff.opponentGoals;
+            int awayGoals = home ? MatchHandoff.opponentGoals : MatchHandoff.clubGoals;
+            MatchHandoff.Clear();
+            SyncStrength();
+            season.AdvanceTo(f.day - 1);
+            season.SetResult(f, homeGoals, awayGoals);
+            return FinishMatch(f);
         }
 
         // ------------------------------------------------------------ actions --
@@ -132,30 +171,49 @@ namespace Career
             Refresh();
         }
 
-        /// <summary>What the top bar's button does: on match day, play the match; otherwise give up the part's points.</summary>
-        public void NextButton()
+        /// <summary>Match day, the first button: the match is drawn from the clubs' strength, and daily life goes on.</summary>
+        public void SimulateMatch()
         {
-            if (life.IsMatchDay) PlayMatch();
-            else SkipPart();
+            if (EventOpen || ScheduleOpen || !life.IsMatchDay) return;
+            Fixture f = season.NextFixture(ClubPool.PlayerId, life.clock.day);
+            if (f != null)
+            {
+                SyncStrength();
+                season.AdvanceTo(f.day);
+            }
+            statusText.text = FinishMatch(f);
+            Refresh();
         }
 
         /// <summary>
-        /// Match day, stand-in: the club's match is played with a drawn result (the match is not
-        /// connected yet), and daily life starts again the day after. When the club has no match
-        /// left the season is finished and the next one opens at its day 1, the new places in hand.
+        /// Match day, the second button: hands the match to the match scene and opens it. The
+        /// scene writes the result into <see cref="MatchHandoff"/> and returns here (its part).
         /// </summary>
-        public void PlayMatch()
+        public void PlayMatchLive()
         {
             if (EventOpen || ScheduleOpen || !life.IsMatchDay) return;
+            Fixture f = season.NextFixture(ClubPool.PlayerId, life.clock.day);
+            if (f == null) return;
+            CareerSession.season = season;
+            CareerSession.life = life;
+            CareerSession.savedPlayer = savedPlayer;
+            CareerSession.pendingFixture = f;
+            MatchHandoff.Request(season.ClubName(f.Other(ClubPool.PlayerId)), Competitions.Name(f.comp), f.home == ClubPool.PlayerId, ReturnScene);
+            CareerSession.Open(MatchScene);
+        }
+
+        /// <summary>
+        /// After a match (drawn or played): says what it was, then starts daily life again the
+        /// day after. When the club has no match left the season is finished and the next one opens
+        /// at its day 1, the new places in hand.
+        /// </summary>
+        string FinishMatch(Fixture f)
+        {
             string me = ClubPool.PlayerId;
-            Fixture f = season.NextFixture(me, life.clock.day);
             string result = "";
             if (f != null)
-            {
-                season.AdvanceTo(f.day);
                 result = Competitions.Name(f.comp) + " " + f.round + ": " + season.ClubName(f.home) + " " + f.homeGoals + "-" + f.awayGoals + " " + season.ClubName(f.away)
                          + (f.penWinner != null ? " (승부차기 " + season.ClubName(f.penWinner) + ")" : "") + ".  ";
-            }
             int firstDay = life.clock.day + 1;
             Fixture next = season.NextFixture(me, firstDay);
             if (next == null)
@@ -163,13 +221,15 @@ namespace Career
                 for (int i = 0; i < 20 && !season.IsOver; i++) season.AdvanceTo(season.LastDay);
                 int ended = season.number;
                 season = season.Next(seasonSeed + ended);
+                SyncStrength();
                 firstDay = 1;
                 next = season.NextFixture(me, firstDay);
                 result += "시즌 " + ended + " 끝. ";
             }
             life = new DailyLife(life.player, life.squad, energyAfterMatch, next.day - firstDay, firstDay);
-            statusText.text = result + "다음 경기까지 " + life.DaysToMatch + "일.";
-            Refresh();
+            CareerSession.season = season;
+            CareerSession.life = life;
+            return result + "다음 경기까지 " + life.DaysToMatch + "일.";
         }
 
         /// <summary>Opens the panel of the coming matches (or the league table).</summary>
@@ -222,17 +282,18 @@ namespace Career
         {
             DayClock c = life.clock;
             // everything before today is played; the calendar may have drawn a round, so the match day is read again
+            SyncStrength();
             season.AdvanceTo(c.day - 1);
             Fixture nextMatch = season.NextFixture(ClubPool.PlayerId, c.day);
             if (nextMatch != null && nextMatch.day != life.matchDay) life.SetMatchDay(nextMatch.day);
             dateText.text = "시즌 " + season.number + " · " + season.DateText(c.day);
             matchText.text = life.IsMatchDay ? "경기 날" : "경기까지 " + life.DaysToMatch + "일";
             nextMatchText.text = nextMatch == null ? "남은 경기 없음" : "다음 경기  " + season.Describe(nextMatch, ClubPool.PlayerId);
-            nextButtonLabel.text = life.IsMatchDay ? "경기 치르기\n<size=14>(결과는 임시)</size>" : "다음 시간대로";
             clockText.text = c.Time + "  " + DayClock.PartName(c.part);
             energyText.text = "체력 " + Mathf.RoundToInt(life.Energy) + "%";
             pointsText.text = "행동력 " + c.points + "P";
-            skipButton.interactable = !life.AwaitingNightChoice && !EventOpen && !ScheduleOpen;
+            skipButton.interactable = !life.AwaitingNightChoice && !life.IsMatchDay && !EventOpen && !ScheduleOpen;
+            matchBox.gameObject.SetActive(life.IsMatchDay);
             nightChoice.gameObject.SetActive(life.AwaitingNightChoice && !EventOpen);
             if (ScheduleOpen) RebuildSchedule();
             if (life.AwaitingNightChoice)
@@ -251,7 +312,7 @@ namespace Career
                 {
                     float h = life.SleepHoursIfNow;
                     detail = "잠든 시각부터 06:00까지 · 지금 자면 " + DailyLife.Hours(h) + " → 아침 회복 +" + Mathf.RoundToInt(life.MorningRecovery(h)) + "%p"
-                             + (life.CanDo(selected.id, a) ? "" : " (저녁·새벽에만)");
+                             + (life.CanDo(selected.id, a) ? "" : a.name == PlaceCatalog.SleepNight ? " (새벽에만)" : " (저녁에만)");
                 }
                 else
                 {
@@ -395,9 +456,8 @@ namespace Career
             clockText = Label(top, "", 26, Gold, TextAnchor.MiddleCenter, new Vector2(0.34f, 0f), new Vector2(0.46f, 1f), Vector2.zero, Vector2.zero);
             energyText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.46f, 0f), new Vector2(0.56f, 1f), Vector2.zero, Vector2.zero);
             pointsText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.56f, 0f), new Vector2(0.66f, 1f), Vector2.zero, Vector2.zero);
-            skipButton = Btn(top, "다음 시간대로", 20, NextButton);
+            skipButton = Btn(top, "다음 시간대로", 20, SkipPart);
             skipButton.name = "NextPart";
-            nextButtonLabel = skipButton.GetComponentInChildren<Text>();
             Anchor(skipButton, new Vector2(0.67f, 0.18f), new Vector2(0.78f, 0.82f));
             Label(top, PlayerLine(), 18, Dim, TextAnchor.MiddleRight, new Vector2(0.78f, 0f), Vector2.one, Vector2.zero, new Vector2(-24f, 0f));
 
@@ -439,6 +499,19 @@ namespace Career
             var gap = new GameObject("Spacer", typeof(RectTransform)).AddComponent<LayoutElement>();
             gap.transform.SetParent(plan, false);
             gap.flexibleHeight = 1f;
+            // match day: simulate it or play it by hand
+            matchBox = new GameObject("MatchBox", typeof(RectTransform)).GetComponent<RectTransform>();
+            matchBox.SetParent(plan, false);
+            var mv = matchBox.gameObject.AddComponent<VerticalLayoutGroup>();
+            mv.spacing = 8f;
+            mv.childControlWidth = true; mv.childControlHeight = true; mv.childForceExpandHeight = false;
+            Label(matchBox, "경기 날", 22, Gold, TextAnchor.MiddleLeft).gameObject.AddComponent<LayoutElement>().minHeight = 32f;
+            Button sim = Btn(matchBox, "시뮬레이션 돌리기", 22, SimulateMatch);
+            sim.name = "Simulate";
+            sim.gameObject.AddComponent<LayoutElement>().minHeight = 52f;
+            Button live = Btn(matchBox, "직접 플레이하기", 22, PlayMatchLive);
+            live.name = "PlayLive";
+            live.gameObject.AddComponent<LayoutElement>().minHeight = 52f;
             sleepText = Label(plan, "", 18, Gold, TextAnchor.UpperLeft);
             sleepText.name = "Sleep";
             sleepText.gameObject.AddComponent<LayoutElement>().minHeight = 84f;
@@ -499,7 +572,7 @@ namespace Career
             fixturesTab = Btn(tabs, "다음 경기", 20, () => OpenSchedule(false));
             fixturesTab.name = "TabFixtures";
             fixturesTab.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
-            standingsTab = Btn(tabs, "라 리가 순위", 20, () => OpenSchedule(true));
+            standingsTab = Btn(tabs, "리그 순위", 20, () => OpenSchedule(true));
             standingsTab.name = "TabStandings";
             standingsTab.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
             scheduleBody = new GameObject("Body", typeof(RectTransform)).GetComponent<RectTransform>();

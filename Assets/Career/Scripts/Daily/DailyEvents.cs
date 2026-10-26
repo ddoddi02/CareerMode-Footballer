@@ -50,8 +50,8 @@ namespace Career
         public const int AdultAge = 18;
         /// <summary>What a blocked action costs: a short walk to the door and back.</summary>
         public const int BlockedMinutes = 30;
-        /// <summary>Chance the paparazzi catch him at the nightclub door: 5% at fame 0, 60% at 100.</summary>
-        public const float PaparazziAtNoFame = 0.05f, PaparazziAtFullFame = 0.60f;
+        /// <summary>Chance the paparazzi catch him at the nightclub door: 0% at fame 0, 80% at 100 (user).</summary>
+        public const float PaparazziAtNoFame = 0f, PaparazziAtFullFame = 0.80f;
         public const int PaparazziMental = -8;
 
         public static readonly ActionEvent[] Rows =

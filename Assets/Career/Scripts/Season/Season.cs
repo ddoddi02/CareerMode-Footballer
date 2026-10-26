@@ -11,15 +11,15 @@ namespace Career
         public string cupWinner, cupRunnerUp;
 
         /// <summary>
-        /// The table of a season nobody played (first game): strongest first, with the player's
-        /// club put at <paramref name="playerRank"/> (inspector value). The cup was won by the
-        /// club in 4th place by strength and lost by the 7th - provisional.
+        /// The table of a season nobody played (first game): the order of <see cref="ClubPool.RankedNames"/>,
+        /// with the player's club in <paramref name="playerRank"/> place. The cup was won by the club
+        /// in 4th place and lost by the 7th - provisional.
         /// </summary>
-        public static PreviousSeason Provisional(Dictionary<string, Club> clubs, int playerRank)
+        public static PreviousSeason Provisional(int playerRank)
         {
             var p = new PreviousSeason();
-            foreach (string id in ClubPool.LeagueIds(clubs)) if (id != ClubPool.PlayerId) p.leagueOrder.Add(id);
-            p.leagueOrder.Insert(Mathf.Clamp(playerRank, 1, p.leagueOrder.Count + 1) - 1, ClubPool.PlayerId);
+            for (int rank = 1; rank <= ClubPool.LeagueSize; rank++)
+                p.leagueOrder.Add(rank == playerRank ? ClubPool.PlayerId : ClubPool.IdOf(rank));
             p.cupWinner = p.leagueOrder[3];
             p.cupRunnerUp = p.leagueOrder[6];
             return p;
@@ -29,11 +29,11 @@ namespace Career
     /// <summary>Who plays the continental competitions and the super cup this season, from <see cref="PreviousSeason"/>.</summary>
     public class Qualified
     {
-        public List<string> champions = new List<string>(), europa = new List<string>(), conference = new List<string>(), superCup = new List<string>();
+        public List<string> continental1 = new List<string>(), continental2 = new List<string>(), continental3 = new List<string>(), superCup = new List<string>();
 
         /// <summary>
-        /// By last season's league place (user): 1st-4th Champions League, 5th and the cup winner
-        /// Europa League, 6th Conference League. A place a club already has goes to the next one
+        /// By last season's league place (user): 1st-4th the continental cup, first division; 5th and
+        /// the cup winner the second; 6th the third. A place a club already has goes to the next one
         /// down the table. The super cup takes the top two, the cup winner and runner-up, the
         /// same way. PROVISIONAL (PROJECT.md 10.13).
         /// </summary>
@@ -42,10 +42,10 @@ namespace Career
             var q = new Qualified();
             List<string> order = p.leagueOrder;
             var used = new HashSet<string>();
-            for (int i = 0; i < 4; i++) { used.Add(order[i]); q.champions.Add(order[i]); }
-            used.Add(order[4]); q.europa.Add(order[4]);
-            q.europa.Add(Place(p.cupWinner, order, used));
-            q.conference.Add(Place(null, order, used));
+            for (int i = 0; i < 4; i++) { used.Add(order[i]); q.continental1.Add(order[i]); }
+            used.Add(order[4]); q.continental2.Add(order[4]);
+            q.continental2.Add(Place(p.cupWinner, order, used));
+            q.continental3.Add(Place(null, order, used));
 
             var s = new HashSet<string>();
             q.superCup.Add(Place(order[0], order, s));
@@ -67,9 +67,9 @@ namespace Career
         {
             switch (c)
             {
-                case CompetitionId.Champions: return champions.Contains(club);
-                case CompetitionId.Europa: return europa.Contains(club);
-                case CompetitionId.Conference: return conference.Contains(club);
+                case CompetitionId.Continental1: return continental1.Contains(club);
+                case CompetitionId.Continental2: return continental2.Contains(club);
+                case CompetitionId.Continental3: return continental3.Contains(club);
                 case CompetitionId.SuperCup: return superCup.Contains(club);
                 default: return true;
             }
@@ -77,8 +77,8 @@ namespace Career
     }
 
     /// <summary>
-    /// One season's calendar and results (user, 2026-10-26): La Liga, the domestic cup and super
-    /// cup, and the Champions, Europa and Conference Leagues, with the continental places given
+    /// One season's calendar and results (user, 2026-10-26): the league, the domestic cup and super
+    /// cup, and the three continental cups, with the continental places given
     /// by last season's table. Day 1 is a Saturday, two weeks before the league starts; the
     /// season ends at the end of May. Numbers are PROVISIONAL (PROJECT.md 10.13).
     ///
@@ -92,7 +92,7 @@ namespace Career
         public const int PreSeasonDays = 14;
         public const int LeagueRounds = 38;
         public const int CupTeams = 32;
-        /// <summary>Teams of a continental league phase, and matches each plays in it (Champions and Europa 8, Conference 6).</summary>
+        /// <summary>Teams of a continental league phase, and matches each plays in it (first and second division 8, third 6).</summary>
         public const int EuroTeams = 36;
         const int Sat = 0, Sun = 1, Tue = 3, Wed = 4, Thu = 5;
         /// <summary>Weeks (from the first league Saturday) the league leaves free: an October break, Christmas, the super cup weekend, a March break.</summary>
@@ -110,6 +110,8 @@ namespace Career
         public readonly DateTime startDate;
         public readonly Dictionary<string, Club> clubs;
         public readonly string playerId;
+        /// <summary>Place in last season's table of the club the player is at - its squad level while it lasts.</summary>
+        public readonly int playerRank;
         public readonly PreviousSeason previous;
         public readonly Qualified qualified;
         public readonly List<Fixture> fixtures = new List<Fixture>();
@@ -138,14 +140,28 @@ namespace Career
         }
         readonly List<Euro> euros = new List<Euro>();
 
-        public static Season First(string playerClubName, float playerStrength, int lastRank, int seed)
+        /// <summary>
+        /// The first season: the player's club is the one that finished <paramref name="lastRank"/>
+        /// last season (chosen at character creation); nobody played that season, its table is made up.
+        /// </summary>
+        public static Season First(int lastRank, int seed)
         {
-            Dictionary<string, Club> clubs = ClubPool.Build(playerClubName, playerStrength);
-            return new Season(1, new DateTime(2026, 8, 1), clubs, PreviousSeason.Provisional(clubs, lastRank), seed);
+            Dictionary<string, Club> clubs = ClubPool.Build(lastRank);
+            return new Season(1, new DateTime(2026, 8, 1), clubs, PreviousSeason.Provisional(lastRank), seed, lastRank);
         }
 
-        Season(int number, DateTime start, Dictionary<string, Club> clubs, PreviousSeason previous, int seed)
+        /// <summary>
+        /// Sets the player's club squad from the player and the squad's chemistry (user: team
+        /// strength = the squad's average overall + chemistry). Called before results are drawn.
+        /// </summary>
+        public void SetPlayerClub(float playerOverall, float chemistry)
         {
+            ClubPool.SetPlayerClub(clubs, playerRank, playerOverall, chemistry);
+        }
+
+        Season(int number, DateTime start, Dictionary<string, Club> clubs, PreviousSeason previous, int seed, int playerRank)
+        {
+            this.playerRank = playerRank;
             this.number = number;
             startDate = start;
             this.clubs = clubs;
@@ -157,9 +173,9 @@ namespace Career
             BuildLeague();
             StartCup();
             StartSuperCup();
-            StartEuro(CompetitionId.Champions, qualified.champions, "ucl", 8);
-            StartEuro(CompetitionId.Europa, qualified.europa, "uel", 8);
-            StartEuro(CompetitionId.Conference, qualified.conference, "uecl", 6);
+            StartEuro(CompetitionId.Continental1, qualified.continental1, "cn1", 8);
+            StartEuro(CompetitionId.Continental2, qualified.continental2, "cn2", 8);
+            StartEuro(CompetitionId.Continental3, qualified.continental3, "cn3", 6);
         }
 
         // ------------------------------------------------------------ dates --
@@ -294,7 +310,7 @@ namespace Career
                     bool aHome = homes[a] != homes[b] ? homes[a] < homes[b] : rng.Next(2) == 0;
                     string home = aHome ? a : b, away = aHome ? b : a;
                     homes[home]++;
-                    Add(Day(LeaguePhaseWeeks[md], comp == CompetitionId.Champions ? (i % 2 == 0 ? Tue : Wed) : Thu),
+                    Add(Day(LeaguePhaseWeeks[md], comp == CompetitionId.Continental1 ? (i % 2 == 0 ? Tue : Wed) : Thu),
                         comp, "리그 페이즈 " + (md + 1), home, away, false, true);
                 }
             }
@@ -415,7 +431,7 @@ namespace Career
         Tie KnockoutTie(Euro e, int stage, int i, string a, string b)
         {
             int[] weeks = KnockoutWeeks[stage - 1];
-            int weekday = e.comp == CompetitionId.Champions ? (i % 2 == 0 ? Tue : Wed) : Thu;
+            int weekday = e.comp == CompetitionId.Continental1 ? (i % 2 == 0 ? Tue : Wed) : Thu;
             return MakeTie(e.comp, EuroRounds[stage], a, b, Day(weeks[0], weekday), Day(weeks[1], weekday));
         }
 
@@ -423,8 +439,8 @@ namespace Career
         {
             switch (c)
             {
-                case CompetitionId.Champions: return Day(40, Wed);
-                case CompetitionId.Europa: return Day(39, Thu);
+                case CompetitionId.Continental1: return Day(40, Wed);
+                case CompetitionId.Continental2: return Day(39, Thu);
                 default: return Day(40, Thu);
             }
         }
@@ -524,7 +540,7 @@ namespace Career
             return l.Count > 0 ? l[0] : null;
         }
 
-        /// <summary>"8/22(토) 라 리가 3라운드 · 홈 vs 라 코스타 CF".</summary>
+        /// <summary>"8/22(토) 리그 3라운드 · 홈 vs 라 코스타 CF".</summary>
         public string Describe(Fixture f, string club)
         {
             string where = f.neutral ? "중립" : f.home == club ? "홈" : "원정";
@@ -544,7 +560,7 @@ namespace Career
         /// <summary>The next season, 52 weeks on, the same clubs; its continental places come from this table.</summary>
         public Season Next(int seed)
         {
-            return new Season(number + 1, startDate.AddDays(364), clubs, Summary(), seed);
+            return new Season(number + 1, startDate.AddDays(364), clubs, Summary(), seed, playerRank);
         }
     }
 }

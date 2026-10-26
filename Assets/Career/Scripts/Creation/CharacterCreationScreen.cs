@@ -10,9 +10,10 @@ namespace Career
     /// <summary>
     /// Character creation (user, 2026-10-16): stats, perks and looks on one screen, balanced
     /// with points the way Project Zomboid does it - good perks cost, bad perks pay back, and
-    /// the character cannot be confirmed while the points are below zero. Before that, a step
-    /// of its own: talent, the difficulty (user, 2026-10-17). The talent button on the top bar
-    /// goes back to it.
+    /// the character cannot be confirmed while the points are below zero. Before that, two steps
+    /// of their own: talent, the difficulty (user, 2026-10-17), and the club (user, 2026-10-26;
+    /// which clubs are on offer depends on the talent). The talent and club buttons on the top bar
+    /// go back to them.
     ///
     /// uGUI, built in code when the scene starts (the builder only lays out the camera, the
     /// event system and this component). uGUI rather than UI Toolkit because the built-in
@@ -32,8 +33,10 @@ namespace Career
         Font font;
 
         // the two steps
-        GameObject talentPage, mainPage;
+        GameObject talentPage, clubPage, mainPage;
         readonly Dictionary<TalentTier, Button> talentCards = new Dictionary<TalentTier, Button>();
+        readonly Dictionary<int, Button> clubCards = new Dictionary<int, Button>();
+        Text clubNote, clubLabel;
 
         // what Refresh rewrites
         Text pointsText, statusText, derivedText, confirmLabel, heightLabel, peakLabel, weightLabel, muscleLabel, talentLabel;
@@ -68,11 +71,19 @@ namespace Career
         /// <summary>Talent first; the stats, perks and looks after it.</summary>
         public void ShowTalentStep(bool talent)
         {
-            talentPage.SetActive(talent);
-            mainPage.SetActive(!talent);
+            ShowStep(talent ? 0 : 2);
+        }
+
+        /// <summary>0 talent, 1 club, 2 the rest.</summary>
+        public void ShowStep(int step)
+        {
+            talentPage.SetActive(step == 0);
+            clubPage.SetActive(step == 1);
+            mainPage.SetActive(step == 2);
         }
 
         public bool OnTalentStep { get { return talentPage.activeSelf; } }
+        public bool OnClubStep { get { return clubPage.activeSelf; } }
 
         // ------------------------------------------------------------ layout --
 
@@ -91,6 +102,10 @@ namespace Career
             talentPage = talent.gameObject;
             BuildTalentStep(talent);
 
+            RectTransform club = Page(canvasRoot, "ClubPage");
+            clubPage = club.gameObject;
+            BuildClubStep(club);
+
             RectTransform root = Page(canvasRoot, "MainPage");
             mainPage = root.gameObject;
 
@@ -100,7 +115,10 @@ namespace Career
             Button back = Btn(top, "", 16, () => ShowTalentStep(true), new Vector2(0.13f, 0.18f), new Vector2(0.29f, 0.82f));
             back.name = "TalentBack";
             talentLabel = back.GetComponentInChildren<Text>();
-            pointsText = Label(top, "", 26, Color.white, TextAnchor.MiddleCenter, new Vector2(0.29f, 0f), new Vector2(0.75f, 1f), Vector2.zero, Vector2.zero);
+            Button clubBack = Btn(top, "", 16, () => ShowStep(1), new Vector2(0.295f, 0.18f), new Vector2(0.41f, 0.82f));
+            clubBack.name = "ClubBack";
+            clubLabel = clubBack.GetComponentInChildren<Text>();
+            pointsText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.42f, 0f), new Vector2(0.75f, 1f), Vector2.zero, Vector2.zero);
             Btn(top, "처음부터", 20, ResetDraft, new Vector2(0.76f, 0.18f), new Vector2(0.85f, 0.82f));   // pool toggle gone: stats no longer cost points
             confirmButton = Btn(top, "확정", 24, Confirm, new Vector2(0.86f, 0.12f), new Vector2(0.995f, 0.88f));
             confirmLabel = confirmButton.GetComponentInChildren<Text>();
@@ -151,10 +169,53 @@ namespace Career
                 talentCards[t.tier] = card;
             }
 
-            Button next = Btn(page, "다음 — 스탯 · 특전 · 외형", 24, () => { ShowTalentStep(false); Refresh(); },
+            Button next = Btn(page, "다음 — 구단", 24, () => { ShowStep(1); Refresh(); },
                               new Vector2(0.38f, 0.03f), new Vector2(0.62f, 0.11f));
             next.name = "TalentNext";
             next.GetComponent<Image>().color = Picked;
+        }
+
+        /// <summary>
+        /// The second step (user, 2026-10-26): the club he starts at, picked from last season's
+        /// table. The easier the talent, the higher up the table he may go (TalentDef.bestClubRank).
+        /// </summary>
+        void BuildClubStep(RectTransform page)
+        {
+            RectTransform head = Box(page, "ClubHead", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -190f), new Vector2(-20f, -16f), Panel);
+            Label(head, "구단 선택 — 지난 시즌 순위", 34, Color.white, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(28f, 0f), new Vector2(-28f, -18f));
+            clubNote = Label(head, "", 19, new Color(0.85f, 0.87f, 0.90f), TextAnchor.LowerLeft, Vector2.zero, Vector2.one, new Vector2(28f, 18f), new Vector2(-28f, 0f));
+            clubNote.name = "ClubNote";
+
+            for (int rank = 1; rank <= ClubPool.LeagueSize; rank++)
+            {
+                int k = rank;
+                int col = (rank - 1) / 5, row = (rank - 1) % 5;
+                float x0 = col / 4f, x1 = (col + 1) / 4f;
+                float y1 = 0.80f - row * 0.13f, y0 = y1 - 0.115f;
+                Button card = Btn(page, "", 20, () => { if (draft.SetClub(k)) Refresh(); }, new Vector2(x0, y0), new Vector2(x1, y1));
+                card.name = "Club_" + rank.ToString("00");
+                var rt = card.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(20f, 0f); rt.offsetMax = new Vector2(col == 3 ? -20f : 0f, 0f);
+                Text body = card.GetComponentInChildren<Text>();
+                body.alignment = TextAnchor.MiddleLeft;
+                Stretch(body.rectTransform, new Vector2(18f, 4f), new Vector2(-12f, -4f));
+                clubCards[rank] = card;
+            }
+
+            Button prev = Btn(page, "이전 — 재능", 22, () => { ShowStep(0); Refresh(); }, new Vector2(0.18f, 0.03f), new Vector2(0.38f, 0.11f));
+            prev.name = "ClubPrev";
+            Button next = Btn(page, "다음 — 스탯 · 특전 · 외형", 24, () => { ShowStep(2); Refresh(); }, new Vector2(0.40f, 0.03f), new Vector2(0.66f, 0.11f));
+            next.name = "ClubNext";
+            next.GetComponent<Image>().color = Picked;
+        }
+
+        /// <summary>The continental competition last season's place gives, for the club cards.</summary>
+        static string PlaceReward(int rank)
+        {
+            if (rank <= 4) return Competitions.Name(CompetitionId.Continental1);
+            if (rank == 5) return Competitions.Name(CompetitionId.Continental2);
+            if (rank == 6) return Competitions.Name(CompetitionId.Continental3);
+            return "대륙 대회 없음";
         }
 
         static string TalentCard(TalentDef t)
@@ -371,6 +432,19 @@ namespace Career
                 kv.Value.GetComponent<Image>().color = kv.Key == draft.talent ? Picked : Row;
             TalentDef talent = TalentCatalog.Get(draft.talent);
             talentLabel.text = string.Format("재능: {0} ({1})\n<size=13>눌러서 바꾸기</size>", talent.name, talent.difficulty);
+            clubLabel.text = string.Format("구단: {0}위\n<size=13>{1}</size>", draft.clubRank, ClubPool.RankedNames[draft.clubRank - 1]);
+            clubNote.text = string.Format("재능이 '{0}'이면 지난 시즌 {1}위부터 {2}위까지 구단을 고를 수 있다. 쉬운 재능일수록 높은 순위의 구단이 열린다.\n"
+                                          + "<color=#e8c070>고른 구단의 지난 시즌 순위가 이번 시즌 대륙 간 컵 대회 참가를 정하고, 선수단 수준이 구단 전력이 된다. 구단 이름은 가상이다.</color>",
+                                          talent.name, talent.bestClubRank, ClubPool.LeagueSize);
+            foreach (var kv in clubCards)
+            {
+                int rank = kv.Key;
+                bool open = rank >= talent.bestClubRank;
+                kv.Value.interactable = open;
+                kv.Value.GetComponent<Image>().color = rank == draft.clubRank ? Picked : Row;
+                kv.Value.GetComponentInChildren<Text>().text = string.Format("<size=26><b>{0}위</b></size>  {1}\n<size=15><color=#9aa3ad>선수단 수준 {2:0} · {3}</color></size>",
+                    rank, ClubPool.RankedNames[rank - 1], ClubPool.LevelOf(rank), open ? PlaceReward(rank) : "이 재능으로는 못 간다");
+            }
 
             int left = draft.Remaining, statLeft = draft.StatLeft;
             pointsText.text = string.Format("특전 포인트 <color=#{0}><b>{1}</b></color><size=16><color=#9aa3ad>/{2}</color></size>   스탯 남음 <color=#{3}><b>{4}</b></color>   오버롤 <b>{5:0.#}</b>",
