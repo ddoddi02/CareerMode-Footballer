@@ -60,7 +60,10 @@ namespace Prototype
         public float LongPassing { get { return Career.StatScale.To01(longPassing); } }
 
         /// <summary>How well he finishes, 0..1. From his slot (Formation.ShootingFor).</summary>
-        public float Shooting { get { return Formation.ShootingFor(role); } }
+        public float Shooting { get { return attrs.finishing01 >= 0f ? attrs.finishing01 : Formation.ShootingFor(role); } }
+
+        /// <summary>What the career side handed him (MatchRoster); unset = the drill as it was.</summary>
+        [System.NonSerialized] public MatchAttributes attrs = new MatchAttributes();
 
         [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
         [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;

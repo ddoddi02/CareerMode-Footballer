@@ -57,6 +57,9 @@ namespace Prototype
         /// <summary>Long passing, 0..1.</summary>
         public float LongPassing { get { return Career.StatScale.To01(longPassing); } }
 
+        /// <summary>What the career side handed him (MatchRoster); unset = the drill as it was.</summary>
+        [System.NonSerialized] public MatchAttributes attrs = new MatchAttributes();
+
         [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
         [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;
         public int FormPercent { get { return form; } }

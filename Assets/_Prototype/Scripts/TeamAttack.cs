@@ -519,7 +519,7 @@ namespace Prototype
             if (off > alignAngle && !rushed) return;
 
             float diff = BallModel.Difficulty(Pressure(from), off, rushed, false);
-            BallModel.Strike st = BallModel.Resolve(from, shot.aim, BallModel.Base.Shot, 0f, ShootingToday(who), diff);
+            BallModel.Strike st = MatchAttributes.Shoot(who.attrs, Form.Scale(who.transform, mates), from, shot.aim, ShootingToday(who), diff);
             ballBody.Launch(from, st.direction, st.speed);
 
             who.ReleaseBall();
@@ -564,7 +564,7 @@ namespace Prototype
             GoalkeeperAI gk = TheirKeeper();
             float stat = ShootingToday(who);
             float press = Pressure(from);
-            float speed = BallModel.Speed(BallModel.Base.Shot, stat);
+            float speed = MatchAttributes.ShotPace(who.attrs, Form.Scale(who.transform, mates), stat);
             float decel = ballBody != null ? ballBody.rollDecel : 5f;
             float edge = TacticalPitch.GoalHalfW - postInset;
             float bestGoal = -1f;
@@ -599,7 +599,7 @@ namespace Prototype
                 Heading(new Vector3(goal.x + TacticalPitch.GoalHalfW, 0f, goal.z) - from)));
             best.keeper = gk != null ? Flat(gk.transform.position) : goal;
             best.keeping = gk != null ? gk.Params.keeping01 : -1f;     // with his form, as he plays it
-            best.clear = ShotClear(from, best.aim, stat);
+            best.clear = ShotClear(from, best.aim, speed);
             return best;
         }
 
@@ -631,7 +631,7 @@ namespace Prototype
         /// chance (GoalkeeperAI.GoalChance), and counting him here as well would count
         /// him twice.
         /// </summary>
-        float ShotClear(Vector3 from, Vector3 aim, float stat)
+        float ShotClear(Vector3 from, Vector3 aim, float v0)
         {
             Vector3 a = Flat(from);
             Vector3 b = Flat(aim);
@@ -639,7 +639,6 @@ namespace Prototype
             float len = ab.magnitude;
             if (len < 1e-3f) return 1f;
             Vector3 u = ab / len;
-            float v0 = BallModel.Speed(BallModel.Base.Shot, stat);
             float decel = ballBody != null ? ballBody.rollDecel : 5f;
 
             float worst = float.MaxValue;
@@ -1207,6 +1206,7 @@ namespace Prototype
             {
                 requestHolder = BallCarrier;
                 requestAccepted = Random.value < TeamChemistry.AcceptChance(Requester, BallCarrier.transform);
+                MatchSession.Earn(Requester, BallCarrier.transform, requestAccepted ? 1 : -1);
             }
             else if (requestHolder != BallCarrier) DropRequest();
         }

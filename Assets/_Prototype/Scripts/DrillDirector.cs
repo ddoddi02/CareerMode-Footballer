@@ -173,6 +173,7 @@ namespace Prototype
             RollPassing();
             if (GetComponent<MouseLegend>() == null) gameObject.AddComponent<MouseLegend>();
             if (TeamChemistry.Active == null) gameObject.AddComponent<TeamChemistry>();
+            MatchRoster.Apply(this);
             if (MatchHandoff.requested && GetComponent<MatchSession>() == null) gameObject.AddComponent<MatchSession>();
 
             phase = Phase.Setup;
@@ -1052,9 +1053,9 @@ namespace Prototype
         {
             Vector3 pp = player.transform.position;
             power = Mathf.Clamp01(power);
-            var sh = BallModel.Resolve(pp, ShotTarget(), BallModel.Base.Shot, 0f,
-                                       Today(playerShooting),
-                                       BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
+            var sh = MatchAttributes.Shoot(player.attrs, Form.Scale(player.transform, attack != null ? attack.mates : null),
+                                           pp, ShotTarget(), Today(playerShooting),
+                                           BallModel.Difficulty(PressureOf(GapNow()), 0f, firstTime, false));
             lastAimErr = sh.aimErrorM; lastSpeedErr = sh.speedErrorPct;
             lastStrike = firstTime ? "첫 터치 슛" : "슛";
 

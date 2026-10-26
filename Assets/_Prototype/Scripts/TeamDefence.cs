@@ -721,8 +721,8 @@ namespace Prototype
             // A bot standing it up is not fighting for it; one on the move is.
             ti.attackerResisting = carrier.Velocity.sqrMagnitude > 1f;
             ti.tackling01 = d.TacklingToday;
-            // A bot has no strength attribute - an even 0.5 - but his form still counts.
-            ti.strength01 = Form.Stat01(0.5f, carrier.transform, Theirs);
+            // A bot without a sheet has no strength attribute - an even 0.5 - but his form still counts.
+            ti.strength01 = Form.Stat01(carrier.attrs.strength01 >= 0f ? carrier.attrs.strength01 : 0.5f, carrier.transform, Theirs);
             ti.reach = Tackle.Reach;
 
             string why;

@@ -21,6 +21,48 @@ namespace Prototype
         float endedAt;
         GUIStyle big, mid;
 
+        /// <summary>The chemistry the match earned goes to the career side as it happens (MatchHandoff.chemistryDeltas).</summary>
+        public static void Earn(Transform a, Transform b, int delta)
+        {
+            if (!MatchHandoff.requested || a == null || b == null || a == b) return;
+            MatchHandoff.chemistryDeltas.Add(new ChemistryDelta { slotA = SlotOf(a), slotB = SlotOf(b), delta = delta });
+        }
+
+        static string SlotOf(Transform t)
+        {
+            return t.GetComponent<GoalkeeperAI>() != null ? "GK" : Formation.RoleOf(t).ToString();
+        }
+
+        // who had the ball before the man who has it now, if he is one of ours and nobody else touched it between
+        Transform shooter, passer;
+        float passedAt = -99f;
+        int seenGoals;
+
+        /// <summary>A goal of ours: the man who shot and the one who gave it to him get +2 (user: "골 합작").</summary>
+        void WatchCombination()
+        {
+            if (director == null || director.ball == null || director.possession == null) return;
+            Transform now = director.ball.CarrierTransform;
+            if (now != null && now != shooter)
+            {
+                Side? side = director.possession.SideOf(now);
+                if (side == Side.Home)
+                {
+                    bool chain = shooter != null && director.possession.SideOf(shooter) == Side.Home;
+                    passer = chain ? shooter : null;
+                    passedAt = Time.time;
+                }
+                else passer = null;
+                shooter = now;
+            }
+            if (director.HomeGoals > seenGoals)
+            {
+                if (shooter != null && passer != null && Time.time - passedAt < 10f) Earn(shooter, passer, 2);
+                shooter = passer = null;
+            }
+            seenGoals = director.HomeGoals;
+        }
+
         public float Played { get { return played; } }
         public bool Ended { get { return ended; } }
 
@@ -40,6 +82,7 @@ namespace Prototype
             if (ProtoInput.EscapePressed()) SetConfirming(!confirming);
             if (confirming) return;
 
+            WatchCombination();
             played += Time.deltaTime;
             if (played >= matchSeconds) End();
         }

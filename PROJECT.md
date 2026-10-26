@@ -815,6 +815,7 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 | `Scripts/TeamChemistry.cs` | 짝별 친밀도 0~100과 그 효과(요청 수락·패스 난이도·드리블 기울기, §3.17d). `DrillDirector`가 시작할 때 붙인다 |
 | `Scripts/Form.cs` | 폼 — 능력치 × 개인 폼 × (1 + 팀 폼) (`Form.Stat`/`Stat01`, 개인 폼은 `IForm`, §3.17d) |
 | `Scripts/Stadium.cs` | **경기장 꾸미기** — 벤치·테크니컬 에어리어·관중석. 장식뿐, 판정에 안 들어간다 (아래). 스스로 생긴다 |
+| `Scripts/MatchRoster.cs`, `Scripts/MatchAttributes.cs` | 시트(`MatchHandoff.club`/`opponent`)를 몸에 입힌다(`DrillDirector.Start`가 부름)와 몸이 들고 있는 커리어 값(슛 파워·마무리·몸싸움, 속도 폭 `BodySwing`) (§3.28) |
 | `Scripts/MatchSession.cs`, `Scripts/MatchHandoff.cs` | 커리어가 부른 경기: 시계(`matchSeconds` 임시 360초 = 실제 6분)·한 줄 점수판(상대·대회·홈/원정)·Esc 확인 후 끝내기·종료 3초 배너·`returnToCaller`. `MatchHandoff.requested`일 때만 `DrillDirector`가 붙인다 — 아니면 드릴 그대로. 점수는 `DrillDirector.HomeGoals/AwayGoals`(사람 쪽 = 홈 = 우리) |
 | `Scenes/ScanAndTurnDrill.unity` | **경기 씬 — 진실 공급원** (아래) |
 
