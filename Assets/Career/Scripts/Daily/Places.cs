@@ -4,39 +4,35 @@ namespace Career
 {
     /// <summary>
     /// Something to do at a place: how long it takes and what it does to energy. Its other
-    /// effects (stats, chemistry) are not decided.
+    /// effects (stats, chemistry) are not decided. Special events hang on
+    /// it in <see cref="DailyEvents"/>.
     /// </summary>
     public struct PlaceAction
     {
-        /// <summary><see cref="minutes"/> value for "the rest of this part of the day" (sleeping early).</summary>
-        public const int RestOfPart = -1;
-
         public string name;
         /// <summary>How long it takes, in 30-minute steps; one action point a step (<see cref="DayClock"/>).</summary>
         public int minutes;
         /// <summary>Energy it takes (negative) or gives back (positive), in percentage points.</summary>
         public float energy;
-        /// <summary>Extra energy at the next 06:00 recovery (sleeping early).</summary>
+        /// <summary>Extra energy at the next 06:00 recovery, in percentage points (recovery training).</summary>
         public float morningBonus;
+        /// <summary>Goes to bed: the day ends here, and the sleep is counted from the clock now (<see cref="DailyLife"/>).</summary>
+        public bool sleeps;
         /// <summary>One of the chemistry candidates (PROJECT.md 10.9), named the same so it can be wired later.</summary>
         public bool chemistry;
 
-        public PlaceAction(string name, int minutes, float energy, bool chemistry = false, float morningBonus = 0f)
+        public PlaceAction(string name, int minutes, float energy, bool chemistry = false, float morningBonus = 0f, bool sleeps = false)
         {
             this.name = name;
             this.minutes = minutes;
             this.energy = energy;
             this.morningBonus = morningBonus;
             this.chemistry = chemistry;
+            this.sleeps = sleeps;
         }
 
-        public bool TakesRestOfPart { get { return minutes == RestOfPart; } }
-
-        /// <summary>Action points it costs with this many still free: the minutes in points, or all of them.</summary>
-        public int Cost(int pointsFree)
-        {
-            return TakesRestOfPart ? pointsFree : DayClock.Cost(minutes);
-        }
+        /// <summary>Action points it costs: the minutes in points. Going to bed costs none - it ends the day.</summary>
+        public int Cost { get { return sleeps ? 0 : DayClock.Cost(minutes); } }
     }
 
     /// <summary>A place on the daily map. <see cref="mapPos"/> is 0..1 across the map, from the bottom left.</summary>
@@ -59,6 +55,8 @@ namespace Career
         /// <summary>Names the chemistry candidates use (PROJECT.md 10.9).</summary>
         public const string TrainTogether = "같이 훈련", MealTogether = "같이 식사·여가";
         public const string SleepEarly = "일찍 자기";
+        /// <summary>What recovery training adds to the next morning's recovery, %p (user: costs more now, gives more back at 06:00). PROVISIONAL.</summary>
+        public const float RecoveryTrainingBonus = 10f;
 
         /// <summary>
         /// Energy back for every 30 minutes of leisure (user: everything but training is recovery),
@@ -80,13 +78,13 @@ namespace Career
         {
             new Place { id = "training_ground", name = "훈련장", icon = "훈", mapPos = new Vector2(0.12f, 0.78f),
                 color = new Color(0.30f, 0.62f, 0.36f), blurb = "팀 훈련과 개인 훈련을 하는 곳.",
-                actions = new[] { new PlaceAction("개인 훈련", 120, -15f), new PlaceAction(TrainTogether, 120, -15f, true), new PlaceAction("회복 훈련", 60, -3f) } },
+                actions = new[] { new PlaceAction("개인 훈련", 120, -15f), new PlaceAction(TrainTogether, 120, -15f, true), new PlaceAction("회복 훈련", 60, -10f, false, RecoveryTrainingBonus) } },
             new Place { id = "clubhouse", name = "구단 클럽하우스", icon = "구", mapPos = new Vector2(0.24f, 0.58f),
                 color = new Color(0.25f, 0.45f, 0.75f), blurb = "구단 사무실과 라커룸, 의무실.",
                 actions = new[] { new PlaceAction("감독 면담", 60, -2f), new PlaceAction("전술 미팅", 60, -2f), Rest("치료", 60) } },
             new Place { id = "home", name = "자택", icon = "집", mapPos = new Vector2(0.84f, 0.22f),
                 color = new Color(0.80f, 0.62f, 0.35f), blurb = "쉬고 자는 곳.",
-                actions = new[] { Rest("휴식", 60), new PlaceAction(SleepEarly, PlaceAction.RestOfPart, 0f, false, DailyLife.SleepNowBonus), Leisure("집밥", 60) } },
+                actions = new[] { Rest("휴식", 60), new PlaceAction(SleepEarly, 0, 0f, false, 0f, true), Leisure("집밥", 60) } },
             new Place { id = "cafe", name = "카페", icon = "카", mapPos = new Vector2(0.42f, 0.76f),
                 color = new Color(0.62f, 0.42f, 0.30f), blurb = "커피 한 잔, 가벼운 만남.",
                 actions = new[] { Leisure("혼자 커피", 30), Leisure(MealTogether, 90, true) } },
@@ -102,7 +100,7 @@ namespace Career
             new Place { id = "car_showroom", name = "자동차 전시장", icon = "차", mapPos = new Vector2(0.90f, 0.84f),
                 color = new Color(0.35f, 0.65f, 0.75f), blurb = "새 차를 구경하는 곳.",
                 actions = new[] { Leisure("차 구경", 60) } },
-            // the club for a night out, not the team's (user). No drinks: he starts at 15.
+            // the club for a night out, not the team's (user). No drinks. Under 18 he is turned away (DailyEvents).
             new Place { id = "nightclub", name = "나이트클럽", icon = "나", mapPos = new Vector2(0.77f, 0.87f),
                 color = new Color(0.55f, 0.30f, 0.80f), blurb = "음악과 춤이 있는 밤의 클럽.",
                 actions = new[] { Leisure("파티", 120), Leisure("춤", 60) } },

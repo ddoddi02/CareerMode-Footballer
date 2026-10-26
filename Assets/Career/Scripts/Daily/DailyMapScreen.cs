@@ -10,10 +10,10 @@ namespace Career
     /// The daily scene (user, 2026-10-25): a map of the town with the places to go - training
     /// ground, club, home, cafe, restaurant, plaza, department store, car showroom
     /// (<see cref="PlaceCatalog"/>). A place opens a small panel with what can be done there;
-    /// picking an action puts it on today's list (<see cref="DailyLife"/>), which is spent on
-    /// confirm. The list shows the time, points and energy it will leave, and a day's lists can
-    /// be saved as a routine and laid over a later day (PROJECT.md 10.10, 10.11). What actions
-    /// do besides energy, and money, are not built.
+    /// picking an action does it at once (<see cref="DailyLife"/>) - points, time and energy go,
+    /// and a special event may open a result page. The right column logs what was done today and
+    /// what the night's sleep would give. What actions do besides energy, and money, are not
+    /// built (PROJECT.md 10.10 - 10.12).
     ///
     /// uGUI built in code when the scene starts, like the creation screen; the scene holds the
     /// camera, the event system and this component. Placeholder art: coloured blocks for the
@@ -32,9 +32,9 @@ namespace Career
         bool savedPlayer;
 
         Font font;
-        RectTransform panel, partsBox, nightChoice;
-        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightOnLabel;
-        Button confirmButton, routineFillButton, skipButton;
+        RectTransform panel, partsBox, nightChoice, eventPanel;
+        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightNowLabel, nightOnLabel, sleepText, eventTitle, eventBody;
+        Button skipButton;
         RectTransform actionList;
         readonly Dictionary<string, Image> frames = new Dictionary<string, Image>();
         readonly List<KeyValuePair<Button, PlaceAction>> actionButtons = new List<KeyValuePair<Button, PlaceAction>>();
@@ -49,6 +49,8 @@ namespace Career
 
         public Place Selected { get { return selected; } }
         public DailyLife Life { get { return life; } }
+        /// <summary>The result page of an event is up and waits for a click.</summary>
+        public bool EventOpen { get { return eventPanel != null && eventPanel.gameObject.activeSelf; } }
 
         void Start()
         {
@@ -61,7 +63,7 @@ namespace Career
             life = new DailyLife(player, Squad.Provisional(player.displayName), energyAfterMatch, daysToMatch, Mathf.Max(1, day));
             BuildUi();
             Close();
-            statusText.text = "경기 끝 체력 " + Mathf.RoundToInt(energyAfterMatch) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%, 행동력 " + life.clock.points + "P. 장소를 눌러 할 일을 목록에 넣는다.";
+            statusText.text = "경기 끝 체력 " + Mathf.RoundToInt(energyAfterMatch) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%, 행동력 " + life.clock.points + "P. 장소를 눌러 할 일을 고른다.";
             Refresh();
         }
 
@@ -87,7 +89,7 @@ namespace Career
             foreach (PlaceAction a in p.actions)
             {
                 PlaceAction act = a;
-                Button b = Btn(actionList, "", 19, () => AddAction(selected.id, act.name));
+                Button b = Btn(actionList, "", 19, () => DoAction(selected.id, act.name));
                 b.name = "Action_" + act.name;
                 b.gameObject.AddComponent<LayoutElement>().minHeight = 48f;
                 actionButtons.Add(new KeyValuePair<Button, PlaceAction>(b, act));
@@ -104,41 +106,20 @@ namespace Career
             foreach (Image f in frames.Values) f.enabled = false;
         }
 
-        /// <summary>Puts an action on this part's list - nothing is spent until the list is confirmed.</summary>
-        public void AddAction(string placeId, string actionName)
+        /// <summary>Does an action now. A special event opens its page over the map.</summary>
+        public void DoAction(string placeId, string actionName)
         {
-            if (life.Add(placeId, actionName)) statusText.text = "목록에 넣었다: " + PlaceCatalog.Get(placeId).name + " · " + actionName;
-            Refresh();
-        }
-
-        public void RemoveItem(DayPart part, int index)
-        {
-            life.Remove(part, index);
-            Refresh();
-        }
-
-        public void ConfirmList()
-        {
-            statusText.text = life.Confirm();
+            if (EventOpen) return;
+            string msg = life.Do(placeId, actionName);
+            if (msg.Length > 0) statusText.text = msg;
+            if (life.LastEvent != null) ShowEvent(life.LastEvent);
             Refresh();
         }
 
         public void SkipPart()
         {
+            if (EventOpen) return;
             statusText.text = life.SkipPart();
-            Refresh();
-        }
-
-        public void SaveRoutine()
-        {
-            life.SaveRoutine();
-            statusText.text = "오늘 목록을 루틴으로 저장했다.";
-            Refresh();
-        }
-
-        public void FillRoutine()
-        {
-            statusText.text = life.FillFromRoutine() ? "루틴대로 채웠다. 포인트가 모자란 것은 뒤에서부터 뺐다." : "저장된 루틴이 없다.";
             Refresh();
         }
 
@@ -147,6 +128,22 @@ namespace Career
         {
             statusText.text = life.ChooseNight(sleepNow);
             Refresh();
+        }
+
+        /// <summary>Closes the result page; the evening's question, if it was waiting behind it, shows next.</summary>
+        public void CloseEvent()
+        {
+            eventPanel.gameObject.SetActive(false);
+            Refresh();
+        }
+
+        void ShowEvent(EventResult r)
+        {
+            eventTitle.text = r.title;
+            string body = string.Join("\n\n", r.pages.ToArray());
+            if (r.effects.Count > 0) body += "\n\n<color=#f2a09a>" + string.Join("   ", r.effects.ToArray()) + "</color>";
+            eventBody.text = body;
+            eventPanel.gameObject.SetActive(true);
         }
 
         // ------------------------------------------------------------ refresh --
@@ -159,104 +156,67 @@ namespace Career
             clockText.text = c.Time + "  " + DayClock.PartName(c.part);
             energyText.text = "체력 " + Mathf.RoundToInt(life.Energy) + "%";
             pointsText.text = "행동력 " + c.points + "P";
-            skipButton.interactable = !life.AwaitingNightChoice && !life.IsMatchDay;
-            nightChoice.gameObject.SetActive(life.AwaitingNightChoice);
+            skipButton.interactable = !life.AwaitingNightChoice && !life.IsMatchDay && !EventOpen;
+            nightChoice.gameObject.SetActive(life.AwaitingNightChoice && !EventOpen);
             if (life.AwaitingNightChoice)
             {
-                nightText.text = "저녁 행동력을 다 썼다. 지금 체력 " + Mathf.RoundToInt(life.Energy) + "%.";
-                nightOnLabel.text = "새벽으로 넘어간다\n<size=15>새벽 " + DayClock.PointsFor(life.Energy) + "P, 아침 보너스 없음</size>";
+                nightText.text = "저녁 행동력을 다 썼다. 지금 " + life.clock.Time + ", 체력 " + Mathf.RoundToInt(life.Energy) + "%.";
+                nightNowLabel.text = "바로 잔다\n<size=15>수면 " + DailyLife.Hours(life.SleepHoursIfNow) + " → 아침 회복 +" + Mathf.RoundToInt(life.MorningRecovery(life.SleepHoursIfNow)) + "%p</size>";
+                nightOnLabel.text = "새벽으로 넘어간다\n<size=15>새벽 " + DayClock.PointsFor(life.Energy) + "P</size>";
             }
 
             foreach (KeyValuePair<Button, PlaceAction> ab in actionButtons)
             {
-                PlaceAction a = ab.Value;
-                int cost = a.Cost(life.FreePoints);
-                string time = a.TakesRestOfPart ? "남은 시간 전부" : Duration(a.minutes);
-                string energy = a.morningBonus > 0f ? "내일 아침 +" + a.morningBonus + "%" : Signed(a.energy) + "%";
-                ab.Key.GetComponentInChildren<Text>().text = a.name + "  <size=15><color=#b8c0cc>" + time + " · " + cost + "P · 체력 " + energy + "</color></size>"
+                PlaceAction a = life.Effective(selected.id, ab.Value);
+                bool blocked = a.minutes != ab.Value.minutes || a.energy != ab.Value.energy;
+                string detail;
+                if (a.sleeps)
+                {
+                    float h = life.SleepHoursIfNow;
+                    detail = "잠든 시각부터 06:00까지 · 지금 자면 " + DailyLife.Hours(h) + " → 아침 회복 +" + Mathf.RoundToInt(life.MorningRecovery(h)) + "%p"
+                             + (life.CanDo(selected.id, a) ? "" : " (저녁·새벽에만)");
+                }
+                else
+                {
+                    float after = Mathf.Clamp(life.Energy + a.energy, 0f, 100f);
+                    detail = Duration(a.minutes) + " · " + a.Cost + "P · 체력 " + Signed(a.energy) + "% → 끝나면 " + Mathf.RoundToInt(after) + "%"
+                             + (a.morningBonus > 0f ? " · 내일 아침 +" + a.morningBonus + "%p" : "");
+                }
+                ab.Key.GetComponentInChildren<Text>().text = a.name + "  <size=15><color=#b8c0cc>" + detail + "</color></size>"
+                    + (blocked ? "  <size=14><color=#f2a09a>입장 불가</color></size>" : "")
                     + (a.chemistry ? "  <size=14><color=#9fd7a8>친밀도</color></size>" : "");
-                ab.Key.interactable = life.CanAdd(a);
+                ab.Key.interactable = !EventOpen && life.CanDo(selected.id, ab.Value);
             }
-            RebuildPlan();
+            RebuildToday();
         }
 
-        /// <summary>Today's four lists: done ones dim, this part's with its forecast, later ones with the points their energy will give.</summary>
-        void RebuildPlan()
+        /// <summary>Today's four parts with what was done in each, and what sleeping now would give.</summary>
+        void RebuildToday()
         {
             ClearChildren(partsBox);
-            PartForecast[] fc = life.ForecastDay();
             int now = (int)life.clock.part;
-            bool pending = false;
             for (int p = 0; p < 4; p++)
             {
                 DayPart part = (DayPart)p;
-                List<PlanItem> items = life.today[p].items;
                 string head = DayClock.PartName(part) + " " + DayClock.StartHour(part).ToString("00") + "~" + (DayClock.StartHour(part) + 6).ToString("00");
                 Color hc = Dim;
                 if (life.IsMatchDay) head += "  ·  경기 날";
-                else if (p > now && fc[p].skipped) head += "  ·  건너뜀 (저녁 뒤 바로 잔다)";
                 else if (p < now) head += "  ·  끝";
-                else if (p == now) { head = "▶ " + head + "  ·  " + fc[p].points + "P"; hc = Gold; }
-                else head += "  ·  예상 " + fc[p].points + "P";
+                else if (p == now) { head = "▶ " + head + "  ·  " + life.clock.points + "P"; hc = Gold; }
                 Text h = Label(partsBox, head, 18, hc, TextAnchor.MiddleLeft);
                 h.gameObject.AddComponent<LayoutElement>().minHeight = 28f;
-
-                for (int i = 0; i < items.Count; i++)
+                foreach (string line in life.log[p])
                 {
-                    PlanItem it = items[i];
-                    PlaceAction a;
-                    PlaceCatalog.TryAction(it.place, it.action, out a);
-                    string line;
-                    Color col = Color.white;
-                    if (it.done) { line = "✓ " + it.action; col = Dim; }
-                    else
-                    {
-                        bool skipped = p > now && fc[p].skipped;
-                        bool fits = !skipped && p >= now && fc[p].fits != null && i < fc[p].fits.Length && fc[p].fits[i];
-                        line = it.action + "  " + (skipped ? "건너뜀" : fits ? fc[p].costs[i] + "P · 체력 " + Signed(a.energy) + "%" : "포인트 부족");
-                        if (skipped) col = Dim;
-                        else if (!fits) col = Bad;
-                        if (p == now) pending = true;
-                    }
-                    ItemRow(line, col, it.done ? null : (UnityEngine.Events.UnityAction)(() => RemoveItem(part, IndexOf(part, it))));
-                }
-                if (part == DayPart.Evening && p >= now && life.SleepsAfterEvening.HasValue && !life.IsMatchDay)
-                {
-                    Text e = Label(partsBox, "  저녁이 끝나면: " + (life.SleepsAfterEvening.Value ? "바로 잔다" : "새벽으로 넘어간다") + " (루틴)", 16, Dim, TextAnchor.MiddleLeft);
-                    e.gameObject.AddComponent<LayoutElement>().minHeight = 24f;
-                }
-                if (p == now && !life.IsMatchDay && !life.AwaitingNightChoice)
-                {
-                    int end = DayClock.StartHour(part) * 60 + fc[p].endMinutes;
-                    Text f = Label(partsBox, "끝나면 " + (end / 60 % 24).ToString("00") + ":" + (end % 60).ToString("00") + " · 체력 "
-                                   + Mathf.RoundToInt(fc[p].energyAfter) + "% · 남는 " + fc[p].pointsLeft + "P", 16, Gold, TextAnchor.MiddleLeft);
-                    f.name = "Forecast";
-                    f.gameObject.AddComponent<LayoutElement>().minHeight = 24f;
+                    Text t = Label(partsBox, "✓ " + line, 17, Dim, TextAnchor.MiddleLeft);
+                    t.gameObject.AddComponent<LayoutElement>().minHeight = 26f;
                 }
             }
-            confirmButton.interactable = pending && !life.AwaitingNightChoice;
-            routineFillButton.interactable = life.routine != null && !life.IsMatchDay && !life.AwaitingNightChoice;
-        }
-
-        int IndexOf(DayPart part, PlanItem it) { return life.today[(int)part].items.IndexOf(it); }
-
-        void ItemRow(string text, Color col, UnityEngine.Events.UnityAction remove)
-        {
-            var row = new GameObject("Item", typeof(RectTransform)).GetComponent<RectTransform>();
-            row.SetParent(partsBox, false);
-            row.gameObject.AddComponent<LayoutElement>().minHeight = 32f;
-            var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 6f; h.padding = new RectOffset(16, 0, 0, 0);
-            // no forced height: a forced row reports itself flexible and soaks up the panel's spare space
-            h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false;
-            Text t = Label(row, text, 17, col, TextAnchor.MiddleLeft);
-            t.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            if (remove == null) return;
-            Button x = Btn(row, "×", 18, remove);
-            x.name = "Remove";
-            LayoutElement xl = x.gameObject.AddComponent<LayoutElement>();
-            xl.minWidth = 36f;
-            xl.minHeight = 28f;
+            if (life.IsMatchDay) { sleepText.text = ""; return; }
+            float hours = life.SleepHoursIfNow;
+            sleepText.text = "지금 자면  " + DailyLife.Hours(hours) + " · 수면 ×" + DailyLife.SleepMultiplier(hours).ToString("0.00")
+                             + "\n아침 회복 +" + Mathf.RoundToInt(life.MorningRecovery(hours)) + "%p"
+                             + (life.RecoveryBonus > 0f ? "  (회복 훈련 +" + life.RecoveryBonus + "%p 포함)" : "")
+                             + "\n지난밤 수면 " + DailyLife.Hours(life.LastSleepHours);
         }
 
         static string Duration(int minutes)
@@ -317,13 +277,13 @@ namespace Career
             Zone(map, "주거 지구", new Vector2(0.675f, 0.02f), new Vector2(0.99f, 0.42f), new Color(0.19f, 0.16f, 0.11f));
             foreach (Place p in PlaceCatalog.All) Marker(map, p);
 
-            // today's lists
+            // today: what was done, and the sleep
             RectTransform plan = Box(root, "Plan", new Vector2(1f, 0f), Vector2.one, new Vector2(-520f, 56f), new Vector2(-20f, -110f), Bar);
             var pv = plan.gameObject.AddComponent<VerticalLayoutGroup>();
             pv.padding = new RectOffset(20, 20, 16, 16);
             pv.spacing = 6f;
             pv.childControlWidth = true; pv.childControlHeight = true; pv.childForceExpandHeight = false;
-            Label(plan, "오늘 일정", 26, Color.white, TextAnchor.MiddleLeft).gameObject.AddComponent<LayoutElement>().minHeight = 36f;
+            Label(plan, "오늘", 26, Color.white, TextAnchor.MiddleLeft).gameObject.AddComponent<LayoutElement>().minHeight = 36f;
             partsBox = new GameObject("Parts", typeof(RectTransform)).GetComponent<RectTransform>();
             partsBox.SetParent(plan, false);
             var bv = partsBox.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -332,21 +292,9 @@ namespace Career
             var gap = new GameObject("Spacer", typeof(RectTransform)).AddComponent<LayoutElement>();
             gap.transform.SetParent(plan, false);
             gap.flexibleHeight = 1f;
-            confirmButton = Btn(plan, "확정 — 목록대로 하기", 22, ConfirmList);
-            confirmButton.name = "Confirm";
-            confirmButton.gameObject.AddComponent<LayoutElement>().minHeight = 52f;
-            var routineRow = new GameObject("RoutineRow", typeof(RectTransform)).GetComponent<RectTransform>();
-            routineRow.SetParent(plan, false);
-            routineRow.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
-            var rh = routineRow.gameObject.AddComponent<HorizontalLayoutGroup>();
-            rh.spacing = 8f;
-            rh.childControlWidth = true; rh.childControlHeight = true; rh.childForceExpandWidth = true; rh.childForceExpandHeight = false;
-            Button save = Btn(routineRow, "루틴 저장", 19, SaveRoutine);
-            save.name = "SaveRoutine";
-            save.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
-            routineFillButton = Btn(routineRow, "루틴대로", 19, FillRoutine);
-            routineFillButton.name = "FillRoutine";
-            routineFillButton.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+            sleepText = Label(plan, "", 18, Gold, TextAnchor.UpperLeft);
+            sleepText.name = "Sleep";
+            sleepText.gameObject.AddComponent<LayoutElement>().minHeight = 84f;
 
             // the panel a place opens, inside the map
             panel = Box(map, "PlacePanel", new Vector2(1f, 0f), Vector2.one, new Vector2(-500f, 16f), new Vector2(-16f, -16f), Bar);
@@ -358,7 +306,7 @@ namespace Career
             panelName.gameObject.AddComponent<LayoutElement>().minHeight = 40f;
             panelBlurb = Label(panel, "", 18, Dim, TextAnchor.UpperLeft);
             panelBlurb.gameObject.AddComponent<LayoutElement>().minHeight = 30f;
-            Label(panel, "할 수 있는 일 — 누르면 목록에 들어간다", 18, Gold, TextAnchor.MiddleLeft).gameObject.AddComponent<LayoutElement>().minHeight = 30f;
+            Label(panel, "할 수 있는 일 — 누르면 바로 한다", 18, Gold, TextAnchor.MiddleLeft).gameObject.AddComponent<LayoutElement>().minHeight = 30f;
             actionList = new GameObject("Actions", typeof(RectTransform)).GetComponent<RectTransform>();
             actionList.SetParent(panel, false);
             var av = actionList.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -377,13 +325,31 @@ namespace Career
             RectTransform card = Box(nightChoice, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-380f, -150f), new Vector2(380f, 150f), Bar);
             Label(card, "저녁이 끝났다", 30, Gold, TextAnchor.MiddleCenter, new Vector2(0f, 0.72f), Vector2.one, Vector2.zero, new Vector2(0f, -10f));
             nightText = Label(card, "", 20, Color.white, TextAnchor.MiddleCenter, new Vector2(0f, 0.52f), new Vector2(1f, 0.72f), Vector2.zero, Vector2.zero);
-            Button now = Btn(card, "바로 잔다\n<size=15>다음 날 06:00, 아침 회복 +" + DailyLife.SleepNowBonus + "%p</size>", 22, () => ChooseNight(true));
+            Button now = Btn(card, "", 22, () => ChooseNight(true));
             now.name = "SleepNow";
+            nightNowLabel = now.GetComponentInChildren<Text>();
             Anchor(now, new Vector2(0.04f, 0.08f), new Vector2(0.48f, 0.46f));
             Button on = Btn(card, "", 22, () => ChooseNight(false));
             on.name = "IntoNight";
             Anchor(on, new Vector2(0.52f, 0.08f), new Vector2(0.96f, 0.46f));
             nightOnLabel = on.GetComponentInChildren<Text>();
+
+            // the result of an event (user: one page of visual-novel text): a window along the bottom
+            eventPanel = Box(root, "EventPanel", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.45f));
+            RectTransform win = Box(eventPanel, "Window", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-760f, 60f), new Vector2(760f, 400f), new Color(0.07f, 0.09f, 0.12f, 0.96f));
+            RectTransform tag = Box(win, "NameTag", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -22f), new Vector2(284f, 22f), new Color(0.25f, 0.45f, 0.75f));
+            eventTitle = Label(tag, "", 24, Color.white, TextAnchor.MiddleCenter);
+            Stretch(eventTitle.rectTransform, Vector2.zero, Vector2.zero);
+            eventBody = Label(win, "", 24, Color.white, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(40f, 70f), new Vector2(-40f, -40f));
+            eventBody.name = "EventBody";
+            Button next = Btn(win, "계속 ▶", 22, CloseEvent);
+            next.name = "EventNext";
+            RectTransform nrt = next.GetComponent<RectTransform>();
+            nrt.anchorMin = nrt.anchorMax = new Vector2(1f, 0f);
+            nrt.pivot = new Vector2(1f, 0f);
+            nrt.sizeDelta = new Vector2(160f, 48f);
+            nrt.anchoredPosition = new Vector2(-24f, 16f);
+            eventPanel.gameObject.SetActive(false);
         }
 
         string PlayerLine()

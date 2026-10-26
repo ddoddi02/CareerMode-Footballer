@@ -31,6 +31,7 @@ namespace Career
         public const float MuscleKgMin = 20f, MuscleKgMax = 65f;
         public const float FrameKgMin = 25f, FrameKgMax = 40f;
         public const float FatigueMin = 0f, FatigueMax = 100f;  // gauge, 0 = fully rested
+        public const int FameMin = 0, FameMax = 100;
 
         [Tooltip("Name, shown on screens only.")]
         public string displayName = "신인";
@@ -97,6 +98,9 @@ namespace Career
 
         [Tooltip("Personal form, 0.6..1.2 (60%..120%): how much of his attributes he gets out in a match, on top of team form (FormModel.Apply). What moves it is not decided.")]
         [Range(FormModel.PersonalMin, FormModel.PersonalMax)] public float personalForm = FormModel.PersonalNeutral;
+
+        [Tooltip("Fame (명성), 0..100: how likely the press is to catch him out (DailyEvents). PROVISIONAL - nothing raises it yet.")]
+        [Range(FameMin, FameMax)] public int fame = FameMin;
 
         [Tooltip("Traits showing right now. Set only by BodyModel.NextTraits - it has the hysteresis.")]
         public BodyTrait traits = BodyTrait.None;

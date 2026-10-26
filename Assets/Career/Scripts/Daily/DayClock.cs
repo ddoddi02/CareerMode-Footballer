@@ -77,6 +77,16 @@ namespace Career
             }
         }
 
+        /// <summary>Minutes from the clock now to 06:00 the next morning - the sleep if he goes to bed now.</summary>
+        public int MinutesToMorning
+        {
+            get
+            {
+                int m = StartHour(part) * 60 + minutes;
+                return part == DayPart.Night ? 6 * 60 - m : 24 * 60 + 6 * 60 - m;
+            }
+        }
+
         public void Begin(int perPart)
         {
             minutes = 0;
@@ -107,7 +117,7 @@ namespace Career
             return newDay;
         }
 
-        /// <summary>Straight to 06:00 the next morning, from whatever part - going to bed after the evening skips the night.</summary>
+        /// <summary>Straight to 06:00 the next morning, from whatever part - going to bed skips what is left of the night.</summary>
         public void NextDay()
         {
             day++;

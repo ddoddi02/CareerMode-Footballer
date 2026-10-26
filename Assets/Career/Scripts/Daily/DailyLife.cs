@@ -4,77 +4,53 @@ using UnityEngine;
 
 namespace Career
 {
-    /// <summary>One thing on the day's list: an action at a place. Done once its part was confirmed.</summary>
-    [Serializable]
-    public class PlanItem
-    {
-        public string place, action;
-        public bool done;
-    }
-
-    /// <summary>The list for one part of the day.</summary>
-    [Serializable]
-    public class PartPlan
-    {
-        public List<PlanItem> items = new List<PlanItem>();
-    }
-
-    /// <summary>What a part of the day comes to if its list is played as it stands.</summary>
-    public struct PartForecast
-    {
-        public int points;          // points the part has (left, for the part now)
-        public int pointsLeft;      // after the items that fit
-        public int endMinutes;      // minutes into the part when they are done
-        public float energyAfter;   // energy when they are done
-        public int[] costs;         // per item; done items 0
-        public bool[] fits;         // per item; false = cut for want of points
-        public bool skipped;        // the night, when he goes to bed after the evening
-    }
-
     /// <summary>
     /// Daily life between two matches (user, 2026-10-25): from the day after a match to the
     /// day before the next. Energy is what is left of the player, 0..100%: each part of the day
     /// gives 12 x energy points, rounded up, so a hard morning leaves a short afternoon. Every
     /// morning at 06:00 some of it comes back.
     ///
-    /// Actions go on a list first, not straight through: the list for the part may use as
-    /// many points as it has or fewer, shows the energy it will leave, and is spent in order
-    /// on confirm. A day's lists can be saved as a routine and laid over a later day, cut from
-    /// the back where the points do not reach.
+    /// An action is done the moment it is picked (user, 2026-10-26; the list and routine were
+    /// dropped): its points, time and energy go at once, and a special event may follow
+    /// (<see cref="DailyEvents"/>, <see cref="LastEvent"/>).
     ///
-    /// When the evening's points run out, he either goes to bed - the night is skipped, and
-    /// the morning gives back a little more - or goes on into the night (user). The routine
-    /// keeps that choice too. Numbers are PROVISIONAL (PROJECT.md 10.11).
+    /// The morning recovery is the base x stamina x perks x how long he slept, plus what
+    /// recovery training added. Sleep runs from when he goes to bed to 06:00. When the evening's
+    /// points run out he either goes to bed - the night is skipped - or goes on into the night
+    /// (user); at the end of the night's points he is in bed as well. Numbers are PROVISIONAL
+    /// (PROJECT.md 10.11).
     /// </summary>
     public class DailyLife
     {
-        /// <summary>Energy won back at 06:00, before stamina and perks.</summary>
+        /// <summary>Energy won back at 06:00, before stamina, perks and sleep.</summary>
         public const float BaseRecovery = 40f;
         /// <summary>Stamina scales recovery: x0.7 at stamina 1, x1.3 at 100.</summary>
         public const float RecoveryAtLowStamina = 0.7f, RecoveryAtHighStamina = 1.3f;
         /// <summary>What the growth path (육성 방향) will do to recovery. There is no growth path yet.</summary>
         public const float GrowthPathRecovery = 1f;
-        /// <summary>Extra recovery the next morning for going to bed early - straight after the evening, or sleeping early at home.</summary>
-        public const float SleepNowBonus = 10f;
+        /// <summary>Sleep scales recovery: x0.4 + x0.075 an hour, between x0.4 and x1.1 - 8 hours is x1, 6 hours x0.85.</summary>
+        public const float SleepBase = 0.4f, SleepPerHour = 0.075f, SleepMin = 0.4f, SleepMax = 1.1f;
+        /// <summary>Sleep the first morning counts, before there was a night to count: 8 hours, x1.</summary>
+        public const float FirstNightHours = 8f;
 
         public readonly PlayerProfile player;
         public readonly Squad squad;
         public readonly DayClock clock = new DayClock();
-        public readonly PartPlan[] today = NewDay();
-        /// <summary>The saved routine, a list per part; null until one is saved.</summary>
-        public PartPlan[] routine;
-        /// <summary>What the routine does when the evening ends: true = bed, false = on into the night, null = ask.</summary>
-        public bool? routineSleepsAfterEvening;
+        /// <summary>The day's log, a line per thing done, per part.</summary>
+        public readonly List<string>[] log = NewLog();
         /// <summary>The day the next match is played. Daily life ends the night before.</summary>
         public readonly int matchDay;
+        /// <summary>0..1 for the special events' chances; swapped for a fixed value in tests.</summary>
+        public Func<float> roll = () => UnityEngine.Random.value;
 
         /// <summary>The evening is over and he has not said yet whether he goes to bed (<see cref="ChooseNight"/>).</summary>
         public bool AwaitingNightChoice { get; private set; }
-        /// <summary>Today's choice once made, or the one a routine fill planned.</summary>
-        public bool? SleepsAfterEvening { get; private set; }
+        /// <summary>What the last action brought, for the result panel; null if it was an ordinary one.</summary>
+        public EventResult LastEvent { get; private set; }
+        /// <summary>Hours slept before the morning he woke to.</summary>
+        public float LastSleepHours { get; private set; }
 
-        float morningBonus;     // from going to bed early, at the next 06:00
-        bool sleptThisPart;     // this part's list ended in sleeping early
+        float recoveryBonus;    // from recovery training, at the next 06:00
 
         /// <summary>
         /// Starts the morning after a match: energy as the match left it, then the first
@@ -88,7 +64,8 @@ namespace Career
             clock.day = firstDay;
             clock.part = DayPart.Morning;
             matchDay = firstDay + daysToMatch;
-            Recover();
+            LastSleepHours = FirstNightHours;
+            Recover(FirstNightHours);
             clock.Begin(DayClock.PointsFor(Energy));
         }
 
@@ -101,13 +78,17 @@ namespace Career
 
         public bool IsMatchDay { get { return clock.day >= matchDay; } }
         public int DaysToMatch { get { return matchDay - clock.day; } }
-        public PartPlan Current { get { return today[(int)clock.part]; } }
 
-        /// <summary>
-        /// Energy back at 06:00 (user: from stamina and traits, and the growth path):
-        /// 40 x lerp(0.7, 1.3, stamina) x perks x growth path. Sleeping early adds its bonus on top.
-        /// </summary>
-        public float MorningRecovery
+        // ------------------------------------------------------------ recovery --
+
+        /// <summary>x0.4 + x0.075 an hour, kept between x0.4 and x1.1 (user's provisional).</summary>
+        public static float SleepMultiplier(float hours)
+        {
+            return Mathf.Clamp(SleepBase + SleepPerHour * hours, SleepMin, SleepMax);
+        }
+
+        /// <summary>Recovery before sleep and training: 40 x lerp(0.7, 1.3, stamina) x perks x growth path.</summary>
+        public float BaseMorningRecovery
         {
             get
             {
@@ -117,178 +98,130 @@ namespace Career
             }
         }
 
-        // ------------------------------------------------------------ the list --
+        /// <summary>What recovery training has added to tomorrow's morning so far, %p.</summary>
+        public float RecoveryBonus { get { return recoveryBonus; } }
 
-        /// <summary>Points the current list does not use yet.</summary>
-        public int FreePoints { get { return Forecast((int)clock.part, clock.points, Energy).pointsLeft; } }
+        /// <summary>Energy back at 06:00 after this many hours of sleep: base x sleep + recovery training.</summary>
+        public float MorningRecovery(float sleepHours)
+        {
+            return BaseMorningRecovery * SleepMultiplier(sleepHours) + recoveryBonus;
+        }
 
-        public bool CanAdd(PlaceAction a)
+        /// <summary>Hours he would sleep if he went to bed on this clock.</summary>
+        public float SleepHoursIfNow { get { return clock.MinutesToMorning / 60f; } }
+
+        // ------------------------------------------------------------ actions --
+
+        /// <summary>
+        /// The action as it will go for this player: the same, or - if an event blocks it - a short,
+        /// empty visit.
+        /// </summary>
+        public PlaceAction Effective(string place, PlaceAction a)
+        {
+            return DailyEvents.IsBlocked(player, place, a.name) ? new PlaceAction(a.name, DailyEvents.BlockedMinutes, 0f) : a;
+        }
+
+        /// <summary>Whether it can be done now: not on a match day or in the question at the evening's end, enough points, and bed only at evening or night.</summary>
+        public bool CanDo(string place, PlaceAction a)
         {
             if (IsMatchDay || AwaitingNightChoice) return false;
-            int free = FreePoints;
-            int cost = a.Cost(free);
-            return cost > 0 && cost <= free;
+            if (a.sleeps) return clock.part == DayPart.Evening || clock.part == DayPart.Night;
+            int cost = Effective(place, a).Cost;
+            return cost > 0 && cost <= clock.points;
         }
 
-        /// <summary>Puts an action at the end of this part's list, if the points left reach.</summary>
-        public bool Add(string place, string action)
+        /// <summary>
+        /// Does an action now: points, time, energy, then its special events. Returns what
+        /// happened, for the status line; an event's page is in <see cref="LastEvent"/>.
+        /// </summary>
+        public string Do(string place, string action)
         {
+            LastEvent = null;
             PlaceAction a;
-            if (!PlaceCatalog.TryAction(place, action, out a) || !CanAdd(a)) return false;
-            Current.items.Add(new PlanItem { place = place, action = action });
-            return true;
-        }
+            if (!PlaceCatalog.TryAction(place, action, out a) || !CanDo(place, a)) return "";
+            if (a.sleeps) return "일찍 잤다.  " + GoToBed();
 
-        /// <summary>Takes an item off a list. Done items stay.</summary>
-        public bool Remove(DayPart part, int index)
-        {
-            List<PlanItem> items = today[(int)part].items;
-            if (index < 0 || index >= items.Count || items[index].done) return false;
-            items.RemoveAt(index);
-            return true;
-        }
+            PlaceAction eff = Effective(place, a);
+            int part = (int)clock.part;
+            clock.Spend(eff.Cost);
+            Energy += eff.energy;
+            recoveryBonus += eff.morningBonus;
 
-        /// <summary>
-        /// Plays a list on paper: <paramref name="points"/> and <paramref name="energy"/> at its
-        /// start. Items past the points do not fit - those a routine fill cuts.
-        /// </summary>
-        public PartForecast Forecast(int part, int points, float energy)
-        {
-            List<PlanItem> items = today[part].items;
-            var f = new PartForecast { points = points, costs = new int[items.Count], fits = new bool[items.Count] };
-            int free = points, minutes = part == (int)clock.part ? clock.minutes : 0;
-            for (int i = 0; i < items.Count; i++)
+            EventResult ev = DailyEvents.Resolve(player, place, action, roll);
+            if (ev != null)
             {
-                PlaceAction a;
-                if (items[i].done || !PlaceCatalog.TryAction(items[i].place, items[i].action, out a)) { f.fits[i] = true; continue; }
-                int cost = a.Cost(free);
-                f.costs[i] = cost;
-                f.fits[i] = cost > 0 && cost <= free;
-                if (!f.fits[i]) continue;
-                free -= cost;
-                minutes += cost * DayClock.MinutesPerPoint;
-                energy = Mathf.Clamp(energy + a.energy, 0f, 100f);
+                Apply(ev);
+                LastEvent = ev;
             }
-            f.pointsLeft = free;
-            f.endMinutes = Mathf.Min(DayClock.PartMinutes, minutes);
-            f.energyAfter = energy;
-            return f;
-        }
-
-        /// <summary>The rest of today, part by part: the one now, then each later one with the points its forecast energy gives.</summary>
-        public PartForecast[] ForecastDay()
-        {
-            var r = new PartForecast[4];
-            float e = Energy;
-            int points = clock.points;
-            for (int p = (int)clock.part; p < 4; p++)
-            {
-                if (p == (int)DayPart.Night && clock.part != DayPart.Night && SleepsAfterEvening == true)
-                {
-                    r[p] = new PartForecast { skipped = true, costs = new int[0], fits = new bool[0], energyAfter = e };
-                    break;
-                }
-                r[p] = Forecast(p, points, e);
-                e = r[p].energyAfter;
-                points = DayClock.PointsFor(e);
-            }
-            return r;
-        }
-
-        /// <summary>
-        /// Spends this part's list in order: time, points, energy. A part with no points left
-        /// gives way to the next. Returns what happened, for the status line.
-        /// </summary>
-        public string Confirm()
-        {
-            if (AwaitingNightChoice) return "먼저 잘지, 새벽으로 넘어갈지 고른다.";
-            var done = new List<string>();
-            foreach (PlanItem it in Current.items)
-            {
-                if (it.done) continue;
-                PlaceAction a;
-                if (!PlaceCatalog.TryAction(it.place, it.action, out a)) continue;
-                int cost = a.Cost(clock.points);
-                if (!clock.Spend(cost)) break;
-                Energy += a.energy;
-                morningBonus += a.morningBonus;
-                if (a.TakesRestOfPart) sleptThisPart = true;
-                it.done = true;
-                done.Add(it.action);
-            }
-            Current.items.RemoveAll(it => !it.done);     // what did not fit goes
-            if (done.Count == 0) return "할 일이 없다.";
-            string msg = string.Join(", ", done.ToArray()) + " → " + clock.Time + ", 체력 " + Mathf.RoundToInt(Energy) + "%.";
+            string line = PlaceCatalog.Get(place).name + " · " + action + (ev != null && ev.blocked ? " (입장 불가)" : "");
+            log[part].Add(line + " → " + clock.Time);
+            string msg = line + " → " + clock.Time + ", 체력 " + Mathf.RoundToInt(Energy) + "%.";
             if (clock.points == 0) msg += "  " + Advance();
             return msg;
+        }
+
+        void Apply(EventResult ev)
+        {
+            if (ev.mental == 0) return;
+            int before = player.mentalStrength;
+            player.mentalStrength = Mathf.Clamp(before + ev.mental, StatScale.Min, StatScale.Max);
+            ev.effects.Add("정신력 " + (ev.mental > 0 ? "+" : "−") + Mathf.Abs(ev.mental) + " (" + before + " → " + player.mentalStrength + ")");
         }
 
         /// <summary>Leaves whatever points are left and starts the next part.</summary>
         public string SkipPart()
         {
             if (AwaitingNightChoice || IsMatchDay) return "";
+            LastEvent = null;
             int left = clock.points;
-            today[(int)clock.part].items.RemoveAll(it => !it.done);
             return "남은 " + left + "P를 버렸다.  " + Advance();
         }
 
         string Advance()
         {
-            if (clock.part == DayPart.Evening) return EveningEnds();
-            if (clock.part == DayPart.Night) return NewDayStarts("");
+            if (clock.part == DayPart.Evening)
+            {
+                AwaitingNightChoice = true;
+                return "저녁이 끝났다. 바로 잘까, 새벽으로 넘어갈까?";
+            }
+            if (clock.part == DayPart.Night) return GoToBed();     // the night's points are spent: bed
             return StartNextPart();
         }
 
         string StartNextPart()
         {
             clock.NextPart(DayClock.PointsFor(Energy));
-            sleptThisPart = false;
-            Trim();
             return DayClock.PartName(clock.part) + " " + clock.Time + " 시작: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
         }
 
-        /// <summary>The evening is spent: to bed, or on into the night - asked, unless already settled.</summary>
-        string EveningEnds()
-        {
-            if (sleptThisPart)          // he slept early at home: that is bed already, its bonus counted
-            {
-                SleepsAfterEvening = true;
-                return NewDayStarts("일찍 잤다.  ");
-            }
-            if (SleepsAfterEvening.HasValue)    // the routine says
-                return (SleepsAfterEvening.Value ? "루틴대로 바로 잤다.  " : "루틴대로 새벽으로 넘어갔다.  ") + Night(SleepsAfterEvening.Value);
-            AwaitingNightChoice = true;
-            return "저녁이 끝났다. 바로 잘까, 새벽으로 넘어갈까?";
-        }
-
         /// <summary>
-        /// The answer at the end of the evening (user): straight to bed - the night is skipped and
-        /// tomorrow's recovery gets <see cref="SleepNowBonus"/> - or on into the night with no bonus.
+        /// The answer at the end of the evening (user): straight to bed - the night is skipped - or
+        /// on into the night. Sleep is counted from the clock to 06:00 either way.
         /// </summary>
         public string ChooseNight(bool sleepNow)
         {
             if (!AwaitingNightChoice) return "";
             AwaitingNightChoice = false;
-            SleepsAfterEvening = sleepNow;
-            return (sleepNow ? "바로 잤다.  " : "새벽으로 넘어갔다.  ") + Night(sleepNow);
+            return sleepNow ? "바로 잤다.  " + GoToBed() : "새벽으로 넘어갔다.  " + StartNextPart();
         }
 
-        string Night(bool sleepNow)
+        /// <summary>He goes to bed on this clock: the sleep is what is left to 06:00, and the next day begins.</summary>
+        string GoToBed()
         {
-            if (!sleepNow) return StartNextPart();
-            morningBonus += SleepNowBonus;
-            return NewDayStarts("");
+            float hours = SleepHoursIfNow;
+            return NewDayStarts(hours);
         }
 
-        /// <summary>The night is over, or skipped: a new day, energy comes back, the squad's day ends.</summary>
-        string NewDayStarts(string lead)
+        /// <summary>The night is over: a new day, energy comes back by the sleep, the squad's day ends.</summary>
+        string NewDayStarts(float sleepHours)
         {
             squad.EndDay();
             clock.NextDay();
-            Recover();
-            for (int i = 0; i < 4; i++) today[i] = new PartPlan();
-            SleepsAfterEvening = null;
-            sleptThisPart = false;
+            LastSleepHours = sleepHours;
+            float back = MorningRecovery(sleepHours);
+            Recover(sleepHours);
+            for (int i = 0; i < 4; i++) log[i].Clear();
+            string lead = "수면 " + Hours(sleepHours) + " → 회복 +" + Mathf.RoundToInt(back) + "%p.  ";
             if (IsMatchDay)
             {
                 clock.Begin(0);
@@ -298,62 +231,23 @@ namespace Career
             return lead + clock.day + "일째 아침: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
         }
 
-        void Recover()
+        void Recover(float sleepHours)
         {
-            Energy += MorningRecovery + morningBonus;
-            morningBonus = 0f;
+            Energy += MorningRecovery(sleepHours);
+            recoveryBonus = 0f;
         }
 
-        /// <summary>Cuts this part's list from the back until it fits the points.</summary>
-        void Trim()
+        /// <summary>"8시간", "6시간 30분".</summary>
+        public static string Hours(float hours)
         {
-            List<PlanItem> items = Current.items;
-            while (true)
-            {
-                PartForecast f = Forecast((int)clock.part, clock.points, Energy);
-                int last = Array.LastIndexOf(f.fits, false);
-                if (last < 0) return;
-                for (int i = items.Count - 1; i >= 0; i--)
-                    if (!items[i].done) { items.RemoveAt(i); break; }
-            }
+            int m = Mathf.RoundToInt(hours * 60f), h = m / 60;
+            if (m % 60 == 0) return h + "시간";
+            return h == 0 ? m + "분" : h + "시간 " + (m % 60) + "분";
         }
 
-        // ------------------------------------------------------------ routine --
-
-        /// <summary>Saves today's lists, done and still to do, as the routine - and the end-of-evening choice, if made.</summary>
-        public void SaveRoutine()
+        static List<string>[] NewLog()
         {
-            routine = NewDay();
-            for (int p = 0; p < 4; p++)
-                foreach (PlanItem it in today[p].items)
-                    routine[p].items.Add(new PlanItem { place = it.place, action = it.action });
-            routineSleepsAfterEvening = SleepsAfterEvening;
-        }
-
-        /// <summary>
-        /// Lays the routine over the rest of today: this part's list goes on from where it has got
-        /// to, later parts take the routine's list. This part is cut to its points from the back;
-        /// each later one is cut when it starts. Returns false with no routine.
-        /// </summary>
-        public bool FillFromRoutine()
-        {
-            if (routine == null || IsMatchDay || AwaitingNightChoice) return false;
-            if (clock.part != DayPart.Night) SleepsAfterEvening = routineSleepsAfterEvening;
-            for (int p = (int)clock.part; p < 4; p++)
-            {
-                List<PlanItem> items = today[p].items;
-                items.RemoveAll(it => !it.done);
-                int skip = items.Count;     // what is done here already, the routine's first ones
-                for (int i = skip; i < routine[p].items.Count; i++)
-                    items.Add(new PlanItem { place = routine[p].items[i].place, action = routine[p].items[i].action });
-            }
-            Trim();
-            return true;
-        }
-
-        static PartPlan[] NewDay()
-        {
-            return new[] { new PartPlan(), new PartPlan(), new PartPlan(), new PartPlan() };
+            return new[] { new List<string>(), new List<string>(), new List<string>(), new List<string>() };
         }
     }
 }
