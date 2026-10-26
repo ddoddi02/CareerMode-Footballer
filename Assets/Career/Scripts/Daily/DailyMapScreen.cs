@@ -28,7 +28,7 @@ namespace Career
     {
         [Tooltip("Season day the clock starts on. 0 or 1 = the day after the club's first match (there is no save yet).")]
         public int day = 1;
-        [Tooltip("Energy a match leaves, %. The match is not connected - a placeholder (PROJECT.md 10.11).")]
+        [Tooltip("Energy a match leaves, %. What a match leaves is not connected to the match yet - a placeholder (PROJECT.md 10.11).")]
         [Range(0f, 100f)] public float energyAfterMatch = 40f;
         [Tooltip("Place in last season's table of the club to start at, when there is no saved character (a saved one picked its club at creation, PROJECT.md 10.14).")]
         [Range(1, 20)] public int lastSeasonRank = 9;
@@ -199,6 +199,8 @@ namespace Career
             CareerSession.savedPlayer = savedPlayer;
             CareerSession.pendingFixture = f;
             MatchHandoff.Request(season.ClubName(f.Other(ClubPool.PlayerId)), Competitions.Name(f.comp), f.home == ClubPool.PlayerId, ReturnScene);
+            // the match side goes back through this, so it never calls the career code (Request clears it)
+            MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
             MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
             CareerSession.Open(MatchScene);
         }
