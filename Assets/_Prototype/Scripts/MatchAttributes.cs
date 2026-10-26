@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace Prototype
 {
     /// <summary>
@@ -14,6 +16,28 @@ namespace Prototype
         public float finishing01 = -1f;
         /// <summary>Body strength as 0..1 for a bot carrier's contest. Negative = the even 0.5.</summary>
         public float strength01 = -1f;
+
+        /// <summary>Ball control as 0..1: how close the ball sits to him on every touch. Negative = as the curve gives it.</summary>
+        public float ballControl01 = -1f;
+        /// <summary>Dribbling as 0..1: how much of his free speed he keeps with the ball. Negative = all of it.</summary>
+        public float dribbling01 = -1f;
+        /// <summary>Tricks as 0..1: beating a challenge on the ball. Negative = none (even).</summary>
+        public float tricks01 = -1f;
+        /// <summary>Mental strength as 0..1: how little his sight shrinks under pressure. Negative = it does not shrink.</summary>
+        public float mental01 = -1f;
+        /// <summary>Stamina as 0..1: how slowly he tires. Negative = an even 0.5.</summary>
+        public float stamina01 = -1f;
+        /// <summary>What is left in him, 0..1 (MatchStamina). Starts at the day's remaining energy.</summary>
+        public float energy = 1f;
+        /// <summary>The share of his aim left when he is tired, 1 = fresh (read through IForm.FormPercent).</summary>
+        public float accuracy = 1f;
+
+        /// <summary>How far in front the ball sits, as a multiple of the curve: 1.25 at ball control 1, 0.75 at 100.</summary>
+        public float TouchScale { get { return ballControl01 < 0f ? 1f : Mathf.Lerp(1.25f, 0.75f, ballControl01); } }
+        /// <summary>The share of his free speed he keeps with the ball: 0.88 at dribbling 1, all of it at 100.</summary>
+        public float CarryKeep { get { return dribbling01 < 0f ? 1f : Mathf.Lerp(0.88f, 1f, dribbling01); } }
+        /// <summary>-0.5..+0.5 around an even duel (Tackle.Input.trickBonus). 0 for a body with no sheet.</summary>
+        public float TrickBonus { get { return tricks01 < 0f ? 0f : tricks01 - 0.5f; } }
 
         /// <summary>
         /// Speed, acceleration and agility reach the match as a swing around the number the match

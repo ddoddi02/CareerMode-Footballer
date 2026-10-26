@@ -33,7 +33,7 @@ namespace Prototype
         }
 
         /// <summary>Everybody on a side: the team's roster, the human and the keeper, once each.</summary>
-        static List<Transform> Bodies(DrillDirector d, Side side)
+        public static List<Transform> Bodies(DrillDirector d, Side side)
         {
             var list = new List<Transform>();
             TeamAttack atk = side == Side.Home ? d.possession.homeAttack : d.possession.awayAttack;
@@ -84,6 +84,12 @@ namespace Prototype
                 if (fin > 0) attrs.finishing01 = Career.StatScale.To01(fin);
                 if (power > 0) attrs.shotPower = power;
                 if (phys > 0) attrs.strength01 = Career.StatScale.To01(phys);
+                attrs.ballControl01 = Pct(s, "ballControl");
+                attrs.dribbling01 = Pct(s, "dribbling");
+                attrs.tricks01 = Pct(s, "tricks");
+                attrs.mental01 = Pct(s, "mentalStrength");
+                attrs.stamina01 = Pct(s, "stamina");
+                attrs.energy = Mathf.Clamp01(s.energyPercent / 100f);
             }
             if (fc != null)
             {
@@ -113,6 +119,12 @@ namespace Prototype
             if (gk != null) Move(gk.motion, fa, fg);
             if (fc != null) { fc.walkSpeed *= ft; fc.sprintSpeed *= ft; fc.accel *= fa; fc.bodyTurn *= fg; }
             return true;
+        }
+
+        static float Pct(PlayerSheet s, string id)
+        {
+            int v = s.Stat(id, 0);
+            return v > 0 ? Career.StatScale.To01(v) : -1f;
         }
 
         static void Move(MotionModel m, float accel, float agility)

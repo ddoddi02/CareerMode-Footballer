@@ -13,7 +13,7 @@ namespace Prototype
     /// shoulder check - the mouse is the check (user, 2026-10-22: Q is gone).
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public class FootballerController : MonoBehaviour, IBallCarrier, IForm
+    public class FootballerController : MonoBehaviour, IBallCarrier, IForm, IBallControl
     {
         /// <summary>How the receiver is allowed to move while a pass is live.</summary>
         public enum Receive
@@ -62,7 +62,8 @@ namespace Prototype
 
         [Tooltip("His form, 60..120 % - how much of his ability shows up in this match (Form). 100 = as written.")]
         [Range(Form.MinPercent, Form.MaxPercent)] public int form = 100;
-        public int FormPercent { get { return form; } }
+        public int FormPercent { get { return Mathf.RoundToInt(form * attrs.accuracy); } }
+        public float TouchScale { get { return attrs.TouchScale; } }
 
         [Header("Refs")]
         public Camera cam;

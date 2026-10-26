@@ -16,6 +16,12 @@ namespace Prototype
         public float endBannerSeconds = 3f;
 
         DrillDirector director;
+        MatchStamina stamina;
+
+        [Tooltip("How far the view closes at the tightest pressure for a man with no mental strength (0.35 = 55 deg to about 36).")]
+        [Range(0f, 0.8f)] public float maxSightShrink = 0.35f;
+        [Tooltip("How fast the view follows the pressure, in shrinks per second.")]
+        public float sightFollow = 4f;
         float played;
         bool confirming, ended;
         float endedAt;
@@ -37,6 +43,18 @@ namespace Prototype
         Transform shooter, passer;
         float passedAt = -99f;
         int seenGoals;
+
+        /// <summary>
+        /// Composure (mental strength): the more he is pressed, the less he sees - and the more
+        /// mental strength he has, the less it costs (PROJECT.md 1). No sheet, no shrink.
+        /// </summary>
+        void WatchPressure()
+        {
+            if (director == null || director.player == null) return;
+            float mental = director.player.attrs.mental01;
+            float target = mental < 0f ? 1f : 1f - maxSightShrink * director.HumanPressure * (1f - mental);
+            PerceptionSystem.sightScale = Mathf.MoveTowards(PerceptionSystem.sightScale, target, sightFollow * maxSightShrink * Time.deltaTime);
+        }
 
         /// <summary>A goal of ours: the man who shot and the one who gave it to him get +2 (user: "골 합작").</summary>
         void WatchCombination()
@@ -69,6 +87,8 @@ namespace Prototype
         void Start()
         {
             director = GetComponent<DrillDirector>();
+            stamina = GetComponent<MatchStamina>();
+            if (stamina == null) stamina = gameObject.AddComponent<MatchStamina>();
             Time.timeScale = 1f;
         }
 
@@ -83,6 +103,7 @@ namespace Prototype
             if (confirming) return;
 
             WatchCombination();
+            WatchPressure();
             played += Time.deltaTime;
             if (played >= matchSeconds) End();
         }
@@ -118,6 +139,7 @@ namespace Prototype
         {
             // leaving the scene by any road must not leave the game frozen
             Time.timeScale = 1f;
+            PerceptionSystem.sightScale = 1f;
         }
 
         void OnGUI()
@@ -136,7 +158,8 @@ namespace Prototype
             GUI.Label(new Rect(w / 2f - 230, 10, 460, 34),
                       string.Format("우리 {0} : {1} {2}   {3}:{4:00}", me, they, MatchHandoff.opponentName, left / 60, left % 60), big);
             GUI.Label(new Rect(w / 2f - 230, 46, 460, 26),
-                      string.Format("{0}  ·  {1}  ·  Esc 경기 끝내기", MatchHandoff.competition, MatchHandoff.isHome ? "홈" : "원정"), mid);
+                      string.Format("{0}  ·  {1}  ·  Esc 경기 끝내기", MatchHandoff.competition, MatchHandoff.isHome ? "홈" : "원정")
+                      + (stamina != null && stamina.HumanEnergy >= 0f ? "  ·  체력 " + Mathf.RoundToInt(stamina.HumanEnergy * 100f) + "%" : ""), mid);
 
             if (confirming)
             {

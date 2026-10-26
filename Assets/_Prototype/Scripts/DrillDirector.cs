@@ -772,6 +772,7 @@ namespace Prototype
             ti.attackerResisting = player.InputDir.sqrMagnitude > 0.09f || player.Shielding;
             ti.tackling01 = d.TacklingToday;
             ti.strength01 = Today(playerStrength);
+            ti.trickBonus = player.attrs.TrickBonus;
             ti.reach = Tackle.Reach;
 
             string why;
@@ -815,6 +816,9 @@ namespace Prototype
         {
             return Form.Stat01(stat01, player.transform, attack != null ? attack.mates : null);
         }
+
+        /// <summary>How hard the human is pressed right now, 0..1 (the same gap the kick's difficulty reads).</summary>
+        public float HumanPressure { get { return player != null ? PressureOf(GapNow()) : 0f; } }
 
         float PressureOf(float gap)
         {

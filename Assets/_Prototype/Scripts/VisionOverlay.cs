@@ -45,8 +45,9 @@ namespace Prototype
             if (cam == null) cam = GetComponent<Camera>();
             if (cam == null || viewer == null) return;
 
-            PerceptionSystem.focusAngle = focusAngle;
-            PerceptionSystem.peripheralAngle = peripheralAngle;
+            float scale = PerceptionSystem.sightScale;
+            PerceptionSystem.focusAngle = focusAngle * scale;
+            PerceptionSystem.peripheralAngle = peripheralAngle * scale;
             PerceptionSystem.freeRadius = freeRadius;
             PerceptionSystem.memorySeconds = memorySeconds;
 
@@ -56,7 +57,7 @@ namespace Prototype
             Shader.SetGlobalVector(ID_ViewerPos, new Vector4(eye.x, eye.y, eye.z, 0f));
             Shader.SetGlobalVector(ID_ViewerFwd, new Vector4(fwd.x, fwd.y, 0f, 0f));
             Shader.SetGlobalVector(ID_CamFwd, cam.transform.forward);
-            Shader.SetGlobalVector(ID_Cone, new Vector4(focusAngle, peripheralAngle, 0f, 0f));
+            Shader.SetGlobalVector(ID_Cone, new Vector4(focusAngle * scale, peripheralAngle * scale, 0f, 0f));
             Shader.SetGlobalVector(ID_Cone2,
                 new Vector4(freeRadius, 3f, PerceptionSystem.xrayDebug ? 1f : 0f, 0f));
 

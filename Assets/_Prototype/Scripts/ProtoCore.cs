@@ -432,6 +432,8 @@ namespace Prototype
 
         public static float focusAngle = 26f;
         public static float peripheralAngle = 55f;
+        /// <summary>1 = the view as set; under pressure the human's shrinks (MatchSession, mental strength).</summary>
+        public static float sightScale = 1f;
         public static float memorySeconds = 4.5f;
         public static float freeRadius = 2.0f;
         public static bool xrayDebug = false;

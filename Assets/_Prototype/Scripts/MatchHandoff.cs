@@ -12,6 +12,8 @@ namespace Prototype
         public Dictionary<string, int> stats;
         /// <summary>Personal form, 60..120.</summary>
         public int formPercent = 100;
+        /// <summary>What is left in him at kick-off, 0..100: the day's remaining energy for the human (MatchStamina).</summary>
+        public int energyPercent = 100;
 
         public int Stat(string id, int fallback)
         {

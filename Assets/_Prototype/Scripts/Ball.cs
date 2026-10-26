@@ -16,6 +16,12 @@ namespace Prototype
         float CarrierTopSpeed { get; }
     }
 
+    /// <summary>A carrier whose touch is better or worse than the curve (ball control, MatchAttributes).</summary>
+    public interface IBallControl
+    {
+        float TouchScale { get; }
+    }
+
     /// <summary>
     /// A rolling ball with real friction, plus the "glued to the dribbler" state that
     /// nearly every football game uses.
@@ -197,6 +203,8 @@ namespace Prototype
         {
             float t = Mathf.InverseLerp(0f, Mathf.Max(c.CarrierTopSpeed, 0.1f), c.CarrierSpeed);
             float ahead = Mathf.Lerp(touchNear, touchFar, Mathf.Pow(t, touchCurve));
+            var bc = c as IBallControl;
+            if (bc != null) ahead *= bc.TouchScale;
             Vector2 f = c.CarrierForward;
             Vector3 p = c.CarrierTransform.position + new Vector3(f.x, 0f, f.y) * ahead;
             p.y = radius;

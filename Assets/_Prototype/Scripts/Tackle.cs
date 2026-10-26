@@ -61,6 +61,9 @@ namespace Prototype
         /// </summary>
         public static float FrontWin = 0.35f;
 
+        /// <summary>How much a trick (tricks above or below 50) moves the duel, per 1.0 of bonus. Placeholder: 100 vs 50 is -15 points.</summary>
+        public static float TrickWeight = 0.30f;
+
         /// <summary>Is p inside the corridor from a to b?</summary>
         public static bool IsBetween(Vector3 p, Vector3 a, Vector3 b, float radius)
         {
@@ -100,6 +103,8 @@ namespace Prototype
             public bool attackerResisting;
             public float tackling01;
             public float strength01;
+            /// <summary>The man on the ball beating a challenge, -0.5..+0.5 (MatchAttributes.TrickBonus). 0 = even.</summary>
+            public float trickBonus;
             public float reach;
         }
 
@@ -121,7 +126,7 @@ namespace Prototype
             if (!shielded)
             {
                 // Nothing in the way - but he is facing you, and can still go past.
-                p = Mathf.Clamp(FrontWin + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
+                p = Mathf.Clamp(FrontWin + 0.35f * (i.tackling01 - i.strength01) - TrickWeight * i.trickBonus, 0.08f, 0.92f);
                 if (Random.value < p)
                 {
                     reason = string.Format("공까지 {0:0.00}m, 정면에서 발이 먼저 닿았습니다", ballGap);
@@ -142,7 +147,7 @@ namespace Prototype
                 // Even attributes used to be a coin toss. The defender who has got himself
                 // into range and committed now wins it more often than not - a shield buys
                 // time, it does not make a man untouchable.
-                p = Mathf.Clamp(0.6f + 0.35f * (i.tackling01 - i.strength01), 0.08f, 0.92f);
+                p = Mathf.Clamp(0.6f + 0.35f * (i.tackling01 - i.strength01) - TrickWeight * i.trickBonus, 0.08f, 0.92f);
                 if (Random.value < p)
                 {
                     reason = "몸싸움에서 밀렸습니다";
