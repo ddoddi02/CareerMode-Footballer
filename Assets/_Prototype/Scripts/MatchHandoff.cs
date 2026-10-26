@@ -58,6 +58,8 @@ namespace Prototype
 
         /// <summary>The match scene sets these when the match is over, from the player's club's side.</summary>
         public static int clubGoals, opponentGoals;
+        /// <summary>What is left in the human at the whistle, 0..100 (written with <see cref="finished"/>). The career side turns it into tiredness.</summary>
+        public static float humanEnergyAtEnd = 100f;
         /// <summary>The match is over and the goals above are its result.</summary>
         public static bool finished;
 
@@ -76,6 +78,7 @@ namespace Prototype
             isHome = home;
             returnScene = returnTo;
             clubGoals = opponentGoals = 0;
+            humanEnergyAtEnd = 100f;
             finished = false;
             returnToCaller = null;
             club = opponent = null;
@@ -92,6 +95,7 @@ namespace Prototype
             chemistryDeltas.Clear();
             opponentName = competition = returnScene = null;
             clubGoals = opponentGoals = 0;
+            humanEnergyAtEnd = 100f;
             isHome = false;
         }
     }

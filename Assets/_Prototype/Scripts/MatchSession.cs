@@ -124,6 +124,7 @@ namespace Prototype
             Time.timeScale = 0f;
             MatchHandoff.clubGoals = director != null ? director.HomeGoals : 0;
             MatchHandoff.opponentGoals = director != null ? director.AwayGoals : 0;
+            MatchHandoff.humanEnergyAtEnd = stamina != null && stamina.HumanEnergy >= 0f ? stamina.HumanEnergy * 100f : 100f;
             MatchHandoff.finished = true;
         }
 

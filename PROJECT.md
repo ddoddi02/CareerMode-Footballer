@@ -749,7 +749,7 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 **계약 — `MatchHandoff`:** 커리어가 `Request` 직후 채운다. 경기는 읽기만 한다.
 - `club` / `opponent` = `PlayerSheet[11]` (slot = `Formation.F4123` 라벨 GK·LB·LCB·RCB·RB·DM·LCM·RCM·LW·ST·RW, 사람 = DM, name,
   stats id→1~100 몸 보너스까지 더한 값, formPercent 60~120). `chemistry(slotA, slotB)` = 우리 팀 짝 친밀도.
-- 경기가 돌려주는 것: `chemistryDeltas`(공 요청 수락 +1·무시 −1, 골 합작 +2 — `MatchSession.Earn`), `clubGoals`/`opponentGoals`.
+- 경기가 돌려주는 것: `humanEnergyAtEnd`(0~100, 끝났을 때 사람의 남은 체력 — 커리어가 피로로 반영), `chemistryDeltas`(공 요청 수락 +1·무시 −1, 골 합작 +2 — `MatchSession.Earn`), `clubGoals`/`opponentGoals`.
 - `requested`가 아니거나 시트가 없으면 드릴 기본값 그대로(슬롯 단위로 시트가 없으면 그 슬롯만).
 
 `MatchRoster.Apply`(`DrillDirector.Start`가 부름)가 시트를 몸에 입힌다. 시트 키는 `CreationRules.Stats`의 id. 키퍼 전용 `keeping`·`reflexes`는
