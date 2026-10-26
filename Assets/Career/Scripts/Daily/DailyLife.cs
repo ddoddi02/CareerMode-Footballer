@@ -38,8 +38,8 @@ namespace Career
         public readonly DayClock clock = new DayClock();
         /// <summary>The day's log, a line per thing done, per part.</summary>
         public readonly List<string>[] log = NewLog();
-        /// <summary>The day the next match is played. Daily life ends the night before.</summary>
-        public readonly int matchDay;
+        /// <summary>The day the next match is played (from the season's calendar). Daily life ends the night before.</summary>
+        public int matchDay { get; private set; }
         /// <summary>0..1 for the special events' chances; swapped for a fixed value in tests.</summary>
         public Func<float> roll = () => UnityEngine.Random.value;
 
@@ -76,12 +76,15 @@ namespace Career
             set { player.fatigue = 100f - Mathf.Clamp(value, 0f, 100f); }
         }
 
+        /// <summary>The calendar moved the next match (a knockout round was drawn); daily life follows it.</summary>
+        public void SetMatchDay(int day) { matchDay = day; }
+
         public bool IsMatchDay { get { return clock.day >= matchDay; } }
         public int DaysToMatch { get { return matchDay - clock.day; } }
 
         // ------------------------------------------------------------ recovery --
 
-        /// <summary>x0.4 + x0.075 an hour, kept between x0.4 and x1.1 (user's provisional).</summary>
+        /// <summary>x0.4 + x0.075 an hour, kept between x0.4 and x1.1 (assistant's provisional).</summary>
         public static float SleepMultiplier(float hours)
         {
             return Mathf.Clamp(SleepBase + SleepPerHour * hours, SleepMin, SleepMax);

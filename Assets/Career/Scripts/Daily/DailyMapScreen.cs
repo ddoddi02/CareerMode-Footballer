@@ -13,7 +13,10 @@ namespace Career
     /// picking an action does it at once (<see cref="DailyLife"/>) - points, time and energy go,
     /// and a special event may open a result page. The right column logs what was done today and
     /// what the night's sleep would give. What actions do besides energy, and money, are not
-    /// built (PROJECT.md 10.10 - 10.12).
+    /// built (PROJECT.md 10.10 - 10.12). Days come from the season's calendar (<see cref="Season"/>):
+    /// the next match - date, rival, competition - is shown under the top bar, with a panel for
+    /// the coming matches and the league table; on match day a stand-in button plays it
+    /// (the result is drawn, the match itself is not connected, PROJECT.md 10.13).
     ///
     /// uGUI built in code when the scene starts, like the creation screen; the scene holds the
     /// camera, the event system and this component. Placeholder art: coloured blocks for the
@@ -21,20 +24,27 @@ namespace Career
     /// </summary>
     public class DailyMapScreen : MonoBehaviour
     {
-        [Tooltip("Day the clock starts on - a placeholder until there is a calendar and a save.")]
+        [Tooltip("Season day the clock starts on. 0 or 1 = the day after the club's first match (there is no save yet).")]
         public int day = 1;
-        [Tooltip("Energy the last match left, %. No match schedule yet - a placeholder (PROJECT.md 10.11).")]
+        [Tooltip("Energy a match leaves, %. The match is not connected - a placeholder (PROJECT.md 10.11).")]
         [Range(0f, 100f)] public float energyAfterMatch = 40f;
-        [Tooltip("Days of daily life before the next match. No match schedule yet - a placeholder.")]
-        public int daysToMatch = 6;
+        [Tooltip("Where the club finished last season, 1..20 - sets its continental places this season (PROJECT.md 10.13).")]
+        [Range(1, 20)] public int lastSeasonRank = 3;
+        [Tooltip("Seed of the draws and drawn results, so a run can be repeated.")]
+        public int seasonSeed = 2026;
+
+        const string ClubName = "카스티야 FC";
+        const float ClubStrength = 80f;
 
         DailyLife life;
+        Season season;
+        bool showStandings;
         bool savedPlayer;
 
         Font font;
-        RectTransform panel, partsBox, nightChoice, eventPanel;
-        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightNowLabel, nightOnLabel, sleepText, eventTitle, eventBody;
-        Button skipButton;
+        RectTransform panel, partsBox, nightChoice, eventPanel, schedulePanel, scheduleBody;
+        Text panelName, panelBlurb, statusText, dateText, matchText, clockText, energyText, pointsText, nightText, nightNowLabel, nightOnLabel, sleepText, eventTitle, eventBody, nextMatchText, nextButtonLabel, scheduleHead;
+        Button skipButton, standingsTab, fixturesTab;
         RectTransform actionList;
         readonly Dictionary<string, Image> frames = new Dictionary<string, Image>();
         readonly List<KeyValuePair<Button, PlaceAction>> actionButtons = new List<KeyValuePair<Button, PlaceAction>>();
@@ -45,12 +55,13 @@ namespace Career
         static readonly Color Dim = new Color(0.62f, 0.65f, 0.70f, 1f);
         static readonly Color Gold = new Color(0.95f, 0.82f, 0.45f, 1f);
         static readonly Color Bad = new Color(0.95f, 0.45f, 0.40f, 1f);
-        static readonly string[] Weekdays = { "월", "화", "수", "목", "금", "토", "일" };
 
         public Place Selected { get { return selected; } }
         public DailyLife Life { get { return life; } }
         /// <summary>The result page of an event is up and waits for a click.</summary>
         public bool EventOpen { get { return eventPanel != null && eventPanel.gameObject.activeSelf; } }
+        public Season Season { get { return season; } }
+        public bool ScheduleOpen { get { return schedulePanel != null && schedulePanel.gameObject.activeSelf; } }
 
         void Start()
         {
@@ -60,7 +71,12 @@ namespace Career
             PlayerProfile player;
             savedPlayer = CharacterStore.TryLoad(out player);
             if (!savedPlayer) player = new PlayerProfile();
-            life = new DailyLife(player, Squad.Provisional(player.displayName), energyAfterMatch, daysToMatch, Mathf.Max(1, day));
+            season = Season.First(ClubName, ClubStrength, lastSeasonRank, seasonSeed);
+            // the game opens the day after the club's first match, whose result is drawn
+            int start = day > 1 ? day : season.NextFixture(ClubPool.PlayerId, 1).day + 1;
+            season.AdvanceTo(start - 1);
+            Fixture next = season.NextFixture(ClubPool.PlayerId, start);
+            life = new DailyLife(player, Squad.Provisional(player.displayName), energyAfterMatch, next.day - start, start);
             BuildUi();
             Close();
             statusText.text = "경기 끝 체력 " + Mathf.RoundToInt(energyAfterMatch) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%, 행동력 " + life.clock.points + "P. 장소를 눌러 할 일을 고른다.";
@@ -116,9 +132,63 @@ namespace Career
             Refresh();
         }
 
+        /// <summary>What the top bar's button does: on match day, play the match; otherwise give up the part's points.</summary>
+        public void NextButton()
+        {
+            if (life.IsMatchDay) PlayMatch();
+            else SkipPart();
+        }
+
+        /// <summary>
+        /// Match day, stand-in: the club's match is played with a drawn result (the match is not
+        /// connected yet), and daily life starts again the day after. When the club has no match
+        /// left the season is finished and the next one opens at its day 1, the new places in hand.
+        /// </summary>
+        public void PlayMatch()
+        {
+            if (EventOpen || ScheduleOpen || !life.IsMatchDay) return;
+            string me = ClubPool.PlayerId;
+            Fixture f = season.NextFixture(me, life.clock.day);
+            string result = "";
+            if (f != null)
+            {
+                season.AdvanceTo(f.day);
+                result = Competitions.Name(f.comp) + " " + f.round + ": " + season.ClubName(f.home) + " " + f.homeGoals + "-" + f.awayGoals + " " + season.ClubName(f.away)
+                         + (f.penWinner != null ? " (승부차기 " + season.ClubName(f.penWinner) + ")" : "") + ".  ";
+            }
+            int firstDay = life.clock.day + 1;
+            Fixture next = season.NextFixture(me, firstDay);
+            if (next == null)
+            {
+                for (int i = 0; i < 20 && !season.IsOver; i++) season.AdvanceTo(season.LastDay);
+                int ended = season.number;
+                season = season.Next(seasonSeed + ended);
+                firstDay = 1;
+                next = season.NextFixture(me, firstDay);
+                result += "시즌 " + ended + " 끝. ";
+            }
+            life = new DailyLife(life.player, life.squad, energyAfterMatch, next.day - firstDay, firstDay);
+            statusText.text = result + "다음 경기까지 " + life.DaysToMatch + "일.";
+            Refresh();
+        }
+
+        /// <summary>Opens the panel of the coming matches (or the league table).</summary>
+        public void OpenSchedule(bool standings)
+        {
+            showStandings = standings;
+            schedulePanel.gameObject.SetActive(true);
+            Refresh();
+        }
+
+        public void CloseSchedule()
+        {
+            schedulePanel.gameObject.SetActive(false);
+            Refresh();
+        }
+
         public void SkipPart()
         {
-            if (EventOpen) return;
+            if (EventOpen || ScheduleOpen) return;
             statusText.text = life.SkipPart();
             Refresh();
         }
@@ -151,13 +221,20 @@ namespace Career
         void Refresh()
         {
             DayClock c = life.clock;
-            dateText.text = "시즌 1 · " + c.day + "일째 (" + Weekdays[(c.day - 1) % 7] + "요일)";
+            // everything before today is played; the calendar may have drawn a round, so the match day is read again
+            season.AdvanceTo(c.day - 1);
+            Fixture nextMatch = season.NextFixture(ClubPool.PlayerId, c.day);
+            if (nextMatch != null && nextMatch.day != life.matchDay) life.SetMatchDay(nextMatch.day);
+            dateText.text = "시즌 " + season.number + " · " + season.DateText(c.day);
             matchText.text = life.IsMatchDay ? "경기 날" : "경기까지 " + life.DaysToMatch + "일";
+            nextMatchText.text = nextMatch == null ? "남은 경기 없음" : "다음 경기  " + season.Describe(nextMatch, ClubPool.PlayerId);
+            nextButtonLabel.text = life.IsMatchDay ? "경기 치르기\n<size=14>(결과는 임시)</size>" : "다음 시간대로";
             clockText.text = c.Time + "  " + DayClock.PartName(c.part);
             energyText.text = "체력 " + Mathf.RoundToInt(life.Energy) + "%";
             pointsText.text = "행동력 " + c.points + "P";
-            skipButton.interactable = !life.AwaitingNightChoice && !life.IsMatchDay && !EventOpen;
+            skipButton.interactable = !life.AwaitingNightChoice && !EventOpen && !ScheduleOpen;
             nightChoice.gameObject.SetActive(life.AwaitingNightChoice && !EventOpen);
+            if (ScheduleOpen) RebuildSchedule();
             if (life.AwaitingNightChoice)
             {
                 nightText.text = "저녁 행동력을 다 썼다. 지금 " + life.clock.Time + ", 체력 " + Mathf.RoundToInt(life.Energy) + "%.";
@@ -190,6 +267,58 @@ namespace Career
             RebuildToday();
         }
 
+        /// <summary>The panel's body: the club's next matches, or the league table with the club's row in gold.</summary>
+        void RebuildSchedule()
+        {
+            ClearChildren(scheduleBody);
+            string me = ClubPool.PlayerId;
+            var names = new List<string>();
+            foreach (CompetitionId id in season.CompetitionsOf(me)) names.Add(Competitions.Name(id));
+            scheduleHead.text = "시즌 " + season.number + " · 참가: " + string.Join(", ", names.ToArray());
+            fixturesTab.GetComponent<Image>().color = showStandings ? Row : new Color(0.25f, 0.45f, 0.75f);
+            standingsTab.GetComponent<Image>().color = showStandings ? new Color(0.25f, 0.45f, 0.75f) : Row;
+            if (!showStandings)
+            {
+                int n = 0;
+                foreach (Fixture f in season.Upcoming(me, life.clock.day, 12))
+                {
+                    TableLine(scheduleBody, new[] { season.DateText(f.day), Competitions.Name(f.comp), f.round, f.neutral ? "중립" : f.home == me ? "홈" : "원정", season.ClubName(f.Other(me)) },
+                        new[] { 120f, 170f, 150f, 70f, 330f }, n == 0 ? Gold : Color.white, 30f);
+                    n++;
+                }
+                if (n == 0) Label(scheduleBody, "남은 경기가 없다.", 20, Dim, TextAnchor.MiddleLeft);
+                Label(scheduleBody, "토너먼트 라운드는 앞 라운드가 끝나야 상대가 정해져 일정에 나타난다.", 15, Dim, TextAnchor.MiddleLeft)
+                    .gameObject.AddComponent<LayoutElement>().minHeight = 26f;
+                return;
+            }
+            TableLine(scheduleBody, new[] { "#", "구단", "경기", "승", "무", "패", "득실", "승점" }, new[] { 40f, 330f, 70f, 60f, 60f, 60f, 110f, 80f }, Dim, 28f);
+            int rank = 1;
+            foreach (TableRow r in season.Table(CompetitionId.League))
+            {
+                TableLine(scheduleBody, new[] { rank.ToString(), season.ClubName(r.club), r.played.ToString(), r.won.ToString(), r.drawn.ToString(), r.lost.ToString(),
+                    r.goalsFor + "-" + r.goalsAgainst, r.Points.ToString() },
+                    new[] { 40f, 330f, 70f, 60f, 60f, 60f, 110f, 80f }, r.club == me ? Gold : Color.white, 26f);
+                rank++;
+            }
+        }
+
+        void TableLine(RectTransform parent, string[] cells, float[] widths, Color col, float height)
+        {
+            var row = new GameObject("Line", typeof(RectTransform)).GetComponent<RectTransform>();
+            row.SetParent(parent, false);
+            row.gameObject.AddComponent<LayoutElement>().minHeight = height;
+            var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 6f;
+            h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                Text t = Label(row, cells[i], 18, col, TextAnchor.MiddleLeft);
+                LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
+                le.minWidth = le.preferredWidth = widths[i];
+                le.minHeight = height;
+            }
+        }
+
         /// <summary>Today's four parts with what was done in each, and what sleeping now would give.</summary>
         void RebuildToday()
         {
@@ -213,6 +342,12 @@ namespace Career
             }
             if (life.IsMatchDay) { sleepText.text = ""; return; }
             float hours = life.SleepHoursIfNow;
+            if (life.clock.part == DayPart.Morning || life.clock.part == DayPart.Afternoon)
+            {
+                sleepText.text = "잠은 저녁부터 잘 수 있다.\n지난밤 수면 " + DailyLife.Hours(life.LastSleepHours)
+                                 + (life.RecoveryBonus > 0f ? "\n내일 아침 회복 훈련 +" + life.RecoveryBonus + "%p" : "");
+                return;
+            }
             sleepText.text = "지금 자면  " + DailyLife.Hours(hours) + " · 수면 ×" + DailyLife.SleepMultiplier(hours).ToString("0.00")
                              + "\n아침 회복 +" + Mathf.RoundToInt(life.MorningRecovery(hours)) + "%p"
                              + (life.RecoveryBonus > 0f ? "  (회복 훈련 +" + life.RecoveryBonus + "%p 포함)" : "")
@@ -260,15 +395,27 @@ namespace Career
             clockText = Label(top, "", 26, Gold, TextAnchor.MiddleCenter, new Vector2(0.34f, 0f), new Vector2(0.46f, 1f), Vector2.zero, Vector2.zero);
             energyText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.46f, 0f), new Vector2(0.56f, 1f), Vector2.zero, Vector2.zero);
             pointsText = Label(top, "", 24, Color.white, TextAnchor.MiddleCenter, new Vector2(0.56f, 0f), new Vector2(0.66f, 1f), Vector2.zero, Vector2.zero);
-            skipButton = Btn(top, "다음 시간대로", 20, SkipPart);
+            skipButton = Btn(top, "다음 시간대로", 20, NextButton);
             skipButton.name = "NextPart";
+            nextButtonLabel = skipButton.GetComponentInChildren<Text>();
             Anchor(skipButton, new Vector2(0.67f, 0.18f), new Vector2(0.78f, 0.82f));
             Label(top, PlayerLine(), 18, Dim, TextAnchor.MiddleRight, new Vector2(0.78f, 0f), Vector2.one, Vector2.zero, new Vector2(-24f, 0f));
+
+            // the next match, and the calendar behind it
+            RectTransform info = Box(root, "NextMatch", new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -150f), new Vector2(-20f, -104f), Bar);
+            nextMatchText = Label(info, "", 22, Gold, TextAnchor.MiddleLeft, Vector2.zero, new Vector2(0.72f, 1f), new Vector2(24f, 0f), Vector2.zero);
+            nextMatchText.name = "NextMatchText";
+            Button sched = Btn(info, "일정", 20, () => OpenSchedule(false));
+            sched.name = "OpenSchedule";
+            Anchor(sched, new Vector2(0.74f, 0.1f), new Vector2(0.86f, 0.9f));
+            Button table = Btn(info, "순위표", 20, () => OpenSchedule(true));
+            table.name = "OpenStandings";
+            Anchor(table, new Vector2(0.87f, 0.1f), new Vector2(0.99f, 0.9f));
 
             statusText = Label(root, "", 18, Dim, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(1f, 0f), new Vector2(20f, 8f), new Vector2(-20f, 48f));
 
             // the map, three by two blocks between the roads, one district each
-            RectTransform map = Box(root, "Map", Vector2.zero, Vector2.one, new Vector2(20f, 56f), new Vector2(-540f, -110f), new Color(0.07f, 0.08f, 0.08f));
+            RectTransform map = Box(root, "Map", Vector2.zero, Vector2.one, new Vector2(20f, 56f), new Vector2(-540f, -160f), new Color(0.07f, 0.08f, 0.08f));
             Zone(map, "운동 지구", new Vector2(0.01f, 0.48f), new Vector2(0.315f, 0.98f), new Color(0.10f, 0.20f, 0.11f));
             Zone(map, "도심", new Vector2(0.345f, 0.48f), new Vector2(0.645f, 0.98f), new Color(0.15f, 0.15f, 0.17f));
             Zone(map, "상업 지구", new Vector2(0.675f, 0.48f), new Vector2(0.99f, 0.98f), new Color(0.12f, 0.13f, 0.20f));
@@ -278,7 +425,7 @@ namespace Career
             foreach (Place p in PlaceCatalog.All) Marker(map, p);
 
             // today: what was done, and the sleep
-            RectTransform plan = Box(root, "Plan", new Vector2(1f, 0f), Vector2.one, new Vector2(-520f, 56f), new Vector2(-20f, -110f), Bar);
+            RectTransform plan = Box(root, "Plan", new Vector2(1f, 0f), Vector2.one, new Vector2(-520f, 56f), new Vector2(-20f, -160f), Bar);
             var pv = plan.gameObject.AddComponent<VerticalLayoutGroup>();
             pv.padding = new RectOffset(20, 20, 16, 16);
             pv.spacing = 6f;
@@ -333,6 +480,40 @@ namespace Career
             on.name = "IntoNight";
             Anchor(on, new Vector2(0.52f, 0.08f), new Vector2(0.96f, 0.46f));
             nightOnLabel = on.GetComponentInChildren<Text>();
+
+            // the coming matches and the league table
+            schedulePanel = Box(root, "SchedulePanel", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.6f));
+            RectTransform sc = Box(schedulePanel, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-480f, -400f), new Vector2(480f, 400f), Bar);
+            var sv = sc.gameObject.AddComponent<VerticalLayoutGroup>();
+            sv.padding = new RectOffset(28, 28, 22, 22);
+            sv.spacing = 8f;
+            sv.childControlWidth = true; sv.childControlHeight = true; sv.childForceExpandHeight = false;
+            scheduleHead = Label(sc, "", 22, Color.white, TextAnchor.MiddleLeft);
+            scheduleHead.gameObject.AddComponent<LayoutElement>().minHeight = 34f;
+            var tabs = new GameObject("Tabs", typeof(RectTransform)).GetComponent<RectTransform>();
+            tabs.SetParent(sc, false);
+            tabs.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+            var th = tabs.gameObject.AddComponent<HorizontalLayoutGroup>();
+            th.spacing = 8f;
+            th.childControlWidth = true; th.childControlHeight = true; th.childForceExpandWidth = true; th.childForceExpandHeight = false;
+            fixturesTab = Btn(tabs, "다음 경기", 20, () => OpenSchedule(false));
+            fixturesTab.name = "TabFixtures";
+            fixturesTab.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+            standingsTab = Btn(tabs, "라 리가 순위", 20, () => OpenSchedule(true));
+            standingsTab.name = "TabStandings";
+            standingsTab.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+            scheduleBody = new GameObject("Body", typeof(RectTransform)).GetComponent<RectTransform>();
+            scheduleBody.SetParent(sc, false);
+            var sb = scheduleBody.gameObject.AddComponent<VerticalLayoutGroup>();
+            sb.spacing = 4f;
+            sb.childControlWidth = true; sb.childControlHeight = true; sb.childForceExpandHeight = false;
+            var sspace = new GameObject("Spacer", typeof(RectTransform)).AddComponent<LayoutElement>();
+            sspace.transform.SetParent(sc, false);
+            sspace.flexibleHeight = 1f;
+            Button sclose = Btn(sc, "닫기", 20, CloseSchedule);
+            sclose.name = "CloseSchedule";
+            sclose.gameObject.AddComponent<LayoutElement>().minHeight = 48f;
+            schedulePanel.gameObject.SetActive(false);
 
             // the result of an event (user: one page of visual-novel text): a window along the bottom
             eventPanel = Box(root, "EventPanel", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.45f));
