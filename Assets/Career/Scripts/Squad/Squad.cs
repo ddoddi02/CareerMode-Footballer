@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Prototype;
+using UnityEngine;
 
 namespace Career
 {
@@ -12,6 +13,8 @@ namespace Career
         public string name;
         public string slot;     // GK, LB, LCB, RCB, RB, DM, LCM, RCM, LW, ST, RW
         public bool isPlayer;
+        /// <summary>The 1..100 stats by <c>CreationRules.Stats</c> id (not saved: made from the club's level, or read off the profile for the human).</summary>
+        [NonSerialized] public Dictionary<string, int> stats;
     }
 
     /// <summary>
@@ -44,6 +47,63 @@ namespace Career
                 });
             }
             return s;
+        }
+
+        /// <summary>
+        /// A club's eleven, from its level (user, 2026-10-26): each slot's stats are the level plus
+        /// what the position needs (<see cref="SquadData"/>). When <paramref name="player"/> is given
+        /// he is the one in the DM slot with his own stats; otherwise all eleven are made.
+        /// <paramref name="seedKey"/> keeps the same club the same squad every run.
+        /// </summary>
+        public static Squad ForClub(string playerName, float level, PlayerProfile player, string seedKey)
+        {
+            Squad s = Provisional(playerName);
+            if (player == null)
+                foreach (SquadMember m in s.members) { m.isPlayer = false; m.id = m.slot; m.name = m.slot; }
+            var rng = new System.Random(SquadData.StableHash(seedKey));
+            foreach (SquadMember m in s.members)
+                m.stats = m.isPlayer ? SquadData.PlayerStats(player) : SquadData.Generate(m.slot, level, rng);
+            return s;
+        }
+
+        /// <summary>The human's stats read again off the profile (they change with training, body and perks).</summary>
+        public void RefreshPlayer(PlayerProfile p)
+        {
+            SquadMember m = Player;
+            if (m != null) m.stats = SquadData.PlayerStats(p);
+        }
+
+        /// <summary>The squad's average overall: the mean of its members' stat means. Half of a club's strength with its chemistry (user).</summary>
+        public float SquadOverall
+        {
+            get
+            {
+                float sum = 0f;
+                int n = 0;
+                foreach (SquadMember m in members)
+                    if (m.stats != null) { sum += SquadData.Overall(m.stats); n++; }
+                return n == 0 ? 0f : sum / n;
+            }
+        }
+
+        /// <summary>The id of the member in this slot (or the id itself, if one is given): what <see cref="chemistry"/> is keyed on.</summary>
+        public string IdOf(string slotOrId)
+        {
+            SquadMember m = members.Find(x => x.slot == slotOrId) ?? members.Find(x => x.id == slotOrId);
+            return m != null ? m.id : slotOrId;
+        }
+
+        /// <summary>The chemistry between the members in two slots, 0..100 as a whole number - what the match asks for per pair (PROJECT.md 10.15).</summary>
+        public int ChemistryBetween(string slotA, string slotB)
+        {
+            string a = IdOf(slotA), b = IdOf(slotB);
+            return a == b ? 0 : Mathf.RoundToInt(chemistry.Get(a, b));
+        }
+
+        /// <summary>A member's personal form for the match as a whole percent: the human's computed form (<see cref="FormModel.Personal"/>), 100 for the rest until they get one.</summary>
+        public static int FormPercentOf(SquadMember m, PlayerProfile player)
+        {
+            return m.isPlayer && player != null ? Mathf.RoundToInt(player.personalForm * 100f) : 100;
         }
 
         public SquadMember Player { get { return members.Find(m => m.isPlayer); } }

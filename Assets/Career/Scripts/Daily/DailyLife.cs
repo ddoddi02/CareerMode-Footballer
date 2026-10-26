@@ -66,6 +66,7 @@ namespace Career
             matchDay = firstDay + daysToMatch;
             LastSleepHours = FirstNightHours;
             Recover(FirstNightHours);
+            UpdateForm();
             clock.Begin(DayClock.PointsFor(Energy));
         }
 
@@ -223,6 +224,7 @@ namespace Career
             LastSleepHours = sleepHours;
             float back = MorningRecovery(sleepHours);
             Recover(sleepHours);
+            UpdateForm();
             for (int i = 0; i < 4; i++) log[i].Clear();
             string lead = "수면 " + Hours(sleepHours) + " → 회복 +" + Mathf.RoundToInt(back) + "%p.  ";
             if (IsMatchDay)
@@ -232,6 +234,16 @@ namespace Career
             }
             clock.Begin(DayClock.PointsFor(Energy));
             return lead + clock.day + "일째 아침: 체력 " + Mathf.RoundToInt(Energy) + "% → " + clock.points + "P.";
+        }
+
+        /// <summary>
+        /// The day's personal form (user: from fatigue, mental strength, recent results and chemistry,
+        /// PROJECT.md 10.15), worked out each morning once the energy is back. Only the human has it
+        /// for now; whether the teammates do too is asked.
+        /// </summary>
+        void UpdateForm()
+        {
+            player.personalForm = FormModel.Personal(player.fatigue, player.mentalStrength, player.recentResults, squad.PlayerChemistry);
         }
 
         void Recover(float sleepHours)

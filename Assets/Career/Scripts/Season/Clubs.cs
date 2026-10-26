@@ -19,6 +19,9 @@ namespace Career
         /// <summary>Plays in the Spanish league or its cup.</summary>
         public bool domestic;
 
+        /// <summary>The eleven, once made (<see cref="ClubPool.SquadOf"/>); for the player's club the live squad.</summary>
+        public Squad squad;
+
         public float Strength { get { return squadOverall + (chemistry - 50f) * ChemistryWeight; } }
     }
 
@@ -67,6 +70,8 @@ namespace Career
                 string id = rank == playerRank ? PlayerId : IdOf(rank);
                 // chemistry hovers round 50 (-5..+5), by place, so the others are not all alike
                 Add(all, id, RankedNames[rank - 1], LevelOf(rank), true, 50f + (rank * 7) % 11 - 5);
+                // the squad's average overall is what the made squad comes to, a little off the level
+                if (id != PlayerId) all[id].squadOverall = SquadOf(all[id]).SquadOverall;
             }
             for (int i = 0; i < LowerSize; i++)
                 Add(all, "lo" + (i + 1).ToString("00"), "2부 팀 " + (i + 1).ToString("00"), Ramp(50f, 40f, i, LowerSize), true, 50f);
@@ -77,14 +82,25 @@ namespace Career
         }
 
         /// <summary>
-        /// The player's club takes the player into its squad: ten of the eleven are at the club's
-        /// level, the eleventh is him. Chemistry is the squad's, live.
+        /// The player's club: its strength comes from the live squad (ten made, one the human)
+        /// and that squad's chemistry (user: squad average + chemistry).
         /// </summary>
-        public static void SetPlayerClub(Dictionary<string, Club> all, int playerRank, float playerOverall, float chemistry)
+        public static void SetPlayerClub(Dictionary<string, Club> all, Squad squad)
         {
             Club c = all[PlayerId];
-            c.squadOverall = (10f * LevelOf(playerRank) + playerOverall) / 11f;
-            c.chemistry = chemistry;
+            c.squad = squad;
+            c.squadOverall = squad.SquadOverall;
+            c.chemistry = squad.TeamChemistry;
+        }
+
+        /// <summary>
+        /// A club's eleven, made once from its level by position (<see cref="SquadData"/>) and kept.
+        /// A stand-in club's squad is at its level; the player's club has its own (<see cref="SetPlayerClub"/>).
+        /// </summary>
+        public static Squad SquadOf(Club c)
+        {
+            if (c.squad == null) c.squad = Squad.ForClub(c.name, c.squadOverall, null, c.id);
+            return c.squad;
         }
 
         /// <summary>The ids of the clubs of the league, strongest first.</summary>

@@ -151,12 +151,12 @@ namespace Career
         }
 
         /// <summary>
-        /// Sets the player's club squad from the player and the squad's chemistry (user: team
-        /// strength = the squad's average overall + chemistry). Called before results are drawn.
+        /// Sets the player's club from its live squad (user: team strength = the squad's average
+        /// overall + chemistry). Called before results are drawn.
         /// </summary>
-        public void SetPlayerClub(float playerOverall, float chemistry)
+        public void SetPlayerClub(Squad squad)
         {
-            ClubPool.SetPlayerClub(clubs, playerRank, playerOverall, chemistry);
+            ClubPool.SetPlayerClub(clubs, squad);
         }
 
         Season(int number, DateTime start, Dictionary<string, Club> clubs, PreviousSeason previous, int seed, int playerRank)

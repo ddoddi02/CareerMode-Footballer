@@ -88,9 +88,9 @@ namespace Career
             PlayerProfile player;
             bool saved = CharacterStore.TryLoad(out player);
             if (!saved) { player = new PlayerProfile(); player.clubRank = lastSeasonRank; }
-            Squad squad = Squad.Provisional(player.displayName);
+            Squad squad = Squad.ForClub(player.displayName, ClubPool.LevelOf(player.clubRank), player, "player-squad-" + player.clubRank);
             Season first = Season.First(player.clubRank, seasonSeed);
-            first.SetPlayerClub(CreationRules.Overall(player), squad.TeamChemistry);
+            first.SetPlayerClub(squad);
             // the game opens the day after the club's first match, whose result is drawn
             int start = day > 1 ? day : first.NextFixture(ClubPool.PlayerId, 1).day + 1;
             first.AdvanceTo(start - 1);
@@ -103,7 +103,8 @@ namespace Career
         /// <summary>Team strength is the squad's overall plus its chemistry, read fresh before any result is drawn (user, 2026-10-26).</summary>
         void SyncStrength()
         {
-            season.SetPlayerClub(CreationRules.Overall(life.player), life.squad.TeamChemistry);
+            life.squad.RefreshPlayer(life.player);
+            season.SetPlayerClub(life.squad);
         }
 
         /// <summary>Back from the match scene with a result: it goes into the season, and daily life goes on from the next day.</summary>
@@ -204,6 +205,14 @@ namespace Career
             CareerSession.Open(MatchScene);
         }
 
+        /// <summary>+1 / 0 / -1 for the club in a played match; a tie decided on penalties counts for whoever won it.</summary>
+        static int ResultOf(Fixture f, string club)
+        {
+            int own = f.home == club ? f.homeGoals : f.awayGoals, other = f.home == club ? f.awayGoals : f.homeGoals;
+            if (own == other && f.penWinner != null) return f.penWinner == club ? 1 : -1;
+            return own > other ? 1 : (own < other ? -1 : 0);
+        }
+
         /// <summary>
         /// After a match (drawn or played): says what it was, then starts daily life again the
         /// day after. When the club has no match left the season is finished and the next one opens
@@ -213,6 +222,7 @@ namespace Career
         {
             string me = ClubPool.PlayerId;
             string result = "";
+            if (f != null) life.player.RecordResult(ResultOf(f, me));
             if (f != null)
                 result = Competitions.Name(f.comp) + " " + f.round + ": " + season.ClubName(f.home) + " " + f.homeGoals + "-" + f.awayGoals + " " + season.ClubName(f.away)
                          + (f.penWinner != null ? " (승부차기 " + season.ClubName(f.penWinner) + ")" : "") + ".  ";

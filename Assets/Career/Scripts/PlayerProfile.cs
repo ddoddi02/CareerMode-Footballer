@@ -99,6 +99,9 @@ namespace Career
         [Tooltip("Personal form, 0.6..1.2 (60%..120%): how much of his attributes he gets out in a match, on top of team form (FormModel.Apply). What moves it is not decided.")]
         [Range(FormModel.PersonalMin, FormModel.PersonalMax)] public float personalForm = FormModel.PersonalNeutral;
 
+        [Tooltip("Results of his club's last matches, +1 win / 0 draw / -1 loss, oldest first - one of the things personal form is made of (FormModel.Personal). Only the last three count.")]
+        public List<int> recentResults = new List<int>();
+
         [Tooltip("The club he plays for, as its place in last season's league table (1 = champion), picked at character creation from the places his talent allows (TalentDef.bestClubRank).")]
         [Range(1, ClubPool.LeagueSize)] public int clubRank = 9;
 
@@ -107,6 +110,13 @@ namespace Career
 
         [Tooltip("Traits showing right now. Set only by BodyModel.NextTraits - it has the hysteresis.")]
         public BodyTrait traits = BodyTrait.None;
+
+        /// <summary>Adds a match result (+1 win, 0 draw, -1 loss) to the last ones, keeping only the ones form reads.</summary>
+        public void RecordResult(int result)
+        {
+            recentResults.Add(Mathf.Clamp(result, -1, 1));
+            while (recentResults.Count > FormModel.ResultsKept) recentResults.RemoveAt(0);
+        }
 
         public float WeightKg { get { return fatKg + muscleKg + frameKg; } }
         public float BodyFatPercent { get { return 100f * fatKg / WeightKg; } }
