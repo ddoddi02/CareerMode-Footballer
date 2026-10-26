@@ -88,6 +88,14 @@ namespace Career
             return w;
         }
 
+        /// <summary>
+        /// Extra keys of a sheet besides the 20 stats (the match asked for them): the final shot power
+        /// (<see cref="ShotPowerKey"/>, past 100 only through perks), and for the goalkeeper two of his own,
+        /// <see cref="KeepingKey"/> and <see cref="ReflexesKey"/>. They are not career stats, so they stay out of
+        /// <see cref="Overall"/>.
+        /// </summary>
+        public const string ShotPowerKey = "shotPower", KeepingKey = "keeping", ReflexesKey = "reflexes";
+
         /// <summary>The stats of one player of this position at a club whose level is <paramref name="level"/>: level + weight x spread + a little at random, 1..100.</summary>
         public static Dictionary<string, int> Generate(string slot, float level, System.Random rng)
         {
@@ -98,6 +106,13 @@ namespace Career
                 float noise = ((float)rng.NextDouble() * 2f - 1f) * Jitter;
                 stats[CreationRules.Stats[i].id] = Mathf.Clamp(Mathf.RoundToInt(level + Spread * w[i] + noise), StatScale.Min, StatScale.Max);
             }
+            stats[ShotPowerKey] = stats["shotPowerBase"];
+            if (Family(slot) == "GK")
+                foreach (string key in new[] { KeepingKey, ReflexesKey })
+                {
+                    float noise = ((float)rng.NextDouble() * 2f - 1f) * Jitter;
+                    stats[key] = Mathf.Clamp(Mathf.RoundToInt(level + Spread + noise), StatScale.Min, StatScale.Max);
+                }
             return stats;
         }
 
@@ -105,8 +120,13 @@ namespace Career
         public static float Overall(Dictionary<string, int> stats)
         {
             float s = 0f;
-            foreach (int v in stats.Values) s += v;
-            return stats.Count == 0 ? 0f : s / stats.Count;
+            int n = 0;
+            foreach (CreationRules.StatDef d in CreationRules.Stats)
+            {
+                int v;
+                if (stats.TryGetValue(d.id, out v)) { s += v; n++; }
+            }
+            return n == 0 ? 0f : s / n;
         }
 
         /// <summary>
@@ -133,6 +153,7 @@ namespace Career
                 }
                 stats[d.id] = v;
             }
+            stats[ShotPowerKey] = Mathf.Max(StatScale.Min, Mathf.RoundToInt(ShotPower.Attribute(p)));
             return stats;
         }
 

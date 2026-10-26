@@ -741,39 +741,40 @@ MaxReach = heightCm/100 × diveLengthPerHeight 1.75 + 공 반지름     190cm �
 - 적분은 킥과 같은 분포: 횡오차 `BallModel.AimSpread × Bell()`을 `BallModel.Resolve`처럼 각도로, 가중치
   `BallModel.BellCdf`(Irwin–Hall n=3), [-1, 1] 24구간 중점 적분. 속도 오차는 뺀다(도착 시각만 몇 백분의 1초 달라진다).
 
-### 3.28 스탯 반영 지도 — 커리어 값이 경기의 무엇에 닿는가 (2026-10-26, 코드는 안 바꿨다)
+### 3.28 스탯 반영 지도 — 커리어 값이 경기의 무엇에 닿는가 (2026-10-26)
 
-현재 **커리어 값을 읽는 경기 코드는 없다**(`Career.StatScale`만 씀). 경기 쪽 수신구는 대부분 인스펙터 고정값이고, 직접 플레이 경기
-(`MatchHandoff`)는 점수와 상대 이름만 주고받는다. 수신구 열은 "넣을 곳"이다.
+사용자 답(10-26): ① 다 연결 ② 상대·팀원은 구단 순위별 평균 + 포지션별 주요 스탯(커리어가 시트로 만든다) ③ 속도 폭은 설명 후 답
+대기 — 지금은 임시 ±15% ④ 개인 폼 원인은 커리어가 지금부터 적용 ⑤ `rollPassing` 대신 커리어 능력치.
+
+**계약 — `MatchHandoff`:** 커리어가 `Request` 직후 채운다. 경기는 읽기만 한다.
+- `club` / `opponent` = `PlayerSheet[11]` (slot = `Formation.F4123` 라벨 GK·LB·LCB·RCB·RB·DM·LCM·RCM·LW·ST·RW, 사람 = DM, name,
+  stats id→1~100 몸 보너스까지 더한 값, formPercent 60~120). `chemistry(slotA, slotB)` = 우리 팀 짝 친밀도.
+- 경기가 돌려주는 것: `chemistryDeltas`(공 요청 수락 +1·무시 −1, 골 합작 +2 — `MatchSession.Earn`), `clubGoals`/`opponentGoals`.
+- `requested`가 아니거나 시트가 없으면 드릴 기본값 그대로(슬롯 단위로 시트가 없으면 그 슬롯만).
+
+`MatchRoster.Apply`(`DrillDirector.Start`가 부름)가 시트를 몸에 입힌다. 시트 키는 `CreationRules.Stats`의 id. 키퍼 전용 `keeping`·`reflexes`는
+커리어 20개에 없어 시트에 있을 때만 쓴다. 슛 파워는 시트의 `shotPower`(최종값)를 우선, 없으면 `shotPowerBase`.
 
 | 커리어 값 | 경기의 수신구 | 상태 |
 |---|---|---|
-| 짧은 패스·긴 패스 (1~100) | `FootballerController.shortPassing`/`longPassing` | **척도·이름 같음, 값 안 감.** 경기 시작마다 70~85로 덮어쓴다(`rollPassing`) |
-| 마무리 | `DrillDirector.playerShooting` (0~1, 고정 0.70) | 안 이어짐. 변환(직선 / 60→0.70)은 §10.4 질문 |
-| 슛 파워 (기본 + 근육·유연성 보너스) | `BallModel` 슛 속도 ±15% 띠 | 안 이어짐. 식(`ShotPower.ProvisionalSpeed`)은 슛 드릴만 쓴다. 이으면 §3.8 속도 폭을 슛에 한해 넓히는 것 |
-| 크로스 | `DrillDirector.playerCrossing` (고정 0.70) | 안 이어짐 |
-| 몸싸움 (+몸 보너스) | `DrillDirector.playerStrength` (고정 0.60, 실드 경합) | 안 이어짐 |
-| 태클 | `DefenderAI.tackling01` (봇, 고정 0.60) | 사람은 태클 버튼이 없어 받을 곳 없음 |
-| 최고속도 / 가속도 / 민첩성 | `FootballerController.sprintSpeed` 7.9 · `accel` 40 · 사람 몸엔 회전 반경 없음 | 안 이어짐. 속도 폭을 어디까지 열지 미정(§3.8과 같은 이유) |
-| 체력 | 없음 | 경기에 체력 소모가 없다. 남은 체력(일상)도 경기에 안 간다 |
-| 드리블 | 없음 | 터치 거리는 속도만의 함수(§3.10) |
-| 볼 컨트롤 · 개인기 | 없음 | 리시브(`CanTouch`)·첫 터치에 스탯이 안 들어간다 |
-| 커브 | 없음 | 회전은 "옆으로 휘는 m"(§3.7)로 모델은 있으나 입력·조작이 없다 |
-| 점프 · 공중볼 | 없음 | 공중볼 경합 자체가 없다(§8-5) |
-| 위치선정 | 없음 | 사람은 직접 움직이고 봇 위치는 AI(역할) 몫 |
-| 정신력 | 없음 | §1의 "Composure → 압박 시 시야 축소"가 미구현(§8-4) |
-| 유연성 | 간접만 | 민첩·슛 파워 보너스로만(위 줄들) |
-| 몸 보너스 (`BodyModel.Points`) | 스탯에 더해진 뒤 위 수신구로 | 스탯이 안 이어져 함께 안 감 |
-| 개인 폼 (`personalForm` 0.6~1.2) | `form` 정수 60~120 (`IForm`, 몸마다 인스펙터 100) | 안 이어짐. 형식만 다르다(배수 ↔ %) |
-| 팀 폼 (`Squad.TeamForm`) | `Form.TeamBonus` (경기 친밀도 평균에서 계산) | **계단 같음**(−10/−5/0/+3/+5). 값 공급만 없음 |
-| 친밀도 짝 (`Chemistry`, 슬롯 이름이 id) | `TeamChemistry` 짝별 값 (없으면 50) | 안 이어짐. 슬롯 이름은 `Formation`과 같게 맞춰 두었다 |
-| 경기 → 커리어 (공 요청 수락 ±1, 골 합작 +2, 점수) | — | 점수만 간다. 친밀도 변화·골 기록은 안 간다 |
-| 상대 구단 수준 | 봇 능력치 (고정) | 상대가 약하든 강하든 같은 봇이다 |
+| 짧은·긴 패스 | `shortPassing`/`longPassing` (사람·봇) | 연결 (`rollPassing` 70~85를 시트가 덮는다) |
+| 마무리 | 사람 `DrillDirector.playerShooting`, 봇 `AttackerAI.attrs.finishing01` (없으면 슬롯 표 §3.17c) | 연결. 변환은 직선 `(v−1)/99` |
+| 슛 파워 | `MatchAttributes.Shoot` → `Career.ShotPower.ProvisionalSpeed(파워 × 폼)`을 평균 속도로 `BallModel.Resolve`(세기 오차는 그대로). 사람·봇·슛 판단·`ShotClear` 모두 같은 값 | 연결. 시트가 없으면 옛 ±15% 띠 |
+| 크로스 | `DrillDirector.playerCrossing` | 연결 (사람만) |
+| 몸싸움 | 사람 `playerStrength`, 봇 캐리어 `attrs.strength01` (없으면 0.5) | 연결 |
+| 태클 | `DefenderAI.tackling01` (봇) | 연결. 사람은 태클 버튼이 없다 |
+| 최고속도 | `sprintSpeed`·`speed`·`jogSpeed`·`walkSpeed` × `BodyFactor` | 연결, **임시 ±15%**(1 → ×0.85, 100 → ×1.15) |
+| 가속도 | 봇 `motion.accel`, 사람 `accel` × `BodyFactor` | 연결, 임시 ±15% |
+| 민첩성 | `motion.turnAccel`·`bodyTurn` (사람은 `bodyTurn`) × `BodyFactor` | 연결, 임시 ±15% |
+| 개인 폼 (`formPercent`) | `form` (`IForm`) | 연결 |
+| 팀 폼·친밀도 | 시트의 `chemistry` → `TeamChemistry.Set` (우리 팀 55쌍). 팀 폼은 그 평균에서 `Form.TeamBonus` | 연결 (상대는 baseline 50) |
+| 경기 → 커리어 | `chemistryDeltas` | 연결 (넘기기만 — 적용은 커리어) |
+| 키퍼 | `GoalkeeperAI.keeping`·`reflexes` | 시트에 있을 때만 |
+| 체력 · 볼 컨트롤 · 드리블 · 개인기 · 정신력 | — | **2단계에서 새로 만듦** |
+| 커브 · 점프 · 공중볼 · 위치선정 · 유연성 | — | 받을 곳 없음 (유연성은 몸 보너스·슛 파워로 이미 간접). 공중볼 경합·AI 위치는 나중 |
 
-- 이미 닿은 것은 둘뿐이다: 척도 변환(`StatScale`)과 팀 폼 계단.
-- **물을 것(연결 방안):** (1) 한 번에 다 이을지, 패스→마무리→몸싸움 순으로 하나씩 이을지 (2) 사람 외 팀원·상대 봇은 구단 수준 하나로
-  뭉뚱그려 줄지(예: 구단 수준 ± 역할 편차) (3) 신체 능력치(속도·가속·민첩)가 경기 속도에 닿는 폭 — 스탯 100과 1의 속도 차를 몇 %로 할지
-  (4) 개인 폼의 원인(피로·정신력·최근 경기)을 언제 켤지 (5) `rollPassing` 70~85를 커리어 값으로 대체해도 되는지.
+- 몸 보너스(`BodyModel.Points`)는 커리어가 스탯에 더해 시트로 넘긴다 — 경기는 따로 모른다.
+- 사람의 폼: 사람은 `FootballerController.form`을 시트의 DM 폼으로 받는다.
 
 ---
 
@@ -1747,6 +1748,9 @@ UI는 플레이를 시작할 때 코드가 만든다. 씬에는 카메라, 이�
   | GK | 공중볼 처리·민첩성·위치선정·점프·정신력·유연성 | 드리블·개인기·태클·크로스·커브·최고속도·슛 파워 |
 
   - 골키퍼는 전용 스탯이 없다. 같은 20개 스탯에 골키퍼 가중을 줬다.
+  - 시트에는 20개 스탯 말고 키가 더 있다(경기가 요구): `shotPower`(근육·유연성·특전까지 더한 최종 슛 파워, 특전으로 100을 넘을 수 있다.
+    생성한 선수는 `shotPowerBase`와 같다)와, 골키퍼만 `keeping`·`reflexes`(구단 수준 + 18 ± 3). 이 셋은 커리어 능력치가 아니라서 오버롤에
+    들어가지 않는다.
   - 사람의 스탯은 프로필 그대로다. 몸이 건드리는 스탯(최고속도·가속도·체력·민첩성·몸싸움·점프)에는 몸 점수(`BodyModel.Points`)를
     더하고, 슛 파워는 근육·유연성·특전까지 계산한 값(`ShotPower.Attribute`)을 100에서 자른다.
   - 팀 전력의 "평균 오버롤"은 이 열한 명 스탯 평균이다(10.13). 다른 구단 선수단은 필요할 때 한 번 만들어 둔다(`ClubPool.SquadOf`).
@@ -1758,7 +1762,10 @@ UI는 플레이를 시작할 때 코드가 만든다. 씬에는 카메라, 이�
   - 정신력: 위 합에 곱한다. 정신력 1이면 ×1.3, 100이면 ×0.7(높을수록 덜 흔들린다).
   - 매일 아침(체력이 돌아온 뒤) `DailyLife`가 `PlayerProfile.personalForm`을 다시 계산한다. 팀원은 아직 100%다.
 - **경기로 넘기는 것**(`MatchHandoff`): 경기 세션이 `PlayerSheet`(`slot`, `name`, `stats`, `formPercent`)와 `club`·`opponent` 배열(11명),
-  `chemistry` 함수를 만들었다. `Squad.ChemistryBetween(슬롯, 슬롯)`과 `Squad.FormPercentOf`가 값을 준다.
+  `chemistry` 함수를 만들었다. 커리어는 `직접 플레이하기`를 누를 때(`PlayMatchLive`) 이것을 채운다: `club`은 우리 선수단 11명(사람은 DM,
+  몸 보너스를 더한 스탯과 오늘의 개인 폼 %), `opponent`는 상대 구단 선수단 11명(폼 100%), `chemistry`는 `Squad.ChemistryBetween`.
+  - 경기에서 돌아오면 `chemistryDeltas`(공 요청 수락 +1·무시 −1·골 합작 +2)를 `Squad.chemistry.Change`로 넣는다. 짝마다 하루 ±5 한도는
+    그대로다. 화면에는 "친밀도 N쌍이 달라졌다"가 나온다.
 - **확인**(10-26, 컴파일한 어셈블리로. 플레이는 하지 않았다):
   - 1위 구단 LCB: 태클 98·공중볼 100·드리블 59·마무리 69. ST: 마무리 96·슛 파워 95·태클 62. GK: 공중볼 98·민첩성 96·드리블 62.
   - 20개 구단 선수단 평균이 구단 수준에서 ±2 안이다. 같은 구단이 두 번 만들어도 같고, 20위 구단 ST의 마무리는 1위보다 15 이상 낮다.
