@@ -30,6 +30,12 @@ namespace Career
         public const float GrowthPathRecovery = 1f;
         /// <summary>Sleep scales recovery: x0.4 + x0.075 an hour, between x0.4 and x1.1 - 8 hours is x1, 6 hours x0.85.</summary>
         public const float SleepBase = 0.4f, SleepPerHour = 0.075f, SleepMin = 0.4f, SleepMax = 1.1f;
+        /// <summary>
+        /// Energy a simulated match takes from the player, %p (assistant's provisional: a full 90
+        /// minutes). A match played by hand returns what was left in him instead (MatchHandoff).
+        /// </summary>
+        public const float SimulatedMatchCost = 50f;
+
         /// <summary>Sleep the first morning counts, before there was a night to count: 8 hours, x1.</summary>
         public const float FirstNightHours = 8f;
 

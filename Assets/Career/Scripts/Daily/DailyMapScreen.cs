@@ -28,7 +28,7 @@ namespace Career
     {
         [Tooltip("Season day the clock starts on. 0 or 1 = the day after the club's first match (there is no save yet).")]
         public int day = 1;
-        [Tooltip("Energy a match leaves, %. What a match leaves is not connected to the match yet - a placeholder (PROJECT.md 10.11).")]
+        [Tooltip("Energy the first match left, %, for the game's opening day only. Later matches leave what was left in him (played by hand) or what the simulation takes (DailyLife.SimulatedMatchCost) - PROJECT.md 10.11.")]
         [Range(0f, 100f)] public float energyAfterMatch = 40f;
         [Tooltip("Place in last season's table of the club to start at, when there is no saved character (a saved one picked its club at creation, PROJECT.md 10.14).")]
         [Range(1, 20)] public int lastSeasonRank = 9;
@@ -117,11 +117,12 @@ namespace Career
             int homeGoals = home ? MatchHandoff.clubGoals : MatchHandoff.opponentGoals;
             int awayGoals = home ? MatchHandoff.opponentGoals : MatchHandoff.clubGoals;
             int changed = ApplyChemistry(life.squad);
+            float energyAtEnd = MatchHandoff.humanEnergyAtEnd;
             MatchHandoff.Clear();
             SyncStrength();
             season.AdvanceTo(f.day - 1);
             season.SetResult(f, homeGoals, awayGoals);
-            string text = FinishMatch(f);
+            string text = FinishMatch(f, energyAtEnd);
             return changed > 0 ? "친밀도 " + changed + "쌍이 달라졌다.  " + text : text;
         }
 
@@ -184,7 +185,8 @@ namespace Career
                 SyncStrength();
                 season.AdvanceTo(f.day);
             }
-            statusText.text = FinishMatch(f);
+            // the simulated match takes a set share of what he had at kick-off, never below nothing
+            statusText.text = FinishMatch(f, Mathf.Max(0f, life.Energy - DailyLife.SimulatedMatchCost));
             Refresh();
         }
 
@@ -207,6 +209,9 @@ namespace Career
             // who plays: the club's squad (the human in DM, with his stats and form), the rival's, and the club's chemistry
             life.squad.RefreshPlayer(life.player);
             MatchHandoff.club = Sheets(life.squad, life.player);
+            // what is left in him at kick-off: the day's energy (100 - fatigue)
+            foreach (PlayerSheet sheet in MatchHandoff.club)
+                if (sheet.slot == Squad.PlayerSlot) sheet.energyPercent = Mathf.RoundToInt(life.Energy);
             MatchHandoff.opponent = Sheets(ClubPool.SquadOf(season.clubs[f.Other(ClubPool.PlayerId)]), null);
             MatchHandoff.chemistry = life.squad.ChemistryBetween;
             CareerSession.Open(MatchScene);
@@ -259,7 +264,7 @@ namespace Career
         /// day after. When the club has no match left the season is finished and the next one opens
         /// at its day 1, the new places in hand.
         /// </summary>
-        string FinishMatch(Fixture f)
+        string FinishMatch(Fixture f, float energyAtEnd)
         {
             string me = ClubPool.PlayerId;
             string result = "";
@@ -279,10 +284,10 @@ namespace Career
                 next = season.NextFixture(me, firstDay);
                 result += "시즌 " + ended + " 끝. ";
             }
-            life = new DailyLife(life.player, life.squad, energyAfterMatch, next.day - firstDay, firstDay);
+            life = new DailyLife(life.player, life.squad, energyAtEnd, next.day - firstDay, firstDay);
             CareerSession.season = season;
             CareerSession.life = life;
-            return result + "다음 경기까지 " + life.DaysToMatch + "일.";
+            return result + "경기 끝 체력 " + Mathf.RoundToInt(energyAtEnd) + "% → 아침 " + Mathf.RoundToInt(life.Energy) + "%. 다음 경기까지 " + life.DaysToMatch + "일.";
         }
 
         /// <summary>Opens the panel of the coming matches (or the league table).</summary>
