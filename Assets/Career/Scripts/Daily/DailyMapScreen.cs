@@ -116,11 +116,13 @@ namespace Career
             bool home = f.home == ClubPool.PlayerId;
             int homeGoals = home ? MatchHandoff.clubGoals : MatchHandoff.opponentGoals;
             int awayGoals = home ? MatchHandoff.opponentGoals : MatchHandoff.clubGoals;
+            int changed = ApplyChemistry(life.squad);
             MatchHandoff.Clear();
             SyncStrength();
             season.AdvanceTo(f.day - 1);
             season.SetResult(f, homeGoals, awayGoals);
-            return FinishMatch(f);
+            string text = FinishMatch(f);
+            return changed > 0 ? "친밀도 " + changed + "쌍이 달라졌다.  " + text : text;
         }
 
         // ------------------------------------------------------------ actions --
@@ -202,7 +204,46 @@ namespace Career
             MatchHandoff.Request(season.ClubName(f.Other(ClubPool.PlayerId)), Competitions.Name(f.comp), f.home == ClubPool.PlayerId, ReturnScene);
             // the match side goes back through this, so it never calls the career code (Request clears it)
             MatchHandoff.returnToCaller = () => CareerSession.Open(ReturnScene);
+            // who plays: the club's squad (the human in DM, with his stats and form), the rival's, and the club's chemistry
+            life.squad.RefreshPlayer(life.player);
+            MatchHandoff.club = Sheets(life.squad, life.player);
+            MatchHandoff.opponent = Sheets(ClubPool.SquadOf(season.clubs[f.Other(ClubPool.PlayerId)]), null);
+            MatchHandoff.chemistry = life.squad.ChemistryBetween;
             CareerSession.Open(MatchScene);
+        }
+
+        /// <summary>A squad as the match takes it: eleven sheets, slot = formation label, stats copied (the match may not change them).</summary>
+        static PlayerSheet[] Sheets(Squad squad, PlayerProfile player)
+        {
+            var sheets = new PlayerSheet[squad.members.Count];
+            for (int i = 0; i < sheets.Length; i++)
+            {
+                SquadMember m = squad.members[i];
+                sheets[i] = new PlayerSheet
+                {
+                    slot = m.slot,
+                    name = m.name,
+                    stats = new System.Collections.Generic.Dictionary<string, int>(m.stats),
+                    formPercent = Squad.FormPercentOf(m, player),
+                };
+            }
+            return sheets;
+        }
+
+        /// <summary>
+        /// What the match earned in chemistry (a call answered +1, ignored -1, a goal together +2) goes
+        /// into the squad; the daily limit of five per pair still holds (Chemistry.Change). Returns how many pairs moved.
+        /// </summary>
+        static int ApplyChemistry(Squad squad)
+        {
+            var moved = new System.Collections.Generic.HashSet<string>();
+            foreach (ChemistryDelta d in MatchHandoff.chemistryDeltas)
+            {
+                string a = squad.IdOf(d.slotA), b = squad.IdOf(d.slotB);
+                if (a == b || d.delta == 0) continue;
+                if (squad.chemistry.Change(a, b, d.delta) != 0f) moved.Add(string.CompareOrdinal(a, b) < 0 ? a + "|" + b : b + "|" + a);
+            }
+            return moved.Count;
         }
 
         /// <summary>+1 / 0 / -1 for the club in a played match; a tie decided on penalties counts for whoever won it.</summary>
